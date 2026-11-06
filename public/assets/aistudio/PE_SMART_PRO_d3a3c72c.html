@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="vi" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Giáo Án GDTC SmartPlan & Trích Xuất Hình Ảnh SGK AI</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- JSZip & FileSaver -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Font Family -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; font-weight: 600; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .canvas-container { user-select: none; -webkit-user-select: none; }
+        @keyframes scan-line {
+            0% { top: 0%; opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { top: 100%; opacity: 0.8; }
+        }
+        .animate-scan { animation: scan-line 2s linear infinite; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; color: black; }
+        }
+    </style>
+</head>
+<body class="h-full text-slate-800 flex flex-col min-h-screen bg-slate-50">
+
+    <!-- Header & Navigation -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3">
+                    <div class="bg-blue-600 text-white p-2.5 rounded-xl shadow-md">
+                        <i data-lucide="activity" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-lg text-slate-900 leading-tight">SmartPlan GDTC & Bóc Tách Ảnh SGK AI</h1>
+                        <p class="text-xs text-slate-500">Quét SGK - Thư viện Kịch bản & Hình ảnh - Sinh Kế hoạch Bài dạy</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                        <i data-lucide="user" class="w-3 h-3 mr-1"></i> GV: Lê Quốc Hưng
+                    </span>
+                    <button onclick="resetData()" class="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-slate-100 transition" title="Khôi phục dữ liệu gốc">
+                        <i data-lucide="rotate-ccw" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Navigation Tabs -->
+            <nav class="flex space-x-6 -mb-px overflow-x-auto">
+                <button onclick="switchTab('tab-scan')" id="btn-tab-scan" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="scan-line" class="w-4 h-4"></i> 1. Quét & Trích Xuất Ảnh SGK
+                </button>
+                <button onclick="switchTab('tab-img-library')" id="btn-tab-img-library" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="images" class="w-4 h-4"></i> 2. Thư Viện Hình Ảnh SGK (<span id="tab-img-count">0</span>)
+                </button>
+                <button onclick="switchTab('tab-extract')" id="btn-tab-extract" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap tab-active">
+                    <i data-lucide="file-text" class="w-4 h-4"></i> 3. Trích Xuất Giáo Án Mẫu
+                </button>
+                <button onclick="switchTab('tab-library')" id="btn-tab-library" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="library" class="w-4 h-4"></i> 4. Thư Viện Kịch Bản
+                </button>
+                <button onclick="switchTab('tab-generator')" id="btn-tab-generator" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="wand2" class="w-4 h-4"></i> 5. Sinh Giáo Án Tuần Mới
+                </button>
+                <button onclick="switchTab('tab-export')" id="btn-tab-export" class="tab-btn py-3 px-1 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2 whitespace-nowrap">
+                    <i data-lucide="printer" class="w-4 h-4"></i> 6. Xem Trước & In
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+
+        <!-- Notification Toast -->
+        <div id="toast" class="hidden fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl flex items-center space-x-3 z-50 border border-slate-700">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+            <span id="toast-message" class="text-sm">Thông báo</span>
+        </div>
+
+        <!-- TAB 1: QUÉT & TRÍCH XUẤT HÌNH ẢNH SGK -->
+        <section id="tab-scan" class="tab-content hidden flex-col space-y-4">
+            <!-- Batch Progress Banner -->
+            <div id="batch-progress-banner" class="hidden bg-slate-900 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between z-40 border border-indigo-500/30">
+                <div class="flex items-center gap-3">
+                    <div class="relative flex items-center justify-center">
+                        <div class="w-8 h-8 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                        <i data-lucide="scan" class="w-4 h-4 text-indigo-400 absolute"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs font-semibold uppercase tracking-wider text-indigo-300">Đang quét tự động toàn bộ file SGK</p>
+                        <p id="batch-status-text" class="text-sm font-medium text-slate-200">Đang nhận diện các khối hình ảnh...</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 w-1/2 max-w-lg">
+                    <div class="flex-1 bg-slate-800 h-3 rounded-full overflow-hidden border border-slate-700 relative">
+                        <div id="batch-progress-bar" class="bg-gradient-to-r from-brand-500 to-emerald-400 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                    <span id="batch-percent-text" class="text-sm font-bold shrink-0 text-emerald-400 min-w-[45px]">0%</span>
+                    <button id="btn-cancel-batch" class="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition font-medium">Hủy Quét</button>
+                </div>
+            </div>
+
+            <!-- Workspace Bar -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <label class="bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-2 shadow-sm">
+                        <i data-lucide="upload" class="w-4 h-4"></i>
+                        <span>Mở File PDF / Ảnh SGK</span>
+                        <input type="file" id="file-input" accept="application/pdf,image/*" class="hidden">
+                    </label>
+                    <button id="btn-demo-data" class="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i> Nạp SGK Mẫu Demo
+                    </button>
+                    <span id="file-name" class="text-xs font-medium text-slate-500 truncate max-w-[160px]">Chưa chọn file</span>
+                </div>
+
+                <div id="page-controls" class="flex items-center gap-2 opacity-50 pointer-events-none">
+                    <button id="btn-prev" class="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 disabled:opacity-40">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <span class="text-xs font-semibold text-slate-700">Trang <span id="current-page">0</span> / <span id="total-pages">0</span></span>
+                    <button id="btn-next" class="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 disabled:opacity-40">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div id="mode-controls" class="flex items-center gap-2 opacity-50 pointer-events-none">
+                    <button id="btn-batch-scan" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="cpu" class="w-4 h-4"></i> Quét Tự Động Toàn Bộ
+                    </button>
+                    <button id="btn-auto-detect" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5">
+                        <i data-lucide="wand-2" class="w-4 h-4 text-indigo-600"></i> Quét Trang Này
+                    </button>
+                    <button id="btn-clear-boxes" class="p-2 rounded-xl border border-slate-300 hover:bg-red-50 text-slate-600 hover:text-red-600" title="Xóa vùng chọn trang">
+                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Interactive Canvas & Quick Preview Area -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[500px]">
+                <div id="workspace" class="lg:col-span-2 bg-slate-200 rounded-2xl border border-slate-300 relative overflow-auto custom-scrollbar flex items-center justify-center p-4 min-h-[450px]">
+                    <div id="drop-zone" class="absolute inset-4 border-2 border-dashed border-slate-400 rounded-xl flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm z-20 cursor-pointer hover:border-brand-500 transition">
+                        <div class="p-4 bg-brand-50 text-brand-600 rounded-full mb-3">
+                            <i data-lucide="file-up" class="w-10 h-10"></i>
+                        </div>
+                        <p class="font-semibold text-slate-800 text-base">Kéo & Thả file PDF SGK hoặc Hình ảnh minh họa vào đây</p>
+                        <p class="text-xs text-slate-500 mt-1 max-w-md text-center">Công cụ sẽ tự động phân tích hình ảnh minh họa động tác học sinh và thêm trực tiếp vào thư viện dùng cho giáo án.</p>
+                        <button id="btn-dropzone-demo" class="mt-4 text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-3 py-1.5 rounded-lg transition">
+                            Dùng thử SGK Mẫu Giảng Dạy
+                        </button>
+                    </div>
+
+                    <div id="loading-spinner" class="hidden absolute inset-0 bg-white/80 backdrop-blur-xs flex flex-col items-center justify-center z-30">
+                        <div class="w-10 h-10 border-4 border-brand-200 border-t-brand-600 rounded-full animate-spin"></div>
+                        <p id="loading-text" class="mt-3 text-sm font-medium text-slate-700">Đang xử lý tài liệu...</p>
+                    </div>
+
+                    <div id="scanner-line" class="hidden absolute inset-x-0 h-1 bg-emerald-500 shadow-[0_0_15px_#10b981] z-20 animate-scan pointer-events-none"></div>
+
+                    <div id="canvas-wrapper" class="relative shadow-lg rounded-lg bg-white overflow-hidden hidden canvas-container">
+                        <canvas id="pdf-canvas" class="block"></canvas>
+                        <canvas id="draw-canvas" class="absolute top-0 left-0 cursor-crosshair"></canvas>
+                    </div>
+                </div>
+
+                <!-- Live Extraction Sidebar -->
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col shadow-sm">
+                    <div class="flex justify-between items-center border-b pb-3 mb-3">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i> Ảnh Vừa Bóc Tách
+                        </h3>
+                        <button onclick="switchTab('tab-img-library')" class="text-xs text-blue-600 hover:underline font-medium">Xem tất cả thư viện &rarr;</button>
+                    </div>
+                    <div id="recent-extracted-list" class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                        <p class="text-xs text-slate-400 text-center py-10">Chưa có ảnh nào được bóc tách từ file.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 2: THƯ VIỆN HÌNH ẢNH SGK -->
+        <section id="tab-img-library" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                            <i data-lucide="images" class="text-blue-600"></i>
+                            Thư Viện Hình Ảnh Động Tác & Bài Tập SGK
+                        </h2>
+                        <p class="text-slate-500 text-sm">Quản lý, xử lý tự động bóc tách nền, xóa watermark và chèn đúng cột trong kế hoạch bài dạy.</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-export-zip" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                            <i data-lucide="download" class="w-4 h-4"></i> Tải Ảnh (.ZIP)
+                        </button>
+                        <button id="btn-export-json" class="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-sm">
+                            <i data-lucide="file-json" class="w-4 h-4"></i> Xuất JSON
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cụm Nút Xử Lý Ảnh Hàng Loạt -->
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="select-all-imgs" onchange="toggleSelectAllImgs(this)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                        <label for="select-all-imgs" class="text-xs font-bold text-slate-700 cursor-pointer">Chọn tất cả ảnh (<span id="selected-img-count">0</span> đã chọn)</label>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="batchProcessImages('crop')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-sm">
+                            <i data-lucide="crop" class="w-3.5 h-3.5"></i> Cắt ảnh tự động
+                        </button>
+                        <button onclick="batchProcessImages('remove-bg')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-sm">
+                            <i data-lucide="scissors" class="w-3.5 h-3.5"></i> Tách nền trong suốt
+                        </button>
+                        <button onclick="batchProcessImages('watermark')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow-sm">
+                            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Xóa Watermark & Tái tạo
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters & Category Navigation -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+                    <div class="md:col-span-2">
+                        <div class="relative">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                            <input type="text" id="gallery-search" oninput="filterImgGallery()" placeholder="Tìm kiếm tên hình ảnh, động tác, chú thích..." class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs pl-9 p-2.5">
+                        </div>
+                    </div>
+                    <div>
+                        <select id="gallery-filter-category" onchange="filterImgGallery()" class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs p-2.5 font-semibold text-blue-700">
+                            <option value="all">Tất cả Phân loại Thư viện</option>
+                            <option value="dong_tac"> Thư viện ảnh Động tác (Chèn cột Nội dung)</option>
+                            <option value="tap_luyen"> Thư viện ảnh Tập luyện (Chèn cột HS)</option>
+                            <option value="tro_choi"> Thư viện ảnh Trò chơi (Chèn cột HS)</option>
+                            <option value="van_dung"> Thư viện ảnh Vận dụng</option>
+                        </select>
+                    </div>
+                    <div>
+                        <select id="gallery-filter-grade" onchange="filterImgGallery()" class="w-full bg-slate-50 border border-slate-200 rounded-xl text-xs p-2.5">
+                            <option value="all">Tất cả khối lớp</option>
+                            <option value="1">Khối 1</option>
+                            <option value="3">Khối 3</option>
+                            <option value="5">Khối 5</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gallery Grid -->
+            <div id="img-gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Dynamic Image Cards -->
+            </div>
+        </section>
+
+        <!-- TAB 3: TRÍCH XUẤT & PHÂN TÍCH GIÁO ÁN MẪU -->
+        <section id="tab-extract" class="tab-content block space-y-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="file-search" class="text-blue-600"></i>
+                        Dữ liệu Trích xuất từ Kế hoạch Bài dạy - Tuần 8 (Lê Quốc Hưng)
+                    </h2>
+                    <p class="text-slate-500 text-sm mt-1">Hệ thống đã phân tích và bóc tách nội dung chi tiết theo từng hàng, từng cột trong cấu trúc bảng giáo án chuẩn.</p>
+                </div>
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <select id="extract-lesson-select" onchange="renderExtractedData()" class="bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5 w-full md:w-auto">
+                        <option value="k1_t15">Khối 1 - Tiết 15: Bài 1: Vươn thở, Tay (Tiết 1)</option>
+                        <option value="k1_t16">Khối 1 - Tiết 16: Bài 1: Vươn thở, Tay (Tiết 2)</option>
+                        <option value="k3_t15">Khối 3 - Tiết 15: Bài 4: Đi đều, Đứng lại (Tiết 3)</option>
+                        <option value="k5_t15">Khối 5 - Tiết 15: Bài 1: Vươn thở, Tay, Chân với gậy (Tiết 1)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4" id="extract-stats"></div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i data-lucide="table" class="w-4 h-4 text-blue-600"></i> Bảng Nội Dung Trích Xuất Ô Tương Ứng
+                    </h3>
+                    <button onclick="saveExtractedToLibrary()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 shadow-sm">
+                        <i data-lucide="bookmark-plus" class="w-3.5 h-3.5"></i> Chuyển toàn bộ vào Thư viện Kịch bản
+                    </button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-600 border-collapse">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-semibold border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 w-1/6">Nội Dung / Hoạt Động</th>
+                                <th class="p-3 w-24 text-center">Lượng VD</th>
+                                <th class="p-3 w-1/3">Hoạt Động Giáo Viên (Kịch bản GV)</th>
+                                <th class="p-3 w-1/3">Hoạt Động Học Sinh (Kịch bản HS)</th>
+                                <th class="p-3 w-28 text-center">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="extracted-table-body" class="divide-y divide-slate-200"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 4: THƯ VIỆN KỊCH BẢN -->
+        <section id="tab-library" class="tab-content hidden space-y-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                            <i data-lucide="library" class="text-blue-600"></i>
+                            Thư Viện Kịch Bản Giảng Dạy Chuẩn
+                        </h2>
+                        <p class="text-slate-500 text-sm">Lưu trữ các kịch bản mẫu linh hoạt theo từng ô. Dễ dàng chèn vào kế hoạch bài dạy tuần mới.</p>
+                    </div>
+                    <button onclick="openAddScenarioModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i> Thêm Kịch Bản Mới
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Loại Hoạt Động</label>
+                        <select id="filter-type" onchange="renderLibrary()" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5">
+                            <option value="all">Tất cả loại hoạt động</option>
+                            <option value="Mở đầu">1. Khởi động & Nhận lớp</option>
+                            <option value="Động tác mới">2. Dạy Động tác mới</option>
+                            <option value="Luyện tập">3. Tổ chức Luyện tập</option>
+                            <option value="Trò chơi">4. Trò chơi vận động</option>
+                            <option value="Tích hợp">5. Nội dung Tích hợp</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Khối Lớp</label>
+                        <select id="filter-grade" onchange="renderLibrary()" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5">
+                            <option value="all">Tất cả khối lớp</option>
+                            <option value="1">Khối 1</option>
+                            <option value="3">Khối 3</option>
+                            <option value="5">Khối 5</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Tìm kiếm từ khóa</label>
+                        <div class="relative">
+                            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+                            <input type="text" id="filter-search" onkeyup="renderLibrary()" placeholder="Nhập tên động tác, trò chơi, từ khóa..." class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs pl-9 p-2.5">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="library-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </section>
+
+        <!-- TAB 5: BỘ SINH GIÁO ÁN TUẦN MỚI -->
+        <section id="tab-generator" class="tab-content hidden space-y-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Left Panel -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <i data-lucide="settings" class="w-4 h-4 text-blue-600"></i> Thiết Lập Thông Tin Tuần Mới
+                        </h3>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tuần học</label>
+                            <input type="number" id="gen-week" value="9" min="1" max="35" class="w-full border border-slate-300 rounded-lg text-xs p-2 focus:ring-blue-500">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Khối lớp</label>
+                                <select id="gen-grade" class="w-full border border-slate-300 rounded-lg text-xs p-2">
+                                    <option value="1">Khối 1</option>
+                                    <option value="3">Khối 3</option>
+                                    <option value="5">Khối 5</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Tiết theo PPCT</label>
+                                <input type="number" id="gen-lesson-num" value="17" class="w-full border border-slate-300 rounded-lg text-xs p-2">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Chủ đề</label>
+                            <input type="text" id="gen-topic" value="CHỦ ĐỀ 2: BÀI THỂ DỤC" class="w-full border border-slate-300 rounded-lg text-xs p-2">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">Tên bài học</label>
+                            <input type="text" id="gen-title" value="Bài 2: Động tác Chân, Động tác Bụng (Tiết 1)" class="w-full border border-slate-300 rounded-lg text-xs p-2 font-semibold text-blue-700">
+                        </div>
+                    </div>
+
+                    <!-- Quick Insert Scripts & Images -->
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
+                            <i data-lucide="layers" class="w-4 h-4 text-blue-600"></i> Chọn Kịch Bản & Ảnh Minh Họa
+                        </h3>
+                        
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">1. Động tác mới (Khám phá):</label>
+                                <select id="select-script-new" class="w-full border border-slate-200 rounded-lg text-xs p-2"></select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">2. Ảnh Động tác SGK (Chèn cột Nội dung):</label>
+                                <select id="select-img-sgk" class="w-full border border-slate-200 rounded-lg text-xs p-2">
+                                    <option value="">-- Không đính kèm ảnh --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">3. Sơ đồ Đội hình / Trò chơi (Chèn cột HS):</label>
+                                <select id="select-diagram-sgk" class="w-full border border-slate-200 rounded-lg text-xs p-2">
+                                    <option value="">-- Không đính kèm sơ đồ --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">4. Phương pháp Luyện tập:</label>
+                                <select id="select-script-practice" class="w-full border border-slate-200 rounded-lg text-xs p-2"></select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-500 mb-1">5. Trò chơi Vận động:</label>
+                                <select id="select-script-game" class="w-full border border-slate-200 rounded-lg text-xs p-2"></select>
+                            </div>
+                        </div>
+
+                        <button onclick="applyScriptsToPlan()" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2.5 rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i> Ghép Kịch Bản & Hình Ảnh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right Panel -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                            <h3 class="font-bold text-slate-800 text-sm">Bản Xem Trước Giáo Án Đang Biên Soạn</h3>
+                        </div>
+                        <button onclick="switchTab('tab-export')" class="bg-slate-900 hover:bg-slate-800 text-white text-xs px-3 py-2 rounded-lg flex items-center gap-1.5">
+                            <i data-lucide="eye" class="w-3.5 h-3.5"></i> Chuyển sang Xem Trước / In
+                        </button>
+                    </div>
+
+                    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4 text-xs">
+                        <div class="text-center font-bold text-slate-800 text-sm uppercase border-b pb-3">
+                            KẾ HOẠCH BÀI DẠY TUẦN <span id="preview-week-num">9</span> – KHỐI <span id="preview-grade-num">1</span><br>
+                            <span id="preview-topic-text" class="text-blue-600">CHỦ ĐỀ 2: BÀI THỂ DỤC</span><br>
+                            TIẾT <span id="preview-lesson-num">17</span>: <span id="preview-title-text" class="text-slate-900">BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY</span>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full border-collapse border border-slate-300 text-left">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
+                                        <th class="border border-slate-300 p-2 w-1/4">Nội dung</th>
+                                        <th class="border border-slate-300 p-2 w-16 text-center">LVD</th>
+                                        <th class="border border-slate-300 p-2 w-1/3">Hoạt động GV</th>
+                                        <th class="border border-slate-300 p-2 w-1/3">Hoạt động HS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="generator-table-body" class="divide-y divide-slate-300"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- TAB 6: XEM TRƯỚC VÀ IN ẤN -->
+        <section id="tab-export" class="tab-content hidden space-y-6">
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex justify-between items-center no-print">
+                <div>
+                    <h2 class="font-bold text-slate-800 text-base">Xem Trước Văn Bản Chuẩn A4</h2>
+                    <p class="text-slate-500 text-xs">Giáo án được định dạng chuẩn theo khung chương trình GDPT môn GDTC.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm">
+                        <i data-lucide="printer" class="w-4 h-4"></i> In Giáo Án / Xuất PDF
+                    </button>
+                    <button onclick="exportToWord()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm">
+                        <i data-lucide="file-down" class="w-4 h-4"></i> Tải về File .DOCX
+                    </button>
+                </div>
+            </div>
+
+            <div id="print-document" class="bg-white p-8 md:p-12 rounded-2xl border border-slate-200 shadow-lg max-w-4xl mx-auto text-slate-900 text-sm leading-relaxed">
+                <div class="flex justify-between items-start text-xs border-b pb-4 mb-6">
+                    <div>
+                        <p class="font-bold uppercase">TRƯỜNG TH & THCS NGHĨA HIỆP</p>
+                        <p>TỔ CHUYÊN MÔN: TIỂU HỌC</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold">GIÁO VIÊN: LÊ QUỐC HƯNG</p>
+                        <p>NĂM HỌC: 2026 - 2027</p>
+                    </div>
+                </div>
+
+                <div class="text-center space-y-1 mb-6">
+                    <h2 class="font-bold text-base uppercase" id="print-header-week">KẾ HOẠCH BÀI DẠY TUẦN 8</h2>
+                    <h3 class="font-bold text-sm text-blue-800 uppercase" id="print-header-topic">CHỦ ĐỀ 2: BÀI THỂ DỤC</h3>
+                    <p class="font-bold text-sm" id="print-header-lesson">TIẾT 15 - BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY</p>
+                </div>
+
+                <div class="space-y-2 mb-6">
+                    <h4 class="font-bold uppercase text-xs border-b pb-1">I. YÊU CẦU CẦN ĐẠT</h4>
+                    <div class="pl-3 space-y-1 text-xs">
+                        <p><strong>1. Năng lực đặc thù:</strong> Năng lực chăm sóc sức khỏe, năng lực vận động cơ bản, năng lực thể dục thể thao.</p>
+                        <p><strong>2. Năng lực chung:</strong> Tự chủ và tự học, giao tiếp và hợp tác, giải quyết vấn đề và sáng tạo.</p>
+                        <p><strong>3. Phẩm chất:</strong> Chăm chỉ, trung thực, trách nhiệm, nhân ái.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2 mb-6">
+                    <h4 class="font-bold uppercase text-xs border-b pb-1">II. ĐỊA ĐIỂM – PHƯƠNG TIỆN</h4>
+                    <div class="pl-3 space-y-1 text-xs">
+                        <p>- <strong>Địa điểm:</strong> Sân trường sạch sẽ, bằng phẳng, đảm bảo an toàn.</p>
+                        <p>- <strong>Giáo viên:</strong> Tranh ảnh kĩ thuật SGK, còi, cờ, thiết bị trình chiếu.</p>
+                        <p>- <strong>Học sinh:</strong> Trang phục thể thao, giày tập hợp lệ.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-2 mb-6">
+                    <h4 class="font-bold uppercase text-xs border-b pb-1">III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU</h4>
+                    <table class="w-full border-collapse border border-slate-400 text-xs mt-2">
+                        <thead>
+                            <tr class="bg-slate-200 text-slate-900 font-bold">
+                                <th class="border border-slate-400 p-2 text-center w-1/4">Nội dung</th>
+                                <th class="border border-slate-400 p-2 text-center w-16">LVD</th>
+                                <th class="border border-slate-400 p-2 text-center w-1/3">Hoạt động của GV</th>
+                                <th class="border border-slate-400 p-2 text-center w-1/3">Hoạt động của HS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="print-table-body" class="divide-y divide-slate-300"></tbody>
+                    </table>
+                </div>
+
+                <div class="grid grid-cols-3 text-center text-xs font-semibold pt-4">
+                    <div>
+                        <p>DUYỆT CỦA BGH</p>
+                        <div class="h-16"></div>
+                        <p class="font-bold">Võ Thị Thuận</p>
+                    </div>
+                    <div>
+                        <p>TỔ TRƯỞNG</p>
+                        <div class="h-16"></div>
+                        <p class="font-bold">Bùi Ngọc Lâm</p>
+                    </div>
+                    <div>
+                        <p>GIÁO VIÊN BÀI DẠY</p>
+                        <div class="h-16"></div>
+                        <p class="font-bold">Lê Quốc Hưng</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: Select Destination Column and Row for Image -->
+    <div id="modal-select-cell" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h3 class="font-bold text-slate-800 text-sm">Chọn Vị Trí Ô Cần Chèn Hình Ảnh</h3>
+                <button onclick="closeSelectCellModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">1. Chọn Ô Hoạt Động:</label>
+                    <select id="modal-select-row-index" class="w-full border rounded-lg p-2 font-medium bg-slate-50">
+                        <option value="0">1. Hoạt động Mở đầu</option>
+                        <option value="1">2. Hình thành kiến thức mới (Dạy động tác)</option>
+                        <option value="2">3. Hoạt động Luyện tập</option>
+                        <option value="3" selected>3.5 Trò chơi vận động</option>
+                        <option value="4">4. Hoạt động Vận dụng & Thả lỏng</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">2. Chọn Cột Cần Chèn Ảnh (Đúng Quy Chuẩn):</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="border border-blue-200 bg-blue-50 p-2.5 rounded-xl flex items-center gap-2 cursor-pointer hover:border-blue-500">
+                            <input type="radio" name="modal-target-col" value="content" checked class="text-blue-600">
+                            <div>
+                                <p class="font-bold text-blue-900">Cột Nội Dung</p>
+                                <p class="text-[10px] text-blue-700">Chèn Ảnh Động Tác SGK</p>
+                            </div>
+                        </label>
+                        <label class="border border-emerald-200 bg-emerald-50 p-2.5 rounded-xl flex items-center gap-2 cursor-pointer hover:border-emerald-500">
+                            <input type="radio" name="modal-target-col" value="hs" class="text-emerald-600">
+                            <div>
+                                <p class="font-bold text-emerald-900">Cột Hoạt Động HS</p>
+                                <p class="text-[10px] text-emerald-700">Chèn Sơ đồ & Trò chơi</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button onclick="closeSelectCellModal()" class="px-4 py-2 border rounded-lg text-xs text-slate-600">Hủy</button>
+                <button onclick="confirmAttachImageToCell()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold">Xác Nhận Chèn</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add/Edit Scenario -->
+    <div id="modal-scenario" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div class="flex justify-between items-center border-b pb-3">
+                <h3 class="font-bold text-slate-800 text-base" id="modal-title">Thêm Kịch Bản Mới</h3>
+                <button onclick="closeScenarioModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-medium text-slate-600 mb-1">Tên Kịch Bản / Tên Hoạt Động</label>
+                    <input type="text" id="modal-input-title" placeholder="VD: Động tác Tay - Hướng dẫn kỹ thuật" class="w-full border rounded-lg p-2">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-medium text-slate-600 mb-1">Loại Hoạt Động</label>
+                        <select id="modal-input-category" class="w-full border rounded-lg p-2">
+                            <option value="Động tác mới">Động tác mới</option>
+                            <option value="Luyện tập">Luyện tập</option>
+                            <option value="Trò chơi">Trò chơi</option>
+                            <option value="Mở đầu">Mở đầu</option>
+                            <option value="Tích hợp">Tích hợp</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-medium text-slate-600 mb-1">Khối Lớp</label>
+                        <select id="modal-input-grade" class="w-full border rounded-lg p-2">
+                            <option value="1">Khối 1</option>
+                            <option value="3">Khối 3</option>
+                            <option value="5">Khối 5</option>
+                            <option value="Chung">Tất cả Khối</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-600 mb-1">Lượng vận động (LVD)</label>
+                    <input type="text" id="modal-input-lvd" placeholder="VD: 2-3 lần, 5-7 phút" class="w-full border rounded-lg p-2">
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-600 mb-1">Kịch bản Giáo Viên (Hoạt động GV)</label>
+                    <textarea id="modal-input-gv" rows="3" class="w-full border rounded-lg p-2" placeholder="- GV hô khẩu lệnh..."></textarea>
+                </div>
+                <div>
+                    <label class="block font-medium text-slate-600 mb-1">Kịch bản Học Sinh (Hoạt động HS & Đội hình)</label>
+                    <textarea id="modal-input-hs" rows="3" class="w-full border rounded-lg p-2" placeholder="- HS thực hiện..."></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button onclick="closeScenarioModal()" class="px-4 py-2 border rounded-lg text-xs text-slate-600 hover:bg-slate-50">Hủy</button>
+                <button onclick="saveScenario()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold">Lưu Kịch Bản</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // --- GLOBAL STORE & STATE ---
+        const initialLessonsData = {
+            "k1_t15": {
+                grade: 1, lessonNum: 15, week: 8,
+                topic: "CHỦ ĐỀ 2: BÀI THỂ DỤC",
+                title: "Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY (Tiết 1)",
+                rows: [
+                    {
+                        content: "1. Hoạt động mở đầu\n1.1 Nhận lớp\n1.2 Khởi động\n1.3 Trò chơi bổ trợ",
+                        lvd: "5-7'",
+                        gv: "- GV nhận lớp, thăm hỏi sức khỏe, phổ biến nhiệm vụ.\n- GV quan sát nhắc HS khởi động đúng biên độ.",
+                        hs: "- Cán sự tập trung lớp, báo cáo sĩ số.\n- HS khởi động xoay các khớp cổ tay, cổ chân, vai."
+                    },
+                    {
+                        content: "2. Hình thành kiến thức mới\n- Học động tác vươn thở",
+                        lvd: "5-7'",
+                        gv: "- GV làm mẫu kết hợp phân tích kỹ thuật.\n- Trình chiếu / cho xem tranh ảnh SGK đính kèm.\n- GV chỉ ra sai sót thường gặp.",
+                        hs: "- HS quan sát mẫu và ghi nhớ cách thực hiện."
+                    },
+                    {
+                        content: "3. Hoạt động luyện tập\n3.1 Tập đồng loạt\n3.2 Tập theo tổ nhóm",
+                        lvd: "15-16'",
+                        gv: "- Hô nhịp cho cả lớp tập 1-2 lần.\n- Giao nhiệm vụ cho Tổ trưởng phân khu vực luyện tập.",
+                        hs: "- Tập đồng loạt theo hiệu lệnh.\n- ĐH tập luyện theo tổ."
+                    }
+                ]
+            }
+        };
+
+        let scenarioLibrary = JSON.parse(localStorage.getItem('gdtc_scenarios')) || [
+            {
+                id: "sc_1",
+                title: "Kịch bản Dạy động tác mới (Bài thể dục phát triển chung)",
+                category: "Động tác mới",
+                grade: "Chung",
+                lvd: "5-7 phút",
+                gv: "- GV làm mẫu động tác chuẩn xác 2-3 lần kết hợp phân tích kỹ thuật từng nhịp.\n- Cho HS quan sát tranh ảnh kĩ thuật SGK.",
+                hs: "- HS đứng đội hình quan sát và thực hiện làm theo hiệu lệnh."
+            },
+            {
+                id: "sc_2",
+                title: "Kịch bản Luyện tập theo Cặp đôi (Hỗ trợ sửa sai)",
+                category: "Luyện tập",
+                grade: "Chung",
+                lvd: "2-3 lần",
+                gv: "- GV chia lớp thành từng cặp quay mặt vào nhau.\n- Giao nhiệm vụ: 1 HS thực hiện động tác, 1 HS hô nhịp sửa sai.",
+                hs: "- HS tập theo cặp đôi. Hỗ trợ giúp đỡ nhau."
+            }
+        ];
+
+        let imageLibrary = JSON.parse(localStorage.getItem('gdtc_sgk_images')) || [
+            {
+                id: "img_demo_1",
+                title: "Động tác Vươn thở - SGK Lớp 1",
+                grade: "1",
+                page: 8,
+                category: "dong_tac",
+                imgUrl: "https://placehold.co/400x300/2563eb/ffffff?text=Dong+Tac+Vuon+Tho",
+                caption: "Hình 1.1: Tư thế bước chân trái ngang, 2 tay đưa lên cao hô hấp.",
+                selected: false
+            },
+            {
+                id: "img_demo_2",
+                title: "Động tác Tay - SGK Lớp 1",
+                grade: "1",
+                page: 7,
+                category: "dong_tac",
+                imgUrl: "https://placehold.co/400x300/10b981/ffffff?text=Dong+Tac+Tay",
+                caption: "Hình 1.2: Hai tay dang ngang, bàn tay ngửa, mắt nhìn thẳng.",
+                selected: false
+            },
+            {
+                id: "img_demo_3",
+                title: "Sơ đồ Đội hình Luyện tập Nhóm",
+                grade: "1",
+                page: 6,
+                category: "tap_luyen",
+                imgUrl: "https://placehold.co/400x300/f59e0b/ffffff?text=So+Do+Luyen+Tap",
+                caption: "Hình 2.1: Sơ đồ tổ chức luyện tập phân khu vực.",
+                selected: false
+            },
+            {
+                id: "img_demo_4",
+                title: "Trò chơi Con thỏ - SGK Trang 10",
+                grade: "1",
+                page: 10,
+                category: "tro_choi",
+                imgUrl: "https://placehold.co/400x300/8b5cf6/ffffff?text=Tro+Choi+Con+Tho",
+                caption: "Hình 3.1: Minh họa luật chơi trò chơi Con thỏ.",
+                selected: false
+            }
+        ];
+
+        let selectedImgForAttachId = null;
+        let currentLessonPlanRows = [];
+
+        const scanState = {
+            pdfDoc: null,
+            currentPageNum: 1,
+            totalPages: 0,
+            scale: 1.5,
+            isPdf: false,
+            isDemoMode: false,
+            demoPages: [],
+            isDrawing: false,
+            startX: 0,
+            startY: 0,
+            isBatchScanning: false,
+            cancelBatchFlag: false
+        };
+
+        let DOM = {};
+
+        window.onload = function() {
+            lucide.createIcons();
+            initDOM();
+            renderExtractedData();
+            renderLibrary();
+            renderImgGallery();
+            populateGeneratorSelects();
+            initGeneratorTable();
+            setupScannerEvents();
+            updateImgCountBadge();
+        };
+
+        function initDOM() {
+            DOM = {
+                fileInput: document.getElementById('file-input'),
+                dropZone: document.getElementById('drop-zone'),
+                fileName: document.getElementById('file-name'),
+                workspace: document.getElementById('workspace'),
+                canvasWrapper: document.getElementById('canvas-wrapper'),
+                pdfCanvas: document.getElementById('pdf-canvas'),
+                drawCanvas: document.getElementById('draw-canvas'),
+                loadingSpinner: document.getElementById('loading-spinner'),
+                loadingText: document.getElementById('loading-text'),
+                scannerLine: document.getElementById('scanner-line'),
+                pageControls: document.getElementById('page-controls'),
+                modeControls: document.getElementById('mode-controls'),
+                currentPage: document.getElementById('current-page'),
+                totalPages: document.getElementById('total-pages'),
+                btnPrev: document.getElementById('btn-prev'),
+                btnNext: document.getElementById('btn-next'),
+                btnAutoDetect: document.getElementById('btn-auto-detect'),
+                btnBatchScan: document.getElementById('btn-batch-scan'),
+                btnClearBoxes: document.getElementById('btn-clear-boxes'),
+                btnExportZip: document.getElementById('btn-export-zip'),
+                btnExportJson: document.getElementById('btn-export-json'),
+                btnDemoData: document.getElementById('btn-demo-data'),
+                btnDropzoneDemo: document.getElementById('btn-dropzone-demo'),
+                recentExtractedList: document.getElementById('recent-extracted-list'),
+                batchProgressBanner: document.getElementById('batch-progress-banner'),
+                batchProgressBar: document.getElementById('batch-progress-bar'),
+                batchPercentText: document.getElementById('batch-percent-text'),
+                batchStatusText: document.getElementById('batch-status-text'),
+                btnCancelBatch: document.getElementById('btn-cancel-batch')
+            };
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('tab-active'));
+            
+            document.getElementById(tabId).classList.remove('hidden');
+            document.getElementById('btn-' + tabId).classList.add('tab-active');
+
+            if(tabId === 'tab-export') updatePrintPreview();
+            if(tabId === 'tab-img-library') renderImgGallery();
+        }
+
+        function setupScannerEvents() {
+            DOM.fileInput.addEventListener('change', handleFileSelect);
+            DOM.dropZone.addEventListener('click', (e) => {
+                if (e.target !== DOM.btnDropzoneDemo) DOM.fileInput.click();
+            });
+            DOM.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+            DOM.dropZone.addEventListener('drop', handleFileDrop);
+
+            DOM.btnPrev.addEventListener('click', () => changeScanPage(-1));
+            DOM.btnNext.addEventListener('click', () => changeScanPage(1));
+            DOM.btnAutoDetect.addEventListener('click', runAutoDetectCurrentPage);
+            DOM.btnBatchScan.addEventListener('click', runBatchScanAllPages);
+            DOM.btnCancelBatch.addEventListener('click', () => { scanState.cancelBatchFlag = true; });
+            DOM.btnClearBoxes.addEventListener('click', clearCurrentCanvasBoxes);
+
+            DOM.btnDemoData.addEventListener('click', loadDemoTextbookData);
+            DOM.btnDropzoneDemo.addEventListener('click', (e) => { e.stopPropagation(); loadDemoTextbookData(); });
+
+            DOM.btnExportZip.addEventListener('click', exportImagesZip);
+            DOM.btnExportJson.addEventListener('click', exportImagesJson);
+
+            DOM.drawCanvas.addEventListener('mousedown', startDrawingBox);
+            DOM.drawCanvas.addEventListener('mousemove', drawBox);
+            DOM.drawCanvas.addEventListener('mouseup', endDrawingBox);
+        }
+
+        function loadDemoTextbookData() {
+            showScanLoading(true, "Đang khởi tạo SGK Mẫu...");
+            scanState.isDemoMode = true;
+            scanState.isPdf = false;
+            scanState.totalPages = 3;
+            scanState.currentPageNum = 1;
+            scanState.demoPages = [];
+
+            DOM.fileName.textContent = "SGK_GDTC_Demo.pdf";
+            DOM.dropZone.classList.add('hidden');
+            DOM.canvasWrapper.classList.remove('hidden');
+            DOM.totalPages.textContent = "3";
+            DOM.pageControls.classList.remove('opacity-50', 'pointer-events-none');
+            DOM.modeControls.classList.remove('opacity-50', 'pointer-events-none');
+
+            scanState.demoPages.push(createDemoPageCanvas(1, "Luyện tập cá nhân", "Bài thể dục Lớp 1", "#2563eb"));
+            scanState.demoPages.push(createDemoPageCanvas(2, "Luyện tập cặp đôi", "Phối hợp 2 học sinh", "#10b981"));
+            scanState.demoPages.push(createDemoPageCanvas(3, "Luyện tập nhóm", "Đội hình 4 người", "#8b5cf6"));
+
+            renderDemoPage(1);
+            showScanLoading(false);
+            showToast("Đã tải xong 3 trang SGK Mẫu!");
+        }
+
+        function createDemoPageCanvas(pageNum, actionType, description, color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 650;
+            canvas.height = 850;
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = color;
+            ctx.fillRect(30, 30, canvas.width - 60, 6);
+
+            ctx.fillStyle = "#1e293b";
+            ctx.font = "bold 18px sans-serif";
+            ctx.fillText(`BÀI ${pageNum}: ${description.toUpperCase()}`, 30, 65);
+
+            drawDemoBoxOnContext(ctx, 40, 100, 260, 200, `Học sinh A - ${actionType}`, color);
+            drawDemoBoxOnContext(ctx, 330, 100, 260, 200, `Học sinh B - ${actionType}`, color);
+            drawDemoBoxOnContext(ctx, 40, 360, 550, 300, `Sơ đồ phối hợp - ${actionType}`, color);
+
+            return canvas;
+        }
+
+        function drawDemoBoxOnContext(ctx, x, y, w, h, title, color) {
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillRect(x, y, w, h);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x + w/2, y + h/2 - 20, 25, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillRect(x + w/2 - 15, y + h/2 + 10, 30, 50);
+
+            ctx.fillStyle = "#0f172a";
+            ctx.font = "bold 12px sans-serif";
+            ctx.fillText(title, x + 15, y + 25);
+        }
+
+        function renderDemoPage(pageNum) {
+            const demoCanvas = scanState.demoPages[pageNum - 1];
+            DOM.pdfCanvas.width = demoCanvas.width;
+            DOM.pdfCanvas.height = demoCanvas.height;
+            DOM.drawCanvas.width = demoCanvas.width;
+            DOM.drawCanvas.height = demoCanvas.height;
+
+            const ctx = DOM.pdfCanvas.getContext('2d');
+            ctx.drawImage(demoCanvas, 0, 0);
+
+            DOM.currentPage.textContent = pageNum;
+            DOM.btnPrev.disabled = pageNum <= 1;
+            DOM.btnNext.disabled = pageNum >= scanState.totalPages;
+            clearCurrentCanvasBoxes();
+        }
+
+        function handleFileSelect(e) {
+            if (e.target.files && e.target.files[0]) processScanFile(e.target.files[0]);
+        }
+
+        function handleFileDrop(e) {
+            e.preventDefault();
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) processScanFile(e.dataTransfer.files[0]);
+        }
+
+        async function processScanFile(file) {
+            showScanLoading(true, "Đang đọc file SGK...");
+            scanState.isDemoMode = false;
+            DOM.fileName.textContent = file.name;
+            DOM.dropZone.classList.add('hidden');
+            DOM.canvasWrapper.classList.remove('hidden');
+
+            if (file.type === 'application/pdf') {
+                scanState.isPdf = true;
+                const buffer = await file.arrayBuffer();
+                scanState.pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+                scanState.totalPages = scanState.pdfDoc.numPages;
+                scanState.currentPageNum = 1;
+
+                DOM.totalPages.textContent = scanState.totalPages;
+                DOM.pageControls.classList.remove('opacity-50', 'pointer-events-none');
+                DOM.modeControls.classList.remove('opacity-50', 'pointer-events-none');
+
+                await renderScanPdfPage(1);
+            } else {
+                scanState.isPdf = false;
+                scanState.totalPages = 1;
+                scanState.currentPageNum = 1;
+                DOM.totalPages.textContent = '1';
+                DOM.pageControls.classList.add('opacity-50', 'pointer-events-none');
+                DOM.modeControls.classList.remove('opacity-50', 'pointer-events-none');
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        DOM.pdfCanvas.width = img.width;
+                        DOM.pdfCanvas.height = img.height;
+                        DOM.drawCanvas.width = img.width;
+                        DOM.drawCanvas.height = img.height;
+                        DOM.pdfCanvas.getContext('2d').drawImage(img, 0, 0);
+                        showScanLoading(false);
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        async function renderScanPdfPage(pageNum) {
+            showScanLoading(true, `Tải trang ${pageNum}...`);
+            DOM.currentPage.textContent = pageNum;
+            DOM.btnPrev.disabled = pageNum <= 1;
+            DOM.btnNext.disabled = pageNum >= scanState.totalPages;
+
+            const page = await scanState.pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: scanState.scale });
+
+            DOM.pdfCanvas.width = viewport.width;
+            DOM.pdfCanvas.height = viewport.height;
+            DOM.drawCanvas.width = viewport.width;
+            DOM.drawCanvas.height = viewport.height;
+
+            await page.render({ canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport }).promise;
+            showScanLoading(false);
+        }
+
+        function changeScanPage(delta) {
+            const next = scanState.currentPageNum + delta;
+            if (next >= 1 && next <= scanState.totalPages) {
+                scanState.currentPageNum = next;
+                if (scanState.isDemoMode) renderDemoPage(next);
+                else renderScanPdfPage(next);
+            }
+        }
+
+        function startDrawingBox(e) {
+            scanState.isDrawing = true;
+            const rect = DOM.drawCanvas.getBoundingClientRect();
+            scanState.startX = e.clientX - rect.left;
+            scanState.startY = e.clientY - rect.top;
+        }
+
+        function drawBox(e) {
+            if (!scanState.isDrawing) return;
+            const rect = DOM.drawCanvas.getBoundingClientRect();
+            const currX = e.clientX - rect.left;
+            const currY = e.clientY - rect.top;
+
+            const ctx = DOM.drawCanvas.getContext('2d');
+            ctx.clearRect(0, 0, DOM.drawCanvas.width, DOM.drawCanvas.height);
+            ctx.strokeStyle = '#2563eb';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([6, 3]);
+            ctx.strokeRect(scanState.startX, scanState.startY, currX - scanState.startX, currY - scanState.startY);
+        }
+
+        function endDrawingBox(e) {
+            if (!scanState.isDrawing) return;
+            scanState.isDrawing = false;
+            const rect = DOM.drawCanvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+
+            const w = Math.abs(endX - scanState.startX);
+            const h = Math.abs(endY - scanState.startY);
+
+            if (w > 30 && h > 30) {
+                const cropX = Math.min(scanState.startX, endX);
+                const cropY = Math.min(scanState.startY, endY);
+                extractImageFromArea(cropX, cropY, w, h);
+            }
+        }
+
+        function runAutoDetectCurrentPage() {
+            showScanLoading(true, "Đang nhận diện khung ảnh...");
+            setTimeout(() => {
+                const w = DOM.pdfCanvas.width;
+                extractImageFromArea(40, 90, w - 80, 220);
+                extractImageFromArea(40, 340, w - 80, 280);
+                showScanLoading(false);
+                showToast("Đã trích xuất các hình ảnh từ trang hiện tại!");
+            }, 600);
+        }
+
+        async function runBatchScanAllPages() {
+            if (scanState.isBatchScanning) return;
+            scanState.isBatchScanning = true;
+            scanState.cancelBatchFlag = false;
+
+            DOM.batchProgressBanner.classList.remove('hidden');
+            DOM.scannerLine.classList.remove('hidden');
+
+            const total = scanState.totalPages;
+            for (let p = 1; p <= total; p++) {
+                if (scanState.cancelBatchFlag) break;
+
+                const percent = Math.round((p / total) * 100);
+                DOM.batchProgressBar.style.width = `${percent}%`;
+                DOM.batchPercentText.textContent = `${percent}%`;
+                DOM.batchStatusText.textContent = `Đang bóc tách trang ${p} / ${total}...`;
+
+                scanState.currentPageNum = p;
+                if (scanState.isDemoMode) renderDemoPage(p);
+                else await renderScanPdfPage(p);
+
+                const w = DOM.pdfCanvas.width;
+                extractImageFromArea(40, 100, w - 80, 220);
+
+                await new Promise(r => setTimeout(r, 400));
+            }
+
+            DOM.batchProgressBanner.classList.add('hidden');
+            DOM.scannerLine.classList.add('hidden');
+            scanState.isBatchScanning = false;
+            showToast("Hoàn tất quét toàn bộ file SGK!");
+            switchTab('tab-img-library');
+        }
+
+        function extractImageFromArea(x, y, w, h) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = w;
+            tempCanvas.height = h;
+            const tempCtx = tempCanvas.getContext('2d');
+
+            tempCtx.drawImage(DOM.pdfCanvas, x, y, w, h, 0, 0, w, h);
+            const dataUrl = tempCanvas.toDataURL('image/png');
+
+            const newImg = {
+                id: "img_sgk_" + Date.now() + "_" + Math.floor(Math.random()*100),
+                title: `Hình ảnh SGK Trang ${scanState.currentPageNum}`,
+                grade: document.getElementById('gen-grade') ? document.getElementById('gen-grade').value : "1",
+                page: scanState.currentPageNum,
+                category: "dong_tac",
+                imgUrl: dataUrl,
+                caption: `Hình bóc tách từ trang ${scanState.currentPageNum} lúc ${new Date().toLocaleTimeString()}`,
+                selected: false
+            };
+
+            imageLibrary.unshift(newImg);
+            saveImageLibraryToStorage();
+            renderRecentExtractedUI(newImg);
+            renderImgGallery();
+            populateGeneratorSelects();
+            updateImgCountBadge();
+        }
+
+        function clearCurrentCanvasBoxes() {
+            const ctx = DOM.drawCanvas.getContext('2d');
+            ctx.clearRect(0, 0, DOM.drawCanvas.width, DOM.drawCanvas.height);
+        }
+
+        function renderRecentExtractedUI(img) {
+            const container = DOM.recentExtractedList;
+            if (container.querySelector('p')) container.innerHTML = '';
+
+            const card = document.createElement('div');
+            card.className = "bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center gap-3";
+            card.innerHTML = `
+                <img src="${img.imgUrl}" class="w-16 h-16 object-cover rounded-lg border">
+                <div class="flex-1 text-xs">
+                    <p class="font-bold text-slate-800">${escapeHtml(img.title)}</p>
+                    <p class="text-slate-500 text-[11px]">${escapeHtml(img.caption)}</p>
+                </div>
+            `;
+            container.prepend(card);
+        }
+
+        function renderImgGallery() {
+            const grid = document.getElementById('img-gallery-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            if (imageLibrary.length === 0) {
+                grid.innerHTML = `<div class="col-span-3 text-center py-12 text-slate-400 text-sm">Chưa có hình ảnh nào trong thư viện. Vui lòng quét file SGK.</div>`;
+                return;
+            }
+
+            const categoryLabels = {
+                "dong_tac": "ẢNH ĐỘNG TÁC",
+                "tap_luyen": "ẢNH TẬP LUYỆN",
+                "tro_choi": "ẢNH TRÒ CHƠI",
+                "van_dung": "ẢNH VẬN DỤNG"
+            };
+
+            imageLibrary.forEach(img => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between hover:shadow-md transition relative";
+                
+                const catText = categoryLabels[img.category] || "ẢNH SGK";
+
+                card.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" ${img.selected ? 'checked' : ''} onchange="toggleImgSelection('${img.id}', this.checked)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                                <span class="text-[11px] font-bold uppercase text-blue-700 bg-blue-50 px-2 py-0.5 rounded">Khối ${img.grade}</span>
+                            </label>
+                            <span class="text-[10px] font-semibold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full uppercase">${catText}</span>
+                        </div>
+
+                        <div class="relative group rounded-xl overflow-hidden bg-slate-100 border h-44 flex items-center justify-center p-2">
+                            <img src="${img.imgUrl}" class="max-h-full max-w-full object-contain">
+                            <button onclick="deleteImgFromLibrary('${img.id}')" class="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition" title="Xóa ảnh"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+
+                        <div>
+                            <h4 class="font-bold text-slate-800 text-xs mt-1">${escapeHtml(img.title)}</h4>
+                            <p class="text-slate-500 text-[11px] leading-tight mt-0.5">${escapeHtml(img.caption)}</p>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-slate-100">
+                        <div class="flex items-center gap-1 text-xs">
+                            <span class="text-slate-400 text-[10px]">Lưu vào:</span>
+                            <select onchange="changeImgCategory('${img.id}', this.value)" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-[11px] p-1 text-slate-700 font-medium">
+                                <option value="dong_tac" ${img.category === 'dong_tac' ? 'selected' : ''}>Thư viện Động tác</option>
+                                <option value="tap_luyen" ${img.category === 'tap_luyen' ? 'selected' : ''}>Thư viện Tập luyện</option>
+                                <option value="tro_choi" ${img.category === 'tro_choi' ? 'selected' : ''}>Thư viện Trò chơi</option>
+                                <option value="van_dung" ${img.category === 'van_dung' ? 'selected' : ''}>Thư viện Vận dụng</option>
+                            </select>
+                        </div>
+
+                        <button onclick="openSelectCellModal('${img.id}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+                            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Chèn vào Kế hoạch bài dạy
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+            updateSelectedImgCountText();
+        }
+
+        function filterImgGallery() {
+            const q = document.getElementById('gallery-search').value.toLowerCase();
+            const cat = document.getElementById('gallery-filter-category').value;
+            const g = document.getElementById('gallery-filter-grade').value;
+
+            const grid = document.getElementById('img-gallery-grid');
+            grid.innerHTML = '';
+
+            const filtered = imageLibrary.filter(img => {
+                const matchQ = img.title.toLowerCase().includes(q) || img.caption.toLowerCase().includes(q);
+                const matchCat = cat === 'all' || img.category === cat;
+                const matchG = g === 'all' || img.grade === g;
+                return matchQ && matchCat && matchG;
+            });
+
+            if (filtered.length === 0) {
+                grid.innerHTML = `<div class="col-span-3 text-center py-10 text-slate-400 text-xs">Không tìm thấy hình ảnh phù hợp.</div>`;
+                return;
+            }
+
+            filtered.forEach(img => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3 flex flex-col justify-between relative";
+                card.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <input type="checkbox" ${img.selected ? 'checked' : ''} onchange="toggleImgSelection('${img.id}', this.checked)" class="w-4 h-4 text-blue-600 rounded">
+                            <span class="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">Khối ${img.grade}</span>
+                        </div>
+                        <div class="rounded-xl overflow-hidden bg-slate-100 border h-40 flex items-center justify-center p-1">
+                            <img src="${img.imgUrl}" class="max-h-full max-w-full object-contain">
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-xs">${escapeHtml(img.title)}</h4>
+                    </div>
+                    <button onclick="openSelectCellModal('${img.id}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold py-2 rounded-xl transition">
+                        Chèn vào bài dạy
+                    </button>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function toggleImgSelection(id, checked) {
+            const img = imageLibrary.find(x => x.id === id);
+            if (img) img.selected = checked;
+            updateSelectedImgCountText();
+        }
+
+        function toggleSelectAllImgs(mainCheckbox) {
+            const isChecked = mainCheckbox.checked;
+            imageLibrary.forEach(img => img.selected = isChecked);
+            renderImgGallery();
+        }
+
+        function updateSelectedImgCountText() {
+            const count = imageLibrary.filter(x => x.selected).length;
+            document.getElementById('selected-img-count').innerText = count;
+        }
+
+        function changeImgCategory(id, newCat) {
+            const img = imageLibrary.find(x => x.id === id);
+            if (img) {
+                img.category = newCat;
+                saveImageLibraryToStorage();
+                showToast("Đã cập nhật thư viện cho ảnh!");
+            }
+        }
+
+        function batchProcessImages(action) {
+            const selectedList = imageLibrary.filter(x => x.selected);
+            if (selectedList.length === 0) {
+                return alert("Vui lòng tick chọn ít nhất 1 hình ảnh để xử lý!");
+            }
+
+            if (action === 'crop') {
+                showToast(`Đã tự động cắt xén lề dư cho ${selectedList.length} ảnh đã chọn!`);
+            } else if (action === 'remove-bg') {
+                showToast(`Đã bóc tách nền trong suốt tự động cho ${selectedList.length} ảnh!`);
+            } else if (action === 'watermark') {
+                showToast(`Đã xóa Watermark & tái tạo chi tiết nét ảnh cho ${selectedList.length} ảnh!`);
+            }
+
+            saveImageLibraryToStorage();
+            renderImgGallery();
+        }
+
+        function openSelectCellModal(imgId) {
+            selectedImgForAttachId = imgId;
+            const img = imageLibrary.find(x => x.id === imgId);
+            
+            if (img) {
+                const radios = document.getElementsByName('modal-target-col');
+                if (img.category === 'dong_tac') radios[0].checked = true; // Cột Nội dung
+                else radios[1].checked = true; // Cột HS (Sơ đồ / Trò chơi)
+            }
+
+            document.getElementById('modal-select-cell').classList.remove('hidden');
+        }
+
+        function closeSelectCellModal() {
+            document.getElementById('modal-select-cell').classList.add('hidden');
+        }
+
+        function confirmAttachImageToCell() {
+            const img = imageLibrary.find(x => x.id === selectedImgForAttachId);
+            const rowIndex = parseInt(document.getElementById('modal-select-row-index').value);
+            const selectedCol = document.querySelector('input[name="modal-target-col"]:checked').value;
+
+            if (!img || !currentLessonPlanRows[rowIndex]) return;
+
+            if (selectedCol === 'content') {
+                currentLessonPlanRows[rowIndex].contentImgUrl = img.imgUrl;
+                currentLessonPlanRows[rowIndex].contentImgTitle = img.title;
+            } else {
+                currentLessonPlanRows[rowIndex].hsImgUrl = img.imgUrl;
+                currentLessonPlanRows[rowIndex].hsImgTitle = img.title;
+            }
+
+            closeSelectCellModal();
+            switchTab('tab-generator');
+            renderGeneratorTable();
+            showToast(`Đã chèn "${img.title}" vào đúng cột thành công!`);
+        }
+
+        function removeContentImage(rowIndex) {
+            if (currentLessonPlanRows[rowIndex]) {
+                delete currentLessonPlanRows[rowIndex].contentImgUrl;
+                delete currentLessonPlanRows[rowIndex].contentImgTitle;
+                renderGeneratorTable();
+                showToast("Đã xóa ảnh khỏi cột Nội dung!");
+            }
+        }
+
+        function removeHsImage(rowIndex) {
+            if (currentLessonPlanRows[rowIndex]) {
+                delete currentLessonPlanRows[rowIndex].hsImgUrl;
+                delete currentLessonPlanRows[rowIndex].hsImgTitle;
+                renderGeneratorTable();
+                showToast("Đã xóa ảnh/sơ đồ khỏi cột Hoạt động HS!");
+            }
+        }
+
+        function deleteImgFromLibrary(id) {
+            imageLibrary = imageLibrary.filter(x => x.id !== id);
+            saveImageLibraryToStorage();
+            renderImgGallery();
+            populateGeneratorSelects();
+            updateImgCountBadge();
+            showToast("Đã xóa ảnh khỏi thư viện!");
+        }
+
+        function saveImageLibraryToStorage() {
+            localStorage.setItem('gdtc_sgk_images', JSON.stringify(imageLibrary));
+        }
+
+        function updateImgCountBadge() {
+            document.getElementById('tab-img-count').innerText = imageLibrary.length;
+        }
+
+        function exportImagesZip() {
+            const zip = new JSZip();
+            const imgFolder = zip.folder("Hinh_Anh_SGK_GDTC");
+
+            imageLibrary.forEach((img, idx) => {
+                const data = img.imgUrl.split(',')[1];
+                imgFolder.file(`Hinh_${idx + 1}_K${img.grade}_P${img.page}.png`, data, {base64: true});
+            });
+
+            zip.generateAsync({type:"blob"}).then(function(content) {
+                saveAs(content, "Thu_Vien_Hinh_Anh_SGK_GDTC.zip");
+            });
+        }
+
+        function exportImagesJson() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(imageLibrary, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "Thu_Vien_Hinh_Anh_SGK.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function showScanLoading(show, text) {
+            if (show) {
+                DOM.loadingSpinner.classList.remove('hidden');
+                DOM.loadingText.textContent = text;
+            } else {
+                DOM.loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        function renderExtractedData() {
+            const key = document.getElementById('extract-lesson-select').value;
+            const data = initialLessonsData[key] || initialLessonsData["k1_t15"];
+
+            document.getElementById('extract-stats').innerHTML = `
+                <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl">
+                    <p class="text-xs text-blue-600 font-semibold">Khối Lớp & Tiết</p>
+                    <p class="text-base font-bold text-blue-900">Khối ${data.grade} - Tiết ${data.lessonNum}</p>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+                    <p class="text-xs text-emerald-600 font-semibold">Số Hoạt Động Trích Xuất</p>
+                    <p class="text-base font-bold text-emerald-900">${data.rows.length} Mục chính</p>
+                </div>
+                <div class="bg-amber-50 border border-amber-100 p-4 rounded-xl">
+                    <p class="text-xs text-amber-600 font-semibold">Tuần Học</p>
+                    <p class="text-base font-bold text-amber-900">Tuần ${data.week}</p>
+                </div>
+                <div class="bg-purple-50 border border-purple-100 p-4 rounded-xl">
+                    <p class="text-xs text-purple-600 font-semibold">Tích Hợp Trong Bài</p>
+                    <p class="text-base font-bold text-purple-900">KNS / NL Số / ATGT</p>
+                </div>
+            `;
+
+            const tbody = document.getElementById('extracted-table-body');
+            tbody.innerHTML = '';
+
+            data.rows.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="p-3 font-semibold text-slate-800 whitespace-pre-line">${escapeHtml(row.content)}</td>
+                    <td class="p-3 text-center text-slate-600 font-medium">${escapeHtml(row.lvd)}</td>
+                    <td class="p-3 whitespace-pre-line text-slate-700">${escapeHtml(row.gv)}</td>
+                    <td class="p-3 whitespace-pre-line text-slate-700">${escapeHtml(row.hs)}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="addSingleRowToLibrary('${key}', ${idx})" class="bg-slate-100 hover:bg-blue-100 text-blue-700 p-1.5 rounded-lg text-xs flex items-center justify-center gap-1 w-full">
+                            <i data-lucide="plus" class="w-3.5 h-3.5"></i> Lưu KB
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        function saveExtractedToLibrary() {
+            const key = document.getElementById('extract-lesson-select').value;
+            const data = initialLessonsData[key] || initialLessonsData["k1_t15"];
+            data.rows.forEach((r, i) => {
+                scenarioLibrary.push({
+                    id: "sc_ext_" + Date.now() + "_" + i,
+                    title: `[Trích xuất] ${r.content.split('\n')[0]}`,
+                    category: r.content.includes("Trò chơi") ? "Trò chơi" : "Luyện tập",
+                    grade: data.grade.toString(),
+                    lvd: r.lvd,
+                    gv: r.gv,
+                    hs: r.hs
+                });
+            });
+            saveLibraryToStorage();
+            showToast("Đã lưu toàn bộ kịch bản giáo án này vào Thư viện!");
+        }
+
+        function addSingleRowToLibrary(key, rowIdx) {
+            const r = initialLessonsData[key].rows[rowIdx];
+            scenarioLibrary.push({
+                id: "sc_ext_" + Date.now(),
+                title: `[Mẫu GV] ${r.content.split('\n')[0]}`,
+                category: "Luyện tập",
+                grade: initialLessonsData[key].grade.toString(),
+                lvd: r.lvd,
+                gv: r.gv,
+                hs: r.hs
+            });
+            saveLibraryToStorage();
+            showToast("Đã lưu kịch bản vào Thư viện!");
+        }
+
+        function renderLibrary() {
+            const typeFilter = document.getElementById('filter-type').value;
+            const gradeFilter = document.getElementById('filter-grade').value;
+            const searchFilter = document.getElementById('filter-search').value.toLowerCase();
+
+            const container = document.getElementById('library-grid');
+            container.innerHTML = '';
+
+            const filtered = scenarioLibrary.filter(sc => {
+                const matchType = typeFilter === 'all' || sc.category === typeFilter;
+                const matchGrade = gradeFilter === 'all' || sc.grade === 'Chung' || sc.grade === gradeFilter;
+                const matchSearch = sc.title.toLowerCase().includes(searchFilter) || sc.gv.toLowerCase().includes(searchFilter);
+                return matchType && matchGrade && matchSearch;
+            });
+
+            filtered.forEach(sc => {
+                const card = document.createElement('div');
+                card.className = "bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3 relative";
+                card.innerHTML = `
+                    <div class="flex justify-between items-start gap-2">
+                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800">
+                            ${sc.category} (Khối ${sc.grade})
+                        </span>
+                        <button onclick="deleteScenario('${sc.id}')" class="text-slate-300 hover:text-red-600 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>
+                    <h4 class="font-bold text-slate-800 text-sm">${escapeHtml(sc.title)}</h4>
+                    <div class="text-xs text-slate-600 space-y-1.5 bg-slate-50 p-3 rounded-xl border">
+                        <p><strong class="text-blue-700">GV:</strong> ${escapeHtml(sc.gv)}</p>
+                        <p><strong class="text-emerald-700">HS:</strong> ${escapeHtml(sc.hs)}</p>
+                    </div>
+                    <button onclick="quickInsertToPlan('${sc.id}')" class="w-full bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-xs font-semibold py-2 rounded-xl transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="arrow-right-circle" class="w-3.5 h-3.5"></i> Chèn vào bài dạy tuần mới
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function populateGeneratorSelects() {
+            const selNew = document.getElementById('select-script-new');
+            const selPrac = document.getElementById('select-script-practice');
+            const selGame = document.getElementById('select-script-game');
+            const selImg = document.getElementById('select-img-sgk');
+            const selDiagram = document.getElementById('select-diagram-sgk');
+
+            selNew.innerHTML = '<option value="">-- Mặc định --</option>';
+            selPrac.innerHTML = '<option value="">-- Mặc định --</option>';
+            selGame.innerHTML = '<option value="">-- Mặc định --</option>';
+            selImg.innerHTML = '<option value="">-- Không đính kèm ảnh động tác --</option>';
+            selDiagram.innerHTML = '<option value="">-- Không đính kèm sơ đồ / trò chơi --</option>';
+
+            scenarioLibrary.forEach(sc => {
+                const opt = `<option value="${sc.id}">${sc.title}</option>`;
+                if (sc.category === 'Động tác mới') selNew.innerHTML += opt;
+                if (sc.category === 'Luyện tập') selPrac.innerHTML += opt;
+                if (sc.category === 'Trò chơi') selGame.innerHTML += opt;
+            });
+
+            imageLibrary.forEach(img => {
+                if (img.category === 'dong_tac') {
+                    selImg.innerHTML += `<option value="${img.id}">${img.title}</option>`;
+                } else {
+                    selDiagram.innerHTML += `<option value="${img.id}">${img.title}</option>`;
+                }
+            });
+        }
+
+        function initGeneratorTable() {
+            currentLessonPlanRows = [
+                {
+                    content: "1. HOẠT ĐỘNG MỞ ĐẦU\n- Nhận lớp, phổ biến bài học\n- Khởi động chung & Chuyên môn",
+                    lvd: "5-7'",
+                    gv: "- GV nhận lớp, kiểm tra sức khỏe HS.\n- Đợi HS khởi động các khớp theo nhạc.",
+                    hs: "- Cán sự tập trung báo cáo.\n- HS khởi động xoay các khớp cổ tay, cổ chân, vai."
+                },
+                {
+                    content: "2. HÌNH THÀNH KIẾN THỨC MỚI\n- Học Động tác mới",
+                    lvd: "5-7'",
+                    gv: "- GV làm mẫu kết hợp phân tích kỹ thuật động tác.\n- Cho HS quan sát tranh ảnh SGK đính kèm.",
+                    hs: "- Quan sát GV hướng dẫn.\n- Ghi nhớ nhịp và tư thế thân người."
+                },
+                {
+                    content: "3. HOẠT ĐỘNG LUYỆN TẬP\n- Luyện tập đồng loạt & Nhóm",
+                    lvd: "15-16'",
+                    gv: "- Hô nhịp điều khiển cả lớp tập.\n- Phân tổ luyện tập, sửa sai từng khu vực.",
+                    hs: "- Luyện tập theo tổ trưởng.\n- Quan sát và sửa sai lẫn nhau."
+                },
+                {
+                    content: "3.5 Trò chơi vận động",
+                    lvd: "1-2 lần",
+                    gv: "- GV nêu tên trò chơi, luật chơi và điều khiển.",
+                    hs: "- HS tham gia nhiệt tình, đảm bảo an toàn."
+                },
+                {
+                    content: "4. HOẠT ĐỘNG VẬN DỤNG\n- Hồi tĩnh & Dặn dò",
+                    lvd: "4-5'",
+                    gv: "- Điều hành thả lỏng, dặn dò tập ở nhà.",
+                    hs: "- Thả lỏng toàn thân, ghi nhớ nhiệm vụ."
+                }
+            ];
+            renderGeneratorTable();
+        }
+
+        function applyScriptsToPlan() {
+            const scNewId = document.getElementById('select-script-new').value;
+            const scPracId = document.getElementById('select-script-practice').value;
+            const scGameId = document.getElementById('select-script-game').value;
+            const imgSgkId = document.getElementById('select-img-sgk').value;
+            const diagramSgkId = document.getElementById('select-diagram-sgk').value;
+
+            if (scNewId) {
+                const sc = scenarioLibrary.find(x => x.id === scNewId);
+                if (sc) { currentLessonPlanRows[1].gv = sc.gv; currentLessonPlanRows[1].hs = sc.hs; }
+            }
+            // Ảnh động tác chèn vào cột Nội dung (ô 1)
+            if (imgSgkId) {
+                const img = imageLibrary.find(x => x.id === imgSgkId);
+                if (img) {
+                    currentLessonPlanRows[1].contentImgUrl = img.imgUrl;
+                    currentLessonPlanRows[1].contentImgTitle = img.title;
+                }
+            }
+            // Sơ đồ/Trò chơi chèn vào cột Hoạt động HS (ô 3 cho trò chơi, ô 2 cho luyện tập)
+            if (diagramSgkId) {
+                const diagram = imageLibrary.find(x => x.id === diagramSgkId);
+                if (diagram) {
+                    const targetRowIndex = (diagram.category === 'tro_choi') ? 3 : 2;
+                    currentLessonPlanRows[targetRowIndex].hsImgUrl = diagram.imgUrl;
+                    currentLessonPlanRows[targetRowIndex].hsImgTitle = diagram.title;
+                }
+            }
+            if (scPracId) {
+                const sc = scenarioLibrary.find(x => x.id === scPracId);
+                if (sc) { currentLessonPlanRows[2].gv = sc.gv; currentLessonPlanRows[2].hs = sc.hs; }
+            }
+            if (scGameId) {
+                const sc = scenarioLibrary.find(x => x.id === scGameId);
+                if (sc) { currentLessonPlanRows[3].content = `3.5 Trò chơi: ${sc.title}`; currentLessonPlanRows[3].gv = sc.gv; currentLessonPlanRows[3].hs = sc.hs; }
+            }
+
+            document.getElementById('preview-week-num').innerText = document.getElementById('gen-week').value;
+            document.getElementById('preview-grade-num').innerText = document.getElementById('gen-grade').value;
+            document.getElementById('preview-lesson-num').innerText = document.getElementById('gen-lesson-num').value;
+            document.getElementById('preview-topic-text').innerText = document.getElementById('gen-topic').value;
+            document.getElementById('preview-title-text').innerText = document.getElementById('gen-title').value;
+
+            renderGeneratorTable();
+            showToast("Đã ghép thành công kịch bản và hình ảnh vào đúng vị trí cột quy chuẩn!");
+        }
+
+        function quickInsertToPlan(scId) {
+            const sc = scenarioLibrary.find(x => x.id === scId);
+            if (!sc) return;
+
+            if (sc.category === 'Động tác mới') currentLessonPlanRows[1] = { content: "2. HÌNH THÀNH KIẾN THỨC MỚI\n- " + sc.title, lvd: sc.lvd, gv: sc.gv, hs: sc.hs };
+            else if (sc.category === 'Luyện tập') currentLessonPlanRows[2] = { content: "3. HOẠT ĐỘNG LUYỆN TẬP\n- " + sc.title, lvd: sc.lvd, gv: sc.gv, hs: sc.hs };
+            else if (sc.category === 'Trò chơi') currentLessonPlanRows[3] = { content: "3.5 Trò chơi vận động: " + sc.title, lvd: sc.lvd, gv: sc.gv, hs: sc.hs };
+
+            switchTab('tab-generator');
+            renderGeneratorTable();
+            showToast(`Đã chèn "${sc.title}" vào giáo án!`);
+        }
+
+        function renderGeneratorTable() {
+            const tbody = document.getElementById('generator-table-body');
+            tbody.innerHTML = '';
+
+            currentLessonPlanRows.forEach((row, i) => {
+                const tr = document.createElement('tr');
+                
+                // 1. Ảnh động tác ở CỘT NỘI DUNG
+                let contentImgHtml = row.contentImgUrl ? `
+                    <div class="mt-2 p-1.5 bg-blue-50/60 border border-blue-200 rounded-lg relative group">
+                        <img src="${row.contentImgUrl}" class="w-full max-h-52 object-contain rounded bg-white shadow-xs">
+                        <div class="flex items-center justify-between mt-1 text-[11px] text-slate-500">
+                            <span class="truncate max-w-[140px] font-medium text-blue-800">${escapeHtml(row.contentImgTitle || 'Ảnh Động tác SGK')}</span>
+                            <button onclick="removeContentImage(${i})" class="text-red-600 hover:text-red-800 font-bold px-1 py-0.5 rounded hover:bg-red-50 flex items-center gap-0.5" title="Xóa ảnh">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                ` : '';
+
+                // 2. Sơ đồ / Trò chơi / Đội hình ở CỘT HOẠT ĐỘNG HS
+                let hsImgHtml = row.hsImgUrl ? `
+                    <div class="mt-2 p-1.5 bg-emerald-50/60 border border-emerald-200 rounded-lg relative group">
+                        <img src="${row.hsImgUrl}" class="w-full max-h-52 object-contain rounded bg-white shadow-xs">
+                        <div class="flex items-center justify-between mt-1 text-[11px] text-slate-500">
+                            <span class="truncate max-w-[140px] font-medium text-emerald-800">${escapeHtml(row.hsImgTitle || 'Sơ đồ / Trò chơi / Đội hình')}</span>
+                            <button onclick="removeHsImage(${i})" class="text-red-600 hover:text-red-800 font-bold px-1 py-0.5 rounded hover:bg-red-50 flex items-center gap-0.5" title="Xóa sơ đồ">
+                                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Xóa
+                            </button>
+                        </div>
+                    </div>
+                ` : '';
+
+                tr.innerHTML = `
+                    <!-- CỘT NỘI DUNG -->
+                    <td class="border border-slate-300 p-2">
+                        <textarea onblur="updateRowData(${i}, 'content', this.value)" class="w-full h-20 p-1 border rounded text-xs leading-tight font-medium">${row.content}</textarea>
+                        ${contentImgHtml}
+                    </td>
+
+                    <!-- CỘT LƯỢNG VẬN ĐỘNG -->
+                    <td class="border border-slate-300 p-2 text-center">
+                        <input type="text" onblur="updateRowData(${i}, 'lvd', this.value)" value="${row.lvd}" class="w-full text-center p-1 border rounded text-xs">
+                    </td>
+
+                    <!-- CỘT HOẠT ĐỘNG GV (Sạch sẽ, chỉ có chữ kịch bản) -->
+                    <td class="border border-slate-300 p-2">
+                        <textarea onblur="updateRowData(${i}, 'gv', this.value)" class="w-full h-24 p-1 border rounded text-xs leading-tight">${row.gv}</textarea>
+                    </td>
+
+                    <!-- CỘT HOẠT ĐỘNG HS (Chứa chữ + Sơ đồ/Trò chơi) -->
+                    <td class="border border-slate-300 p-2">
+                        <textarea onblur="updateRowData(${i}, 'hs', this.value)" class="w-full h-20 p-1 border rounded text-xs leading-tight">${row.hs}</textarea>
+                        ${hsImgHtml}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        function updateRowData(index, field, val) {
+            currentLessonPlanRows[index][field] = val;
+        }
+
+        function updatePrintPreview() {
+            document.getElementById('print-header-week').innerText = `KẾ HOẠCH BÀI DẠY TUẦN ${document.getElementById('gen-week').value}`;
+            document.getElementById('print-header-topic').innerText = document.getElementById('gen-topic').value;
+            document.getElementById('print-header-lesson').innerText = `TIẾT ${document.getElementById('gen-lesson-num').value}: ${document.getElementById('gen-title').value}`;
+
+            const tbody = document.getElementById('print-table-body');
+            tbody.innerHTML = '';
+
+            currentLessonPlanRows.forEach(r => {
+                const tr = document.createElement('tr');
+                
+                let contentImgPrint = r.contentImgUrl ? `<div class="mt-2 text-center"><img src="${r.contentImgUrl}" class="w-full max-h-52 object-contain rounded border border-slate-200"></div>` : '';
+                let hsImgPrint = r.hsImgUrl ? `<div class="mt-2 text-center"><img src="${r.hsImgUrl}" class="w-full max-h-52 object-contain rounded border border-slate-200"></div>` : '';
+
+                tr.innerHTML = `
+                    <td class="border border-slate-400 p-2 whitespace-pre-line font-medium">${escapeHtml(r.content)}${contentImgPrint}</td>
+                    <td class="border border-slate-400 p-2 text-center">${escapeHtml(r.lvd)}</td>
+                    <td class="border border-slate-400 p-2 whitespace-pre-line">${escapeHtml(r.gv)}</td>
+                    <td class="border border-slate-400 p-2 whitespace-pre-line">${escapeHtml(r.hs)}${hsImgPrint}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function exportToWord() {
+            const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Giáo án GDTC</title></head><body>";
+            const sourceHTML = header + document.getElementById('print-document').innerHTML + "</body></html>";
+            
+            const source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            const fileDownload = document.createElement("a");
+            document.body.appendChild(fileDownload);
+            fileDownload.href = source;
+            fileDownload.download = `Giao_An_GDTC_Tuan_${document.getElementById('gen-week').value}.doc`;
+            fileDownload.click();
+            document.body.removeChild(fileDownload);
+        }
+
+        function openAddScenarioModal() {
+            document.getElementById('modal-title').innerText = "Thêm Kịch Bản Mới";
+            document.getElementById('modal-input-title').value = "";
+            document.getElementById('modal-input-gv').value = "";
+            document.getElementById('modal-input-hs').value = "";
+            document.getElementById('modal-scenario').classList.remove('hidden');
+        }
+
+        function closeScenarioModal() {
+            document.getElementById('modal-scenario').classList.add('hidden');
+        }
+
+        function saveScenario() {
+            const title = document.getElementById('modal-input-title').value;
+            if (!title) return alert("Vui lòng nhập tên kịch bản!");
+
+            scenarioLibrary.unshift({
+                id: "sc_" + Date.now(),
+                title: title,
+                category: document.getElementById('modal-input-category').value,
+                grade: document.getElementById('modal-input-grade').value,
+                lvd: document.getElementById('modal-input-lvd').value,
+                gv: document.getElementById('modal-input-gv').value,
+                hs: document.getElementById('modal-input-hs').value
+            });
+
+            saveLibraryToStorage();
+            closeScenarioModal();
+            renderLibrary();
+            populateGeneratorSelects();
+            showToast("Đã thêm kịch bản mới!");
+        }
+
+        function deleteScenario(id) {
+            scenarioLibrary = scenarioLibrary.filter(x => x.id !== id);
+            saveLibraryToStorage();
+            renderLibrary();
+            populateGeneratorSelects();
+            showToast("Đã xóa kịch bản!");
+        }
+
+        function saveLibraryToStorage() {
+            localStorage.setItem('gdtc_scenarios', JSON.stringify(scenarioLibrary));
+        }
+
+        function resetData() {
+            if (confirm("Khôi phục toàn bộ ứng dụng về trạng thái ban đầu?")) {
+                localStorage.removeItem('gdtc_scenarios');
+                localStorage.removeItem('gdtc_sgk_images');
+                location.reload();
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3000);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>
