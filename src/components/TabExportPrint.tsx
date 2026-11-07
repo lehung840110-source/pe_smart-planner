@@ -230,6 +230,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   const [fontFamily, setFontFamily] = useState<'Times New Roman' | 'Arial' | 'Roboto' | 'Calibri'>('Times New Roman');
   const [fontSize, setFontSize] = useState<'11pt' | '12pt' | '13pt' | '14pt'>('12pt');
   const [imageHeight, setImageHeight] = useState<number>(95); // Chuẩn 95px theo đúng kích thước thầy vừa điều chỉnh trong file PDF
+  const [showImageCaptions, setShowImageCaptions] = useState<boolean>(false); // Mặc định tắt ghi chú dưới hình theo chuẩn giáo án GDTC tiểu học
   const [isExportingWord, setIsExportingWord] = useState(false);
 
   // Local editable administrative settings
@@ -605,10 +606,24 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         };
       }
 
-      // Row 1: Technical movement exploration row: ensure authentic textbook photo, never artificial SVG
+      // Row 1: Technical movement exploration row: ensure authentic textbook photo, never artificial SVG or mismatched movement
       if (rIdx === 1) {
-        if (r.contentImgUrl?.startsWith('data:image/svg+xml') || !r.contentImgUrl || isMismatched) {
-          const acc = resolveAccurateMovement(r.content || '', resolvedTitle, g, images);
+        const acc = resolveAccurateMovement(r.content || '', resolvedTitle, g, images);
+        const currentUrl = r.contentImgUrl || '';
+        const cLower = (r.content || '').toLowerCase();
+        const tLower = resolvedTitle.toLowerCase();
+        const isWrongImage =
+          !currentUrl ||
+          currentUrl.startsWith('data:image/svg+xml') ||
+          isMismatched ||
+          (g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !currentUrl.includes('bung')) ||
+          (g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !currentUrl.includes('van_minh')) ||
+          (g === 5 && (tLower.includes('toàn thân') || cLower.includes('toàn thân')) && !currentUrl.includes('toan_than')) ||
+          (g === 5 && (tLower.includes('chân') || cLower.includes('chân')) && !currentUrl.includes('chan')) ||
+          (g === 1 && (tLower.includes('bụng') || cLower.includes('bụng')) && !currentUrl.includes('bung')) ||
+          (g === 1 && (tLower.includes('chân') || cLower.includes('chân')) && !currentUrl.includes('chan'));
+
+        if (isWrongImage) {
           return {
             ...r,
             contentImgUrl: acc.imgUrl,
@@ -621,6 +636,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       if (rIdx === 5 || (rawRows.length === 7 && rIdx === 5) || rIdx === rawRows.length - 2) {
         const gameImg = resolveAccurateGameImage(rule.practiceGame, g, 'tro_choi_vd', images);
         let contentText = r.content || '';
+        if (contentText.includes('Kéo co thể thao')) {
+          contentText = contentText.replace(/Kéo co thể thao/g, rule.practiceGame || 'Trao gậy tiếp sức');
+        }
         if (rule.practiceGame && !contentText.toLowerCase().includes(rule.practiceGame.toLowerCase())) {
           if (contentText.includes('Trò chơi vận động:')) {
             contentText = contentText.replace(/\*?\s*Trò chơi vận động:[^\n]*/i, `* Trò chơi vận động: "${rule.practiceGame}": Tổ chức cho học sinh chơi theo luật.`);
@@ -643,13 +661,21 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           gvText = gvText.replace(/cất gậy và\s*/gi, '').replace(/4\s*gậy/gi, 'cọc mốc');
           hsText = hsText.replace(/cầm gậy/gi, 'chạy tiếp sức');
         }
+
+        const currentGameUrl = r.contentImgUrl || '';
+        const isWrongGameImg =
+          !currentGameUrl ||
+          currentGameUrl.startsWith('data:image/svg+xml') ||
+          (g === 5 && (rule.practiceGame?.includes('Trao gậy') || contentText.includes('Trao gậy')) && !currentGameUrl.includes('trao_gay')) ||
+          (g === 5 && currentGameUrl.includes('k1_tro_choi'));
+
         return {
           ...r,
           content: contentText,
           gv: gvText,
           hs: hsText,
-          contentImgUrl: gameImg.url,
-          contentImgTitle: gameImg.title
+          contentImgUrl: isWrongGameImg ? gameImg.url : (r.contentImgUrl || gameImg.url),
+          contentImgTitle: isWrongGameImg ? gameImg.title : (r.contentImgTitle || gameImg.title)
         };
       }
 
@@ -1548,6 +1574,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Show Image Captions Toggle */}
+            <label className="flex items-center gap-1.5 pl-2 border-l border-slate-200 text-xs font-semibold text-slate-600 cursor-pointer select-none" title="Bật/Tắt ghi chú tên hình ảnh bên dưới khung ảnh (Mặc định: Tắt theo chuẩn SGK để giáo án sạch đẹp, tránh sai lệch)">
+              <input
+                type="checkbox"
+                checked={showImageCaptions}
+                onChange={(e) => setShowImageCaptions(e.target.checked)}
+                className="rounded text-blue-600 focus:ring-0 cursor-pointer"
+              />
+              <span className="text-[11px]">Ghi chú dưới ảnh</span>
+            </label>
           </div>
         </div>
 
@@ -2184,7 +2221,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       style={{ maxHeight: `${imageHeight}px` }}
                                       className="w-auto mx-auto object-contain rounded"
                                     />
-                                    {row.contentImgTitle && (
+                                    {showImageCaptions && row.contentImgTitle && (
                                       <p className="text-[10px] text-slate-600 italic mt-0.5">
                                         {row.contentImgTitle}
                                       </p>
@@ -2240,7 +2277,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       style={{ maxHeight: `${imageHeight}px` }}
                                       className="w-auto mx-auto object-contain rounded"
                                     />
-                                    {row.contentImgTitle && (
+                                    {showImageCaptions && row.contentImgTitle && (
                                       <p className="text-[10px] text-slate-600 italic mt-0.5">
                                         {row.contentImgTitle}
                                       </p>

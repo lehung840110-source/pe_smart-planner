@@ -820,7 +820,7 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
     title: 'Bài 2: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
     movementNames: ['Động tác Phối hợp với gậy', 'Động tác Nhảy với gậy', 'Động tác Điều hòa'],
-    suggestedGame: 'Trò chơi: Kéo co thể thao'
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   }
 ];
 

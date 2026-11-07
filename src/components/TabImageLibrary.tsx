@@ -24,7 +24,8 @@ import {
   BookOpen,
   Tag,
   Move,
-  X
+  X,
+  Edit3
 } from 'lucide-react';
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
@@ -33,6 +34,8 @@ import { Database, Wand2, Eraser } from 'lucide-react';
 import { sgkCurriculumTree, SgkLessonFolder } from '../data/sgkCurriculumTree';
 import { deleteImageDB, saveImagesDB } from '../utils/db';
 import { ImageToImageModal } from './ImageToImageModal';
+import { BatchImageUploadModal } from './BatchImageUploadModal';
+import { EditImageModal } from './EditImageModal';
 
 interface TabImageLibraryProps {
   images: SgkImageItem[];
@@ -57,6 +60,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const [selectedLessonId, setSelectedLessonId] = useState<string>('all');
   const [selectedSubFolder, setSelectedSubFolder] = useState<string>('all'); // 'all' | 'kyThuat' | 'luyenTap' | 'vanDung' | 'troChoi' | 'khoiDong'
   const [imageToImageModalItem, setImageToImageModalItem] = useState<SgkImageItem | null>(null);
+  const [isBatchUploadOpen, setIsBatchUploadOpen] = useState<boolean>(false);
 
   // Tree expanded state
   const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({
@@ -73,6 +77,16 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState<boolean>(false);
   const [reclassifyModalImage, setReclassifyModalImage] = useState<SgkImageItem | null>(null);
+  const [editingImageItem, setEditingImageItem] = useState<SgkImageItem | null>(null);
+
+  const handleSaveEditedImage = (updatedItem: SgkImageItem) => {
+    setImages((prev) => {
+      const updated = prev.map((img) => (img.id === updatedItem.id ? updatedItem : img));
+      saveImagesDB(updated).catch(() => {});
+      return updated;
+    });
+    setEditingImageItem(null);
+  };
 
   const selectedCount = images.filter((img) => img.selected).length;
 
@@ -392,6 +406,15 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handleBatchImportImages = async (newImages: SgkImageItem[]) => {
+    if (newImages.length === 0) return;
+    setImages((prev) => {
+      const merged = [...newImages, ...prev];
+      saveImagesDB(merged).catch((err) => console.error('Save to IndexedDB error:', err));
+      return merged;
+    });
+  };
+
   // State theo dõi ảnh đang sinh 3D
   const [generating3dId, setGenerating3dId] = useState<string | null>(null);
 
@@ -617,8 +640,16 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setIsBatchUploadOpen(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-98"
+              title="Tải lên cùng lúc nhiều ảnh, chọn thư mục hoặc giải nén từ file ZIP mà không cần quét lại từ đầu"
+            >
+              <Upload className="w-4 h-4 text-sky-200" /> Tải Hàng Loạt Ảnh (ZIP / Nhiều Ảnh)
+            </button>
+
             <label className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
-              <Upload className="w-3.5 h-3.5" /> Thêm Ảnh Ngoài
+              <Upload className="w-3.5 h-3.5" /> Thêm 1 Ảnh
               <input
                 type="file"
                 accept="image/*"
@@ -1217,9 +1248,19 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
                       {/* Image Info & Hierarchy Tags */}
                       <div>
-                        <h4 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
-                          {img.title}
-                        </h4>
+                        <div className="flex items-start justify-between gap-1">
+                          <h4 className="font-bold text-slate-900 text-xs leading-snug line-clamp-2">
+                            {img.title}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => setEditingImageItem(img)}
+                            className="p-1 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded transition shrink-0"
+                            title="Sửa chữa thủ công thông tin hình ảnh này"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-600" />
+                          </button>
+                        </div>
                         {img.lessonTitle && (
                           <p className="text-[10px] font-semibold text-blue-700 mt-1 line-clamp-1">
                             {img.lessonTitle}
@@ -1275,15 +1316,27 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
                       {/* Action Buttons */}
                       <div className="space-y-1.5 pt-1">
-                        {/* Generate New Image from Existing Image */}
-                        <button
-                          onClick={() => setImageToImageModalItem(img)}
-                          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
-                          title="Tạo hình ảnh mới (Chuẩn mẫu SGK, 3D, Nhiều người, Phác thảo) giữ nguyên tư thế từ ảnh này"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                          <span>🎨 Tạo Ảnh Mới Từ Ảnh Này</span>
-                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingImageItem(img)}
+                            className="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+                            title="Sửa chữa thủ công tên ảnh, bài học, khối lớp, thư mục, số trang hoặc thay thế tệp ảnh mới"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-amber-700" />
+                            <span>✏️ Sửa Thông Tin</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setImageToImageModalItem(img)}
+                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+                            title="Tái tạo hình ảnh mới chuẩn SGK 2D bằng A.I hoặc kết nối ChatGPT"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                            <span>🎨 Tái Tạo Ảnh A.I</span>
+                          </button>
+                        </div>
 
                         <div className="grid grid-cols-3 gap-1.5">
                           {onOpenSmartClean && (
@@ -1375,8 +1428,37 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
         onClose={() => setImageToImageModalItem(null)}
         sourceImage={imageToImageModalItem}
         onSaveGeneratedImage={(newImg) => {
-          setImages((prev) => [newImg, ...prev]);
+          setImages((prev) => {
+            const updated = [newImg, ...prev];
+            saveImagesDB(updated).catch(() => {});
+            return updated;
+          });
         }}
+        onReplaceImage={(oldId, updatedImg) => {
+          setImages((prev) => {
+            const updated = prev.map((img) => (img.id === oldId ? updatedImg : img));
+            saveImagesDB(updated).catch(() => {});
+            return updated;
+          });
+        }}
+        showToast={showToast}
+      />
+
+      {/* Batch Image Upload Modal */}
+      <BatchImageUploadModal
+        isOpen={isBatchUploadOpen}
+        onClose={() => setIsBatchUploadOpen(false)}
+        onImportImages={handleBatchImportImages}
+        defaultGrade={filterGrade}
+        showToast={showToast}
+      />
+
+      {/* Manual Edit Image Metadata Modal */}
+      <EditImageModal
+        isOpen={!!editingImageItem}
+        onClose={() => setEditingImageItem(null)}
+        imageItem={editingImageItem}
+        onSave={handleSaveEditedImage}
         showToast={showToast}
       />
     </div>

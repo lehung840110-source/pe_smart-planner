@@ -179,10 +179,40 @@ export default function App() {
                 } else if (key.includes('k5_t16')) {
                   r2.contentImgUrl = '/assets/sgk_chuan/k5_chan_voi_gay.jpg';
                   r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Chân với gậy (SGK GDTC Lớp 5)';
-                } else if (key.includes('k5_t17') || key.includes('k5_t18')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_van_minh_toan_than_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vặn mình & Bụng với gậy (SGK GDTC Lớp 5)';
+                } else if (key.includes('k5_t17')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_bung_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Bụng với gậy (SGK GDTC Lớp 5)';
+                } else if (key.includes('k5_t18')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vặn mình với gậy (SGK GDTC Lớp 5)';
+                } else if (key.includes('k5_t19')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Toàn thân với gậy (SGK GDTC Lớp 5)';
                 }
+              }
+
+              // Self-heal any stored plans that have mismatched Grade 5 images or fabricated games
+              const cLower = (r2.content || '').toLowerCase();
+              if (plan.grade === 5) {
+                if (cLower.includes('động tác bụng') || cLower.includes('học động tác bụng')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_bung_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Bụng với gậy (SGK GDTC Lớp 5)';
+                } else if (cLower.includes('động tác vặn mình') || cLower.includes('học động tác vặn mình')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vặn mình với gậy (SGK GDTC Lớp 5)';
+                } else if (cLower.includes('động tác toàn thân') || cLower.includes('học động tác toàn thân')) {
+                  r2.contentImgUrl = '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg';
+                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Toàn thân với gậy (SGK GDTC Lớp 5)';
+                }
+
+                // Sanitize game rows
+                plan.rows.forEach((r) => {
+                  if (r.content && r.content.includes('Kéo co thể thao')) {
+                    r.content = r.content.replace(/Kéo co thể thao/g, 'Trao gậy tiếp sức');
+                    r.contentImgUrl = '/assets/sgk_chuan/k5_tro_choi_trao_gay_tiep_suc.jpg';
+                    r.contentImgTitle = 'Trò chơi vận động: Trao gậy tiếp sức - SGK GDTC 5';
+                  }
+                });
               }
             }
             // If stored plan is mismatched with authentic Week 9 plans, prefer authoritative Week 9 plan
@@ -653,6 +683,9 @@ export default function App() {
             onNavigateToGallery={() => setActiveTab('tab-img-library')}
             onAnalyzeVision={handleAnalyzeVision}
             onOpenSmartClean={handleOpenSmartClean}
+            onOpenBatchUpload={() => {
+              setActiveTab('tab-img-library');
+            }}
           />
         )}
 
@@ -909,19 +942,17 @@ export default function App() {
           onImportFileContent={async (file: File) => {
             try {
               const parsed = await parseLessonFile(file);
-              if (parsed.success) {
+              if (parsed && parsed.rows && parsed.rows.length > 0) {
                 if (parsed.week) setWeek(parsed.week);
                 if (parsed.grade) setGrade(parsed.grade);
                 if (parsed.topic) setTopic(parsed.topic);
                 if (parsed.title) setTitle(parsed.title);
-                if (parsed.rows && parsed.rows.length > 0) {
-                  setLessonRows(parsed.rows);
-                }
+                setLessonRows(parsed.rows);
                 showToast(`Đã nạp thành công giáo án "${file.name}" từ Google Drive!`);
                 setActiveTab('tab-generator');
                 setIsGoogleDriveOpen(false);
               } else {
-                showToast(`Không thể đọc cấu trúc giáo án: ${parsed.error || 'Định dạng không khớp'}`);
+                showToast(`Không thể đọc cấu trúc giáo án từ "${file.name}". Vui lòng kiểm tra lại định dạng.`);
               }
             } catch (err: any) {
               console.error(err);

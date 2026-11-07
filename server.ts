@@ -3,11 +3,59 @@ import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { generateSgk2dSequenceSvg } from './src/utils/sgkVectorGenerator.js';
+
+import fs from 'fs';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Helper: Safely resolve image base64 from data URLs, file paths, or raw base64
+function extractBase64Data(imageInput: string): { data: string; mimeType: string } | null {
+  if (!imageInput || typeof imageInput !== 'string') return null;
+
+  // 1. Data URL (e.g. data:image/png;base64,....)
+  if (imageInput.startsWith('data:')) {
+    if (imageInput.startsWith('data:image/svg+xml')) return null;
+    const parts = imageInput.split(';base64,');
+    if (parts.length === 2 && parts[1].length > 20) {
+      const mime = parts[0].replace('data:', '') || 'image/png';
+      return { mimeType: mime, data: parts[1] };
+    }
+    return null;
+  }
+
+  // 2. Local relative file path (e.g. /assets/sgk_chuan/k1_tay.jpg)
+  const cleanPath = imageInput.replace(/^\/+/, '');
+  const candidatePaths = [
+    path.join(__dirname, 'public', cleanPath),
+    path.join(__dirname, 'public', cleanPath.replace(/^public\//, '')),
+    path.join(__dirname, cleanPath)
+  ];
+
+  for (const cPath of candidatePaths) {
+    try {
+      if (fs.existsSync(cPath) && fs.statSync(cPath).isFile()) {
+        const fileBuffer = fs.readFileSync(cPath);
+        const ext = path.extname(cPath).toLowerCase();
+        const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.webp' ? 'image/webp' : 'image/png';
+        return {
+          mimeType,
+          data: fileBuffer.toString('base64')
+        };
+      }
+    } catch {}
+  }
+
+  // 3. Raw Base64 string
+  if (imageInput.length > 100 && /^[A-Za-z0-9+/=]+$/.test(imageInput)) {
+    return { mimeType: 'image/jpeg', data: imageInput };
+  }
+
+  return null;
+}
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -249,20 +297,15 @@ app.post('/api/ai/analyze-vision', async (req: Request, res: Response) => {
   }
 
   try {
-    let cleanBase64 = imageBase64;
-    let mimeType = 'image/png';
-    if (imageBase64.includes(';base64,')) {
-      const parts = imageBase64.split(';base64,');
-      mimeType = parts[0].replace('data:', '') || 'image/png';
-      cleanBase64 = parts[1];
-    } else if (imageBase64.startsWith('data:image/svg+xml')) {
-      return res.json({ success: true, source: 'svg_detected', analysis: getFallbackAnalysis() });
+    const resolved = extractBase64Data(imageBase64);
+    if (!resolved) {
+      return res.json({ success: true, source: 'curated_vision_fallback', analysis: getFallbackAnalysis() });
     }
 
     const imagePart = {
       inlineData: {
-        mimeType: mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'image/jpeg' : 'image/png',
-        data: cleanBase64,
+        mimeType: resolved.mimeType,
+        data: resolved.data,
       },
     };
 
@@ -308,22 +351,11 @@ Trả về DUY NHẤT chuỗi JSON hợp lệ, không bọc markdown khác:
       source: 'gemini-3.8-flash-vision',
       analysis: parsed
     });
-  } catch (error: any) {
-    console.warn('Vision API notice, using fallback:', error?.message);
+  } catch (_error: any) {
     return res.json({
       success: true,
       source: 'fallback-heuristics',
-      analysis: {
-        name: 'Động tác thể dục cơ bản SGK',
-        category: 'dong_tac',
-        targetColumn: 'content',
-        lvd: "5 - 7'",
-        caption: 'Tư thế động tác chuẩn xác, thân người thẳng, nhịp nhàng.',
-        technicalCues: ['Giữ thẳng thân người', 'Biên độ tay chân mở rộng dứt khoát', 'Hít thở đều đặn'],
-        commonErrors: ['Cúi đầu mất thăng bằng', 'Chưa thẳng cánh tay'],
-        gvScript: '- GV làm mẫu chuẩn xác 2-3 lần.\n- Cho HS quan sát tranh ảnh SGK đính kèm.\n- Hô nhịp dứt khoát và hướng dẫn HS sửa sai.',
-        hsScript: '- Đội hình 4 hàng ngang cự ly 1 sải tay so le.\n- Chú ý quan sát và thực hiện theo nhịp hô.',
-      }
+      analysis: getFallbackAnalysis()
     });
   }
 });
@@ -1376,7 +1408,9 @@ app.post('/api/ai/generate-3d-cartoon', async (req: Request, res: Response) => {
     sourceImageBase64 = '',
     style = 'sgk_vector',
     gender = 'male',
-    characterMode = 'single'
+    characterMode = 'single',
+    openAiApiKey = '',
+    geminiApiKey = ''
   } = req.body;
   const safeName = movementName || 'Động tác thể dục';
 
@@ -1396,73 +1430,67 @@ app.post('/api/ai/generate-3d-cartoon', async (req: Request, res: Response) => {
 
   const effectiveMode = characterMode === 'group' || isMultiplayerGame ? 'group' : characterMode === 'pair' ? 'pair' : 'single';
 
-  // Định nghĩa mô tả phong cách hình ảnh chân thực chuẩn SGK GDTC Việt Nam
-  let stylePrompt = '';
-  if (style === 'sgk_vector' || style === 'sgk_2d') {
-    const studentDesc = effectiveMode === 'group'
-      ? 'A joyful group of 3 to 4 energetic Vietnamese primary school children (boys and girls) playing an active physical education game together, running, holding hands, or passing a relay baton/ball'
-      : effectiveMode === 'pair'
-      ? 'A cooperative pair of two cute Vietnamese primary school children (a boy and a girl) practicing together with friendly smiles'
-      : gender === 'female'
-      ? 'Charming Vietnamese primary school girl student with a neat ponytail, cute anime-style face, dark sparkling eyes, warm cheerful smile, gentle rosy cheeks'
-      : 'Charming energetic Vietnamese primary school boy student with neat short black hair, cute anime-style face, dark sparkling eyes, warm encouraging smile, gentle rosy cheeks';
-
-    stylePrompt = `Authentic Vietnamese Physical Education textbook illustration style (Bộ sách Kết Nối Tri Thức Với Cuộc Sống / Chân Trời Sáng Tạo / Cánh Diều):
-- Characters: ${studentDesc}.
-- Attire: Standard Vietnamese primary school physical education PE uniform consisting of a clean white short-sleeve athletic t-shirt with royal-blue collar and sleeve-cuff trim, matching royal-blue athletic sweatpants with a single crisp white vertical stripe running down the outer side of each leg, brown/tan athletic sneakers with white rubber soles.
-- Art Style: High-quality 2D digital vector cartoon illustration with smooth crisp dark brown/black outlines, flat colors with clean soft cel-shading on folds and contours.
-- Composition: Full-body characters showing complete arms, torso, legs, and shoes demonstrating the physical exercise posture or game interaction.
-- Background: 100% PURE SOLID TRANSPARENT BACKGROUND (ISOLATED PNG CUTOUT). No faux checkerboard grid, no drop shadow boxes.
-- ABSOLUTELY STRICT RESTRICTIONS: ZERO TEXT, NO VIETNAMESE WORDS, NO "Luyện tập cá nhân", NO "Kết nối tri thức", NO PUBLISHER LOGOS, NO WATERMARKS, NO PAGE NUMBERS, NO DECORATIVE FRAMES. PURE ATHLETIC STUDENT CHARACTER ONLY.`;
-  } else if (style === '3d_pixar') {
-    stylePrompt = 'Full-body 3D Pixar Disney animated movie style cute energetic Vietnamese primary school student(s), vibrant colors, volumetric lighting, wearing PE uniform, pure transparent background, no text';
-  } else if (style === 'sketch_bw') {
-    stylePrompt = 'Black and white hand-drawn pencil line art sketch of athletic student(s) demonstrating exercise posture, clean anatomical lines, pure transparent background, no text';
-  } else if (style === 'stickman') {
-    stylePrompt = 'Clean bold minimalist pedagogical athletic stick figure diagram showing joint angles and limb positions, transparent background, no text';
-  } else {
-    stylePrompt = 'Modern clean flat vector line-art illustration suitable for Vietnamese physical education textbook (SGK GDTC), pure transparent background, no text';
+  // 1. Nếu có OpenAI API Key, ưu tiên gọi OpenAI DALL-E 3 để tạo tranh minh họa SGK
+  if (openAiApiKey && openAiApiKey.trim()) {
+    try {
+      const openAiRes = await fetch('https://api.openai.com/v1/images/generations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openAiApiKey.trim()}`
+        },
+        body: JSON.stringify({
+          model: 'dall-e-3',
+          prompt: `Vietnamese Physical Education primary textbook illustration (SGK GDTC Bộ Kết Nối Tri Thức). Exercise: "${safeName}" for Grade ${grade}. Full-body Vietnamese elementary school students wearing athletic uniform: white collared polo shirt with blue trim, royal-blue long sweatpants with white side stripe, sneakers. Sequential horizontal breakdown showing 5 key poses: TTCB, Step 1, Step 2, Step 3, Step 4. Clean 2D flat digital vector illustration, white background, no 3D clay or plastic toys, high resolution for school print.`,
+          n: 1,
+          size: '1024x1024'
+        })
+      });
+      const openAiData: any = await openAiRes.json();
+      if (openAiData?.data?.[0]?.url) {
+        return res.json({
+          success: true,
+          source: 'openai-dall-e-3',
+          imageUrl: openAiData.data[0].url,
+          movementName: safeName,
+          grade
+        });
+      }
+    } catch (e: any) {
+      console.warn('OpenAI API call notice:', e?.message);
+    }
   }
 
-  // 1. Nếu có Gemini AI Client, thử tạo bằng mô hình sinh ảnh chuẩn gemini-3.1-flash-lite-image
-  if (aiClient) {
+  // 2. Chỉ gọi Gemini Image API nếu người dùng có cung cấp custom geminiApiKey
+  // (Tránh gọi trên free tier default key vì model image có quota = 0 gây lỗi 429)
+  if (geminiApiKey && geminiApiKey.trim()) {
     try {
+      const userGeminiClient = new GoogleGenAI({ apiKey: geminiApiKey.trim() });
       const parts: any[] = [];
 
-      // Nếu có ảnh gốc truyền vào, đính kèm ảnh tham chiếu để AI giữ nguyên tư thế và góc độ thân người
-      if (sourceImageBase64 && sourceImageBase64.length > 100) {
-        let cleanBase64 = sourceImageBase64;
-        let mimeType = 'image/png';
-        if (sourceImageBase64.includes(';base64,')) {
-          const splitParts = sourceImageBase64.split(';base64,');
-          mimeType = splitParts[0].replace('data:', '') || 'image/png';
-          cleanBase64 = splitParts[1];
-        }
+      const resolvedRef = extractBase64Data(sourceImageBase64);
+      if (resolvedRef) {
         parts.push({
           inlineData: {
-            mimeType: mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'image/jpeg' : 'image/png',
-            data: cleanBase64,
+            mimeType: resolvedRef.mimeType,
+            data: resolvedRef.data,
           }
         });
       }
 
-      const promptText = `Reference activity: "${safeName}" for Grade ${grade} primary school PE.
-${sourceImageBase64 && effectiveMode === 'single' ? 'CRITICAL: Carefully analyze the human body posture, arm angles, torso, and foot positioning in the attached reference image. Replicate the EXACT SAME physical exercise movement posture.' : ''}
-${stylePrompt}
-Dressed in neat school sports PE athletic uniform and running sneakers.
-SOLID PURE TRANSPARENT BACKGROUND. ISOLATED CUTOUT CHARACTERS.
-CRITICAL MANDATORY REQUIREMENT: ABSOLUTELY NO TEXT, NO LETTERS, NO NUMBERS, NO WORDS, NO LABELS, NO WATERMARKS, NO BORDER, NO BACKGROUND OBJECTS, NO DECORATIVE FRAMES. PURE ATHLETIC CHARACTERS ONLY.`;
+      const promptText = `Educational textbook illustration for primary physical education (SGK GDTC Khối ${grade}).
+Movement: "${safeName}".
+Attire: Vietnamese primary school PE uniform: clean white athletic polo shirt with blue trim, long royal-blue sports pants with white side stripe, sneakers.
+Style: 2D flat digital vector cel-shading illustration, clean outlines, sequential horizontal movement breakdown (TTCB, Nhịp 1, Nhịp 2, Nhịp 3, Nhịp 4). Pure white background, high resolution. ABSOLUTELY NO 3D CLAY FIGURES, NO PLASTIC BOBBLEHEAD DOLLS.`;
 
       parts.push({ text: promptText });
 
-      const response = await aiClient.models.generateContent({
+      const response = await userGeminiClient.models.generateContent({
         model: 'gemini-3.1-flash-lite-image',
-        contents: {
-          parts
-        },
+        contents: { parts },
         config: {
           imageConfig: {
-            aspectRatio: effectiveMode === 'group' ? '4:3' : '1:1'
+            aspectRatio: '4:3'
           }
         }
       });
@@ -1475,7 +1503,7 @@ CRITICAL MANDATORY REQUIREMENT: ABSOLUTELY NO TEXT, NO LETTERS, NO NUMBERS, NO W
             const imageUrl = `data:${mime};base64,${part.inlineData.data}`;
             return res.json({
               success: true,
-              source: 'gemini-3.1-flash-lite-image',
+              source: 'gemini-image-gen',
               imageUrl,
               movementName: safeName,
               style,
@@ -1484,22 +1512,20 @@ CRITICAL MANDATORY REQUIREMENT: ABSOLUTELY NO TEXT, NO LETTERS, NO NUMBERS, NO W
           }
         }
       }
-    } catch (apiErr: any) {
-      console.warn('Gemini image generation notice, falling back to volumetric 3D SVG:', apiErr?.message);
-    }
+    } catch {}
   }
 
-  // 2. Fallback sang Hoạ sĩ Vector SVG thể tích cao, trong suốt và sạch 100% không chứa chữ
-  const rawSvg = generate3dCartoonSvg(safeName, grade, effectiveMode, gender);
+  // 3. Fallback chuẩn xác 100%: Sinh Tranh Phân Thế 2D Vector SGK (TTCB -> Nhịp 1 -> Nhịp 2 -> Nhịp 3 -> Nhịp 4)
+  const rawSvg = generateSgk2dSequenceSvg(safeName, grade, effectiveMode, gender);
   const svgDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
 
   return res.json({
     success: true,
-    source: 'vector-3d-transparent',
+    source: 'sgk-2d-vector-sequence',
     imageUrl: svgDataUrl,
     svgRaw: rawSvg,
     movementName: safeName,
-    style,
+    style: 'sgk_vector',
     characterMode: effectiveMode
   });
 });

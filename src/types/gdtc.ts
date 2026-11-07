@@ -61,12 +61,13 @@ export interface SgkImageItem {
   lessonId?: string;
   lessonTitle?: string;
   folder?: SubFolderType;
-  page: number;
+  page?: number;
   category: ImageCategory;
   imgUrl: string;
   caption: string;
   selected?: boolean;
   createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface SchoolSettings {

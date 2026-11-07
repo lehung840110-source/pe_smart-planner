@@ -437,7 +437,7 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         lvd: "5 - 7'",
         gv: "- Tích hợp năng lực số (6.1TC2a): GV giới thiệu ngắn phần mềm có AI hỗ trợ phân tích tư thế chân, tay, thân người, cách cầm gậy, biên độ và nhịp với gậy.\n- GV sẽ thực hiện lại và phân tích các nhịp để học sinh quan sát.\n- GV giải đáp thắc mắc của HS nếu có.",
         hs: "- Tích hợp: Học sinh làm quen và bước đầu nhận thức được sự hỗ trợ của trí tuệ nhân tạo (AI) thông qua việc quan sát phần mềm phân tích tư thế đúng/sai mà giáo viên giới thiệu.\n- HS quan sát tranh, thảo luận trả lời câu hỏi; quan sát mẫu và ghi nhớ cách thực hiện.",
-        contentImgUrl: '/assets/sgk_chuan/k5_van_minh_toan_than_gay.jpg',
+        contentImgUrl: '/assets/sgk_chuan/k5_bung_voi_gay.jpg',
         contentImgTitle: 'Hình ảnh Kỹ thuật: Động tác Bụng với gậy (SGK GDTC Lớp 5)',
         hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
         hsImgTitle: 'Đội hình quan sát làm mẫu động tác'
@@ -529,7 +529,7 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         lvd: "5 - 7'",
         gv: "- Yêu cầu HS xem tranh ảnh trong SGK, quan sát và trả lời câu hỏi.\n- GV sẽ thực hiện lại và phân tích các nhịp để học sinh quan sát.\n- Giải đáp thắc mắc của HS nếu có; hướng dẫn cách xoay vặn thân người đúng trục.",
         hs: "- Đội hình HS quan sát tranh, tập mẫu.\n- HS quan sát tranh, thảo luận nhóm trả lời câu hỏi; ghi nhớ tư thế cầm gậy và nhịp vặn mình.",
-        contentImgUrl: '/assets/sgk_chuan/k5_van_minh_toan_than_gay.jpg',
+        contentImgUrl: '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg',
         contentImgTitle: 'Hình ảnh Kỹ thuật: Động tác Vặn mình với gậy (SGK GDTC Lớp 5)',
         hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
         hsImgTitle: 'Đội hình HS quan sát tranh, tập mẫu'

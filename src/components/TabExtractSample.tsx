@@ -535,11 +535,6 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                           alt={row.contentImgTitle || 'Ảnh kỹ thuật động tác'}
                           className="max-h-36 w-full object-contain rounded"
                         />
-                        {row.contentImgTitle && (
-                          <p className="text-[10px] text-slate-600 font-medium text-center mt-1">
-                            {row.contentImgTitle}
-                          </p>
-                        )}
                         {isEditMode && (
                           <button
                             onClick={() => handleRemoveImage(idx, 'content')}

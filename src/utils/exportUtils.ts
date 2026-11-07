@@ -463,11 +463,6 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
                 const imgBlock = `
                   <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
                     <img src="${contentImgSrc}" width="${row.contentImgWidth || 98}" height="${row.contentImgHeight || 65}" style="width: ${row.contentImgWidth || 98}pt; height: ${row.contentImgHeight || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
-                    ${row.contentImgTitle ? `
-                      <p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; text-align: center; color: #444;">
-                        ${escapeHtml(row.contentImgTitle)}
-                      </p>
-                    ` : ''}
                   </div>
                 `;
 

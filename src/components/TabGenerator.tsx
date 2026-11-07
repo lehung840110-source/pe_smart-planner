@@ -599,11 +599,6 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                           alt={row.contentImgTitle || 'Ảnh kỹ thuật'}
                           className="max-h-36 w-full object-contain rounded"
                         />
-                        {row.contentImgTitle && (
-                          <p className="text-[10px] text-slate-600 font-medium text-center mt-1">
-                            {row.contentImgTitle}
-                          </p>
-                        )}
                         <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
                           <button
                             onClick={() => downloadSvgAsPng(row.contentImgUrl!, `anh_ky_thuat_dong_${idx + 1}.png`)}

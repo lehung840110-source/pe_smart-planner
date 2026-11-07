@@ -667,6 +667,45 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     gvExplanation: '- Làm mẫu tư thế khuỵu gối sâu giữ lưng thẳng với gậy.',
     hsTask: '- Tập trung thăng bằng và hạ gậy đúng tầm ngực.'
   },
+  {
+    id: 'mv_k5_bung_gay',
+    name: 'Động tác Bụng với gậy (Khối 5)',
+    grade: 5,
+    keywords: ['bụng với gậy', 'gậy bụng', 'gập thân gậy', 'động tác bụng', 'bung voi gay'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái sang ngang rộng hơn vai', 'Hai tay đưa gậy lên cao chếch chữ V', 'Cúi người gập thân sâu gậy chạm mu bàn chân', 'Hai chân giữ thẳng'],
+    commonErrors: ['Co gập đầu gối khi cúi', 'Lưng cúi quá vội vàng'],
+    svgDataUrl: '/assets/sgk_chuan/k5_bung_voi_gay.jpg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- Làm mẫu tư thế gập thân sâu hai chân thẳng, gậy chạm mu bàn chân.\n- Nhắc nhở học sinh không co gập khớp gối khi cúi người.',
+    hsTask: '- Giữ thẳng hai chân, gập sâu thân người và điều hòa nhịp thở theo tiếng đếm.'
+  },
+  {
+    id: 'mv_k5_van_minh_gay',
+    name: 'Động tác Vặn mình với gậy (Khối 5)',
+    grade: 5,
+    keywords: ['vặn mình với gậy', 'gậy vặn mình', 'xoay thân gậy', 'động tác vặn mình', 'van minh voi gay'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái sang ngang rộng bằng vai', 'Hai tay đưa gậy ra trước', 'Giữ nguyên chân, vặn mình sang trái 90 độ', 'Mắt nhìn theo gậy'],
+    commonErrors: ['Xê dịch bàn chân khi xoay người', 'Gậy bị nghiêng lệch'],
+    svgDataUrl: '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- Hướng dẫn học sinh giữ cố định bàn chân và trục hông khi vặn mình.\n- Tay cầm gậy giữ căng ngang ngực.',
+    hsTask: '- Giữ cố định chân, xoay thân người dứt khoát 90 độ sang trái rồi sang phải.'
+  },
+  {
+    id: 'mv_k5_toan_than_gay',
+    name: 'Động tác Toàn thân với gậy (Khối 5)',
+    grade: 5,
+    keywords: ['toàn thân với gậy', 'gậy toàn thân', 'động tác toàn thân', 'toan than voi gay'],
+    category: 'dong_tac_moi',
+    cues: ['Khuỵu gối lưng thẳng gậy ra trước', 'Duỗi gối gập thân gậy chạm mũi chân', 'Kiễng gót dồn trọng tâm nâng gậy lên cao', 'Về TTCB'],
+    commonErrors: ['Mất thăng bằng khi kiễng gót', 'Nhịp vận động thiếu liên hoàn'],
+    svgDataUrl: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- Phân tích từng nhịp liên hoàn khuỵu gối, gập thân và vươn người kiễng gót.\n- Uốn nắn tư thế dồn trọng tâm thăng bằng cho học sinh.',
+    hsTask: '- Phối hợp nhịp nhàng giữa tay, chân và thân mình theo nhịp đếm 2x8 nhịp.'
+  },
 
   // Bổ sung các chuyển động chuẩn khớp hoàn toàn chương trình SGK cả 3 khối:
   // Đội hình đội ngũ: Đứng nghiêm, đứng nghỉ

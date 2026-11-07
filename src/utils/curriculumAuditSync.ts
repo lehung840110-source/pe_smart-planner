@@ -221,7 +221,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     cleanTitle: 'BÀI 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY',
     movementName: 'Học động tác Bụng với gậy',
-    movementKey: 'gay',
+    movementKey: 'bung_gay',
     warmupGame: 'Ai kéo khoẻ hơn',
     practiceGame: 'Trao gậy tiếp sức'
   },
@@ -232,7 +232,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     cleanTitle: 'BÀI 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY',
     movementName: 'Học động tác Vặn mình với gậy',
-    movementKey: 'van_minh',
+    movementKey: 'van_minh_gay',
     warmupGame: 'Ai kéo khoẻ hơn',
     practiceGame: 'Trao gậy tiếp sức'
   },
@@ -242,9 +242,9 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     cleanTitle: 'BÀI 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY',
     movementName: 'Học động tác Toàn thân với gậy',
-    movementKey: 'van_minh',
-    warmupGame: 'Chạy luồn cọc tiêu',
-    practiceGame: 'Kéo co thể thao'
+    movementKey: 'toan_than_gay',
+    warmupGame: 'Đội nào nhanh nhất',
+    practiceGame: 'Trao gậy tiếp sức'
   },
   'k5_t20': {
     grade: 5,
@@ -275,7 +275,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     movementName: 'Học động tác Thăng bằng và Nhảy với gậy',
     movementKey: 'gay',
     warmupGame: 'Lò cò tiếp sức',
-    practiceGame: 'Kéo co thể thao'
+    practiceGame: 'Chuyển bóng tiếp sức'
   },
   'k5_t23': {
     grade: 5,
@@ -364,7 +364,7 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
       practiceGame = 'Chuyền gậy tiếp sức';
     } else {
       warmupGame = 'Chạy luồn cọc tiêu';
-      practiceGame = 'Kéo co thể thao';
+      practiceGame = 'Chuyển bóng tiếp sức';
     }
   }
 

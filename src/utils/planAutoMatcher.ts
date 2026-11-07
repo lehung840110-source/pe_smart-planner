@@ -133,15 +133,31 @@ export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string
   },
   gay: {
     url: '/assets/sgk_chuan/k5_vuon_tho_tay_gay.jpg',
-    title: 'Bài tập thể dục với gậy - SGK Lớp 5 (Trang 24)'
+    title: 'Bài tập thể dục với gậy (Vươn thở, Tay) - SGK Lớp 5 (Trang 24)'
   },
   chan_gay: {
     url: '/assets/sgk_chuan/k5_chan_voi_gay.jpg',
     title: 'Động tác Chân với gậy - SGK Lớp 5 (Trang 25)'
   },
+  bung_gay: {
+    url: '/assets/sgk_chuan/k5_bung_voi_gay.jpg',
+    title: 'Động tác Bụng với gậy - SGK GDTC Lớp 5 (Trang 30)'
+  },
+  van_minh_gay: {
+    url: '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg',
+    title: 'Động tác Vặn mình với gậy - SGK GDTC Lớp 5 (Trang 30)'
+  },
+  toan_than_gay: {
+    url: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
+    title: 'Động tác Toàn thân với gậy - SGK GDTC Lớp 5 (Trang 31)'
+  },
   van_minh: {
-    url: '/assets/sgk_chuan/k5_van_minh_toan_than_gay.jpg',
-    title: 'Động tác Vặn mình và Toàn thân với gậy - SGK Lớp 5 (Trang 28)'
+    url: '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg',
+    title: 'Động tác Vặn mình với gậy - SGK GDTC Lớp 5 (Trang 30)'
+  },
+  toan_than: {
+    url: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
+    title: 'Động tác Toàn thân với gậy - SGK GDTC Lớp 5 (Trang 31)'
   },
   thang_bang: {
     url: '/assets/aistudio/0e0e03fc-7060-481d-85f2-da82dde1f3c3_eccfceae.jfif',
@@ -164,7 +180,27 @@ export function resolveAccurateMovement(
   let targetKey = 'vuon_tho';
   let targetName = 'Động tác Vươn thở';
 
-  if (combined.includes('vươn thở') || combined.includes('vuon tho')) {
+  if (grade === 5) {
+    if (combined.includes('bụng') || combined.includes('bung')) {
+      targetKey = 'bung_gay';
+      targetName = 'Động tác Bụng với gậy';
+    } else if (combined.includes('vặn mình') || combined.includes('van minh')) {
+      targetKey = 'van_minh_gay';
+      targetName = 'Động tác Vặn mình với gậy';
+    } else if (combined.includes('toàn thân') || combined.includes('toan than')) {
+      targetKey = 'toan_than_gay';
+      targetName = 'Động tác Toàn thân với gậy';
+    } else if (combined.includes('động tác chân') || (combined.includes('chân') && !combined.includes('cổ chân') && !combined.includes('mũi chân'))) {
+      targetKey = 'chan_gay';
+      targetName = 'Động tác Chân với gậy';
+    } else if (combined.includes('vươn thở') || combined.includes('tay')) {
+      targetKey = 'gay';
+      targetName = 'Động tác Vươn thở, Tay với gậy';
+    } else {
+      targetKey = 'gay';
+      targetName = 'Bài tập thể dục với gậy';
+    }
+  } else if (combined.includes('vươn thở') || combined.includes('vuon tho')) {
     targetKey = 'vuon_tho';
     targetName = 'Động tác Vươn thở';
   } else if (combined.includes('động tác tay') || (combined.includes('tay') && !combined.includes('cổ tay') && !combined.includes('vỗ tay') && !combined.includes('chạm tay') && !combined.includes('chuyền'))) {
@@ -245,6 +281,10 @@ export function resolveAccurateMovement(
     if (targetKey === 'tay') return t.includes('động tác tay') || c.includes('động tác tay') || (t.includes('tay') && !t.includes('cổ tay'));
     if (targetKey === 'chan') return (t.includes('động tác chân') || t.includes('kỹ thuật chân') || (t.includes('chân') && !t.includes('cổ chân'))) && !t.includes('vươn thở');
     if (targetKey === 'luon') return t.includes('lườn') || c.includes('lườn') || t.includes('nghiêng người');
+    if (targetKey === 'bung_gay') return (t.includes('bụng') || c.includes('bụng')) && (t.includes('gậy') || c.includes('gậy'));
+    if (targetKey === 'van_minh_gay') return (t.includes('vặn mình') || c.includes('vặn mình')) && (t.includes('gậy') || c.includes('gậy'));
+    if (targetKey === 'toan_than_gay') return (t.includes('toàn thân') || c.includes('toàn thân')) && (t.includes('gậy') || c.includes('gậy'));
+    if (targetKey === 'chan_gay') return (t.includes('chân') || c.includes('chân')) && (t.includes('gậy') || c.includes('gậy'));
     if (targetKey === 'bung') return t.includes('bụng') || c.includes('bụng') || t.includes('gập thân');
     if (targetKey === 'van_minh') return t.includes('vặn mình') || c.includes('vặn mình');
     if (targetKey === 'toan_than') return t.includes('toàn thân') || c.includes('toàn thân');
@@ -354,11 +394,32 @@ export function resolveAccurateMovement(
       practiceFocus = 'bước chân đúng nhịp 1 - 2 chân nọ tay kia và đứng lại chuẩn khẩu lệnh';
       break;
 
+    case 'bung_gay':
+      movementSteps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa gậy ra trước - lên cao, mắt nhìn theo gậy.\n- Nhịp 2: Cúi người, gập thân, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay đưa gậy lên cao, mắt nhìn theo gậy).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.`;
+      gvExplanation = `- GV giới thiệu Động tác Bụng với gậy (SGK Lớp 5 Trang 30), phân tích tác dụng tăng cường độ dẻo của cột sống, phát triển cơ bụng và cơ đùi sau.\n- Làm mẫu trực quan 2 - 3 lần kết hợp phân tích kỹ thuật: nhịp 1 nâng gậy lên cao thân thẳng, nhịp 2 cúi gập thân sâu thở ra hết, hai chân giữ thẳng không được co gập gối, gậy chạm mũi bàn chân.\n- Cho học sinh quan sát hình ảnh kỹ thuật SGK lớp 5 trang 30, lưu ý cách cầm hai đầu gậy chắc chắn.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn cho những em chân còn bị co gập hoặc cúi gập vội vàng.\n- Tuyên dương các em giữ được chân thẳng và hạ gậy chạm mũi chân chuẩn xác.`;
+      hsTask = `- Đội hình 4 hàng ngang giãn cách cự ly 1.5m đảm bảo không chạm gậy vào bạn bên cạnh.\n- Chăm chú theo dõi tư thế cúi gập thân và giữ thẳng đầu gối của thầy cô.\n- Cầm chắc gậy, tập mô phỏng chậm rãi, thở ra hết khi gập thân và hít sâu khi vươn người đứng thẳng.\n- Tự giác điều chỉnh không co gối khi gậy hạ xuống chạm mu bàn chân.`;
+      practiceFocus = 'hai chân giữ thẳng, cúi gập thân sâu và hạ gậy chạm mũi bàn chân';
+      break;
+
+    case 'van_minh_gay':
+      movementSteps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Giữ nguyên chân, vặn mình sang trái, hai tay cầm gậy đưa ngang sang trái - ra sau, mắt nhìn theo gậy.\n- Nhịp 3: Về nhịp 1 (gậy đưa thẳng ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân, nhịp 6 đổi hướng vặn mình sang phải.`;
+      gvExplanation = `- GV giới thiệu Động tác Vặn mình với gậy (SGK Lớp 5 Trang 30), nêu rõ tác dụng tăng độ linh hoạt khớp háng, cơ lườn và cột sống.\n- Làm mẫu kỹ thuật 2 - 3 lần; nhấn mạnh yêu cầu cốt lõi: hai bàn chân phải bám chắc trên mặt sân, chỉ xoay vặn phần thân trên, hai tay cầm gậy đưa ngang ra sau dứt khoát.\n- Hướng dẫn học sinh quan sát hình ảnh SGK trang 30, nhắc nhở giữ gậy thăng bằng ngang vai trong suốt quá trình vặn mình.\n- Hô nhịp chậm hướng dẫn lớp tập luyện; quan sát phát hiện lỗi xoay cả chân hoặc hạ gậy xuống thấp để kịp thời nhắc nhở sửa chữa.\n- Biểu dương sự cố gắng và chuyển động dứt khoát của học sinh.`;
+      hsTask = `- Đội hình 4 hàng ngang so le 1.5m cự ly an toàn.\n- Quan sát góc xoay thân trên và vị trí cố định của hai bàn chân khi thực hiện động tác với gậy.\n- Cầm chắc gậy, thực hiện động tác vặn mình dứt khoát, giữ gậy ngang vai.\n- Chỉnh sửa tư thế bàn chân bám chắc mặt sân theo nhắc nhở của thầy cô.`;
+      practiceFocus = 'hai bàn chân bám chắc sàn, vặn thân mình và giữ gậy ngang vai';
+      break;
+
+    case 'toan_than_gay':
+      movementSteps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Khuỵu gối, thẳng lưng, hai tay đưa gậy ra trước ngang vai.\n- Nhịp 2: Duỗi gối, cúi người, gập thân, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng, chân trái đưa ra sau kiễng gót tì mũi chân, trọng tâm dồn chân phải, hai tay đưa gậy ra trước - lên cao, mắt nhìn theo gậy.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 7 đổi chân.`;
+      gvExplanation = `- GV giới thiệu Động tác Toàn thân với gậy (SGK Lớp 5 Trang 31), phân tích tác dụng phối hợp liên hoàn các khớp chân, cơ lưng, bụng và cánh tay.\n- Thị phạm chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích kỹ thuật: nhịp 1 khuỵu gối giữ lưng thẳng, nhịp 2 cúi gập thân thẳng chân gậy chạm chân, nhịp 3 nâng gậy lên cao chân sau kiễng gót dồn trọng tâm chân trước.\n- Cho học sinh quan sát tranh ảnh kỹ thuật đính kèm trong SGK trang 31, chỉ rõ sự chuyển dịch trọng tâm.\n- Hô nhịp chậm cho học sinh tập mô phỏng; kịp thời uốn nắn tư thế nâng gậy và giữ thăng bằng.\n- Khen ngợi những em thực hiện nhịp nhàng, vững vàng thăng bằng.`;
+      hsTask = `- Đội hình 4 hàng ngang đứng so le, khoảng cách 1.5m.\n- Quan sát kỹ thuật khuỵu gối, gập thân và vươn gậy kiễng gót của giáo viên.\n- Tập mô phỏng từng nhịp theo nhịp hô chậm, chú ý giữ thăng bằng và cầm chắc gậy.\n- Tiếp thu chỉ dẫn để hoàn thiện độ cao của gậy và độ thẳng lưng.`;
+      practiceFocus = 'khuỵu gối lưng thẳng, cúi gập thân chạm gậy và nâng gậy kiễng gót thăng bằng';
+      break;
+
     case 'gay':
-      movementSteps = `- TTCB: Đứng nghiêm, hai tay cầm hai đầu gậy thể dục đặt ngang trước đùi.\n- Nhịp 1: Kiễng gót hai chân, hai tay nâng gậy thẳng ra trước ngang vai (thân thẳng, gậy song song mặt đất).\n- Nhịp 2: Khuỵu gối sâu, hai tay giữ nguyên gậy ngang vai, lưng thẳng, mắt nhìn thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (kiễng gót hai chân, nâng gậy ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên hoàn như nhịp 1, 2, 3, 4.`;
-      gvExplanation = `- GV giới thiệu bài tập thể dục với gậy, nêu rõ tác dụng phát triển sức mạnh tay vai, độ khéo léo kết hợp dụng cụ và rèn luyện tư thế chuẩn mực.\n- Quán triệt kỷ luật an toàn sử dụng gậy; kiểm tra gậy nhẵn bóng không nứt gãy trước khi tập; thị phạm mẫu chuẩn xác 2 - 3 lần.\n- Cho học sinh quan sát tranh ảnh SGK lớp 5 trang 24-26, chỉ rõ cách cầm gậy cân đối và giữ gậy thăng bằng song song với mặt sân.\n- Hô nhịp trống/còi dứt khoát hướng dẫn học sinh tập thử từng nhịp; luân chuyển uốn nắn tư thế gậy và lưng thẳng cho từng em.\n- Đánh giá cao ý thức giữ cự ly an toàn và sự đồng đều của các tổ.`;
-      hsTask = `- Đội hình 4 hàng ngang so le cự ly 1.5m đảm bảo không chạm gậy vào nhau.\n- Cầm chắc hai đầu gậy, chăm chú quan sát tư thế nâng gậy song song và khuỵu gối lưng thẳng của GV.\n- Tập liên hoàn theo nhịp trống dứt khoát, nâng gậy đều đẹp và hạ gậy dứt khoát.\n- Tự giác bảo quản dụng cụ học tập cẩn thận trong suốt tiết học.`;
-      practiceFocus = 'nâng gậy song song thăng bằng và giữ khoảng cách an toàn dụng cụ';
+      movementSteps = `- TTCB: Đứng nghiêm, hai tay cầm hai đầu gậy thể dục đặt ngang trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Hai tay đưa gậy lên cao, mắt nhìn theo gậy (đầu ngửa nhẹ, hít sâu).\n- Nhịp 3: Về nhịp 1 (hai tay đưa gậy ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.`;
+      gvExplanation = `- GV giới thiệu bài tập thể dục với gậy (Động tác Vươn thở và Động tác Tay - SGK Lớp 5 Trang 24-25), nêu rõ tác dụng phát triển sức mạnh tay vai, mở rộng lồng ngực và rèn luyện tư thế chuẩn mực.\n- Quán triệt kỷ luật an toàn sử dụng gậy; kiểm tra gậy nhẵn bóng không nứt gãy trước khi tập; thị phạm mẫu chuẩn xác 2 - 3 lần.\n- Cho học sinh quan sát tranh ảnh SGK lớp 5 trang 24-25, chỉ rõ cách cầm gậy cân đối và giữ gậy thăng bằng song song với mặt sân.\n- Hô nhịp trống/còi dứt khoát hướng dẫn học sinh tập thử từng nhịp; luân chuyển uốn nắn tư thế gậy và lưng thẳng cho từng em.\n- Đánh giá cao ý thức giữ cự ly an toàn và sự đồng đều của các tổ.`;
+      hsTask = `- Đội hình 4 hàng ngang so le cự ly 1.5m đảm bảo không chạm gậy vào nhau.\n- Cầm chắc hai đầu gậy, chăm chú quan sát tư thế nâng gậy song song và vươn cao của GV.\n- Tập liên hoàn theo nhịp trống dứt khoát, nâng gậy đều đẹp và hạ gậy dứt khoát.\n- Tự giác bảo quản dụng cụ học tập cẩn thận trong suốt tiết học.`;
+      practiceFocus = 'cầm chắc hai đầu gậy, nâng gậy song song thăng bằng và hít thở sâu nhịp nhàng';
       break;
 
     case 'dung_nghiem':
@@ -496,22 +557,40 @@ export function resolveAccurateGameImage(
     };
   }
 
-  // Grade 5 (Bài tập thể dục với gậy)
+  // Grade 5 (Bài tập thể dục với gậy - Trò chơi chính khóa SGK GDTC 5)
+  if (cleanName.includes('trao gậy') || cleanName.includes('trao gay')) {
+    return {
+      url: '/assets/sgk_chuan/k5_tro_choi_trao_gay_tiep_suc.jpg',
+      title: 'Trò chơi vận động: Trao gậy tiếp sức - SGK GDTC 5 (Trang 32)'
+    };
+  }
+  if (cleanName.includes('chuyền gậy') || cleanName.includes('chuyen gay')) {
+    return {
+      url: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
+      title: 'Trò chơi vận động: Chuyền gậy tiếp sức - SGK GDTC 5 (Trang 26)'
+    };
+  }
   if (cleanName.includes('nhanh nhất') || cleanName.includes('đội nào') || cleanName.includes('doi nao') || cleanName.includes('nhanh nhat')) {
     return {
       url: '/assets/sgk_chuan/k5_tro_choi_doi_nao_nhanh_nhat.jpg',
       title: 'Trò chơi bổ trợ khởi động: Đội nào nhanh nhất - SGK GDTC 5 (Trang 29)'
     };
   }
+  if (cleanName.includes('kéo khoẻ') || cleanName.includes('keo khoe') || cleanName.includes('ai kéo') || cleanName.includes('nhanh hơn với gậy')) {
+    return {
+      url: '/assets/sgk_chuan/k5_tro_choi_doi_nao_nhanh_nhat.jpg',
+      title: 'Trò chơi bổ trợ khởi động: Ai kéo khoẻ hơn - SGK GDTC 5 (Trang 27)'
+    };
+  }
   if (category === 'tro_choi_kd') {
     return {
       url: '/assets/sgk_chuan/k5_tro_choi_doi_nao_nhanh_nhat.jpg',
-      title: `Trò chơi bổ trợ khởi động: ${gameName || 'Đội nào nhanh nhất'} - SGK GDTC 5 (Trang 29)`
+      title: `Trò chơi bổ trợ khởi động: ${gameName || 'Ai kéo khoẻ hơn'} - SGK GDTC 5 (Trang 27)`
     };
   }
   return {
-    url: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
-    title: `Trò chơi SGK Khối 5: ${gameName || 'Chuyền gậy tiếp sức'}`
+    url: '/assets/sgk_chuan/k5_tro_choi_trao_gay_tiep_suc.jpg',
+    title: `Trò chơi vận động: ${gameName || 'Trao gậy tiếp sức'} - SGK GDTC 5 (Trang 32)`
   };
 }
 
@@ -549,10 +628,10 @@ export function createBalanced7LessonRows(
 
   const resolvedWarmup =
     customWarmupGame ||
-    (grade === 1 ? defaultG1Warmup : grade === 3 ? 'Chui qua hầm' : 'Ai nhanh hơn với gậy');
+    (grade === 1 ? defaultG1Warmup : grade === 3 ? 'Chui qua hầm' : 'Ai kéo khoẻ hơn');
   const resolvedPractice =
     customPracticeGame ||
-    (grade === 1 ? defaultG1Practice : grade === 3 ? 'Đua ô tô' : 'Chuyền gậy tiếp sức');
+    (grade === 1 ? defaultG1Practice : grade === 3 ? 'Đua ô tô' : 'Trao gậy tiếp sức');
 
   const warmupImg = resolveAccurateGameImage(resolvedWarmup, grade, 'tro_choi_kd', userImages);
   const practiceImg = resolveAccurateGameImage(resolvedPractice, grade, 'tro_choi_vd', userImages);

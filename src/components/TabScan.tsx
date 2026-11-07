@@ -52,6 +52,7 @@ interface TabScanProps {
   onNavigateToGallery: () => void;
   onAnalyzeVision?: (img: SgkImageItem) => void;
   onOpenSmartClean?: (img: SgkImageItem) => void;
+  onOpenBatchUpload?: () => void;
 }
 
 export const TabScan: React.FC<TabScanProps> = ({
@@ -59,6 +60,7 @@ export const TabScan: React.FC<TabScanProps> = ({
   onNavigateToGallery,
   onAnalyzeVision,
   onOpenSmartClean,
+  onOpenBatchUpload,
 }) => {
   // Active Grade & Textbook selection
   const [selectedGrade, setSelectedGrade] = useState<1 | 3 | 5>(1);
@@ -917,6 +919,17 @@ export const TabScan: React.FC<TabScanProps> = ({
 
           {/* Quick Upload or Auto Load */}
           <div className="flex items-center gap-2">
+            {onOpenBatchUpload && (
+              <button
+                onClick={onOpenBatchUpload}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs"
+                title="Tải lên hàng loạt nhiều file ảnh hoặc giải nén từ file ZIP, không cần quét lại từ đầu"
+              >
+                <Upload className="w-3.5 h-3.5 text-blue-200" />
+                <span>Tải Hàng Loạt Ảnh (ZIP / Nhiều Ảnh)</span>
+              </button>
+            )}
+
             <label className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5">
               <Upload className="w-3.5 h-3.5 text-slate-600" />
               <span>Chọn file PDF ngoài</span>
