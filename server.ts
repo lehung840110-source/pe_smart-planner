@@ -261,34 +261,231 @@ Trả về kết quả JSON với format:
 
 // API: Phân tích hình ảnh động tác SGK bằng Gemini Vision AI
 app.post('/api/ai/analyze-vision', async (req: Request, res: Response) => {
-  const { imageBase64, grade, lessonTitle } = req.body;
+  const {
+    imageBase64,
+    grade,
+    lessonTitle,
+    imageTitle,
+    caption,
+    folder,
+    category
+  } = req.body;
 
   if (!imageBase64) {
     return res.status(400).json({ success: false, error: 'Thiếu dữ liệu hình ảnh' });
   }
 
-  // Fallback function when AI client is unavailable or overloaded
+  // Intelligent domain-aware analysis fallback when AI client is unavailable, quota is exhausted, or offline
   const getFallbackAnalysis = () => {
-    const isGame = lessonTitle && (lessonTitle.toLowerCase().includes('trò chơi') || lessonTitle.toLowerCase().includes('chơi'));
+    const rawText = `${imageTitle || ''} ${caption || ''} ${folder || ''} ${category || ''} ${lessonTitle || ''}`.toLowerCase();
+
+    // 1. Cặp đôi luyện tập (Luyện tập cặp đôi / đối diện / sửa sai)
+    if (
+      rawText.includes('cặp đôi') ||
+      rawText.includes('cap doi') ||
+      rawText.includes('đối diện') ||
+      rawText.includes('doi dien') ||
+      rawText.includes('hai bạn') ||
+      rawText.includes('2 bạn')
+    ) {
+      return {
+        name: 'Luyện tập cặp đôi sửa sai cho nhau',
+        category: 'tap_luyen',
+        targetColumn: 'hs',
+        lvd: "3 - 5' (2 - 3 lượt đổi vai)",
+        caption:
+          'Hình thức luyện tập cặp đôi: hai bạn quay mặt vào nhau, một bạn tập mẫu, một bạn quan sát giúp đỡ sửa sai và luân phiên đổi vai.',
+        technicalCues: [
+          'Hai bạn đứng đối diện nhau giữ cự ly an toàn 1.5 - 2 mét',
+          'Quan sát chuẩn xác tư thế tay, chân và góc nghiêng thân người của bạn',
+          'Nhắc nhở nhẹ nhàng, cổ vũ động viên và đổi vai luyện tập theo hiệu lệnh'
+        ],
+        commonErrors: [
+          'Đứng quá gần hoặc nói chuyện riêng làm gián đoạn tập luyện',
+          'Không tập trung quan sát nên chưa kịp thời giúp bạn sửa sai tư thế'
+        ],
+        gvScript:
+          '- Chia lớp thành từng cặp đứng đối diện nhau cự ly 1.5 - 2 mét.\n- Giao nhiệm vụ: một bạn thực hiện động tác theo nhịp hô, một bạn quan sát giúp bạn uốn nắn tư thế rồi đổi vai.\n- GV luân phiên đi bao quát các cặp, uốn nắn và biểu dương cặp đôi phối hợp tích cực.',
+        hsScript:
+          '- Từng cặp đứng đối diện nhau nghiêm túc, cự ly 1.5m.\n- Bạn A thực hiện động tác theo nhịp hô, bạn B quan sát hỗ trợ sửa sai; sau đó đổi vai theo hiệu lệnh của GV.'
+      };
+    }
+
+    // 2. Luyện tập theo tổ / nhóm (4 góc sân bãi)
+    if (
+      rawText.includes('theo tổ') ||
+      rawText.includes('tổ nhóm') ||
+      rawText.includes('to nhom') ||
+      rawText.includes('4 góc') ||
+      rawText.includes('tổ trưởng')
+    ) {
+      return {
+        name: 'Luyện tập theo tổ nhóm 4 góc sân',
+        category: 'tap_luyen',
+        targetColumn: 'hs',
+        lvd: "4 - 6' (3 - 4 lần)",
+        caption:
+          'Luyện tập theo tổ: 4 tổ di chuyển về 4 góc sân tập, tổ trưởng hô nhịp và điều hành các bạn tập luyện, luân phiên sửa sai.',
+        technicalCues: [
+          'Tổ trưởng hô nhịp to, rõ ràng và dứt khoát',
+          'Các thành viên trong tổ thực hiện đều, đúng phương hướng',
+          'Luân phiên quan sát và giúp đỡ bạn cùng tổ sửa sai'
+        ],
+        commonErrors: [
+          'Mất trật tự khi di chuyển về vị trí của tổ mình',
+          'Tập luyện chưa đều theo nhịp đếm của tổ trưởng'
+        ],
+        gvScript:
+          '- Phân 4 tổ về 4 khu vực sân tập, giao nhiệm vụ điều hành cho tổ trưởng.\n- GV di chuyển giữa các tổ để uốn nắn kỹ thuật và hướng dẫn tổ trưởng cách sửa sai.',
+        hsScript:
+          '- 4 tổ nhanh chóng di chuyển về 4 góc sân bãi theo hiệu lệnh.\n- Tổ trưởng hô nhịp điều khiển, các tổ viên tự giác tập luyện và giúp bạn sửa sai.'
+      };
+    }
+
+    // 3. Luyện tập đồng loạt cả lớp (4 hàng ngang so le)
+    if (
+      rawText.includes('đồng loạt') ||
+      rawText.includes('dong loat') ||
+      rawText.includes('cả lớp') ||
+      rawText.includes('ca lop') ||
+      rawText.includes('4 hàng ngang')
+    ) {
+      return {
+        name: 'Luyện tập đồng loạt cả lớp 4 hàng ngang',
+        category: 'tap_luyen',
+        targetColumn: 'hs',
+        lvd: "5 - 7' (2x8 nhịp/động tác)",
+        caption:
+          'Đội hình toàn lớp 4 hàng ngang giãn cách so le cự ly 1 sải tay đồng loạt thực hiện theo nhịp hô của giáo viên.',
+        technicalCues: [
+          'Toàn lớp đứng so le cự ly 1 sải tay để không vướng tay bạn',
+          'Thực hiện động tác dứt khoát, mở rộng biên độ tay chân',
+          'Phối hợp nhịp thở sâu tự nhiên theo nhịp đếm'
+        ],
+        commonErrors: [
+          'Chưa đứng so le dẫn đến vướng tay bạn bên cạnh',
+          'Thực hiện động tác vội vàng, chưa mở hết biên độ'
+        ],
+        gvScript:
+          '- Điều hành lớp chuyển sang đội hình 4 hàng ngang so le cự ly 1 sải tay.\n- Hô nhịp dứt khoát (1, 2, 3, 4...) kết hợp quan sát uốn nắn lỗi sai chung cho cả lớp.',
+        hsScript:
+          '- Đội hình 4 hàng ngang giãn cách so le 1 sải tay.\n- Chú ý quan sát và đồng loạt thực hiện động tác theo nhịp hô của thầy cô.'
+      };
+    }
+
+    // 4. Trò chơi vận động
+    const isGame =
+      category === 'tro_choi' ||
+      category === 'tro_choi_khoi_dong' ||
+      folder === 'troChoi' ||
+      rawText.includes('trò chơi') ||
+      rawText.includes('tro choi') ||
+      rawText.includes('tiếp sức') ||
+      rawText.includes('kéo co') ||
+      rawText.includes('con sâu') ||
+      rawText.includes('mèo đuổi chuột') ||
+      rawText.includes('ném trúng đích') ||
+      rawText.includes('chuyền bóng');
+    if (isGame) {
+      let gameName = 'Trò chơi vận động rèn luyện thể chất';
+      if (
+        imageTitle &&
+        (imageTitle.toLowerCase().includes('trò chơi') ||
+          imageTitle.toLowerCase().includes('tiếp sức') ||
+          imageTitle.toLowerCase().includes('kéo co') ||
+          imageTitle.toLowerCase().includes('con sâu'))
+      ) {
+        gameName = imageTitle;
+      }
+      return {
+        name: gameName,
+        category: 'tro_choi',
+        targetColumn: 'hs',
+        lvd: "4 - 6' (2 - 3 lượt chơi)",
+        caption:
+          caption ||
+          'Sơ đồ và hướng dẫn luật chơi trò chơi vận động rèn luyện phản xạ nhanh nhẹn, tinh thần đồng đội.',
+        technicalCues: [
+          'Xuất phát đúng vạch quy định khi có hiệu lệnh còi',
+          'Phối hợp trao tiếp sức an toàn, không xô đẩy hay cản trở bạn',
+          'Tuân thủ tuyệt đối luật chơi và bảo đảm an toàn trên sân'
+        ],
+        commonErrors: [
+          'Xuất phát trước hiệu lệnh còi của giáo viên (phạm quy)',
+          'Chạy lấn làn của đội bạn hoặc dừng lại đột ngột'
+        ],
+        gvScript:
+          '- GV nêu tên trò chơi, luật chơi và các lỗi phạm quy cần tránh.\n- Cho 1 nhóm chơi thử 1 lượt, sau đó tổ chức thi đua hào hứng giữa các tổ có tính điểm khen thưởng.',
+        hsScript:
+          '- Đội hình theo các tổ tập trung trước vạch xuất phát.\n- Tích cực tham gia thi đua với tinh thần đoàn kết, trung thực và cổ vũ hết mình.'
+      };
+    }
+
+    // 5. Vận dụng & Hồi tĩnh
+    const isVanDung =
+      category === 'van_dung' ||
+      folder === 'vanDung' ||
+      rawText.includes('vận dụng') ||
+      rawText.includes('van dung') ||
+      rawText.includes('chào cờ') ||
+      rawText.includes('thể dục sáng') ||
+      rawText.includes('vệ sinh') ||
+      rawText.includes('thu dọn');
+    if (isVanDung) {
+      return {
+        name: 'Hoạt động vận dụng thực tế cuộc sống',
+        category: 'van_dung',
+        targetColumn: 'hs',
+        lvd: "2 - 3'",
+        caption:
+          caption ||
+          'Hình ảnh vận dụng bài thể dục vào đời sống thực tế: tập thể dục buổi sáng tại nhà, đứng nghiêm trang trong lễ chào cờ.',
+        technicalCues: [
+          'Hình thành thói quen rèn luyện thể dục thể thao hằng ngày',
+          'Tự giác giữ gìn vệ sinh cá nhân và thu dọn cọc tiêu, trang thiết bị tập luyện'
+        ],
+        commonErrors: ['Chưa duy trì thói quen tập luyện thường xuyên tại nhà'],
+        gvScript:
+          '- Nêu câu hỏi vận dụng liên hệ thực tế: "Em nên tập bài thể dục này vào thời điểm nào trong ngày để tăng cường sức khỏe?"\n- Nhắc nhở HS giữ gìn vệ sinh, cùng nhau thu dọn cọc tiêu và trang thiết bị sân tập ngăn nắp.',
+        hsScript:
+          '- Hào hứng phát biểu liên hệ thực tế: Tập thể dục buổi sáng ở nhà cùng người thân.\n- Tự giác dọn dẹp vệ sinh sân tập và cất dụng cụ cẩn thận.'
+      };
+    }
+
+    // 6. Động tác kỹ thuật mới SGK (dong_tac)
+    let moveName = imageTitle || 'Động tác kỹ thuật bài thể dục';
+    if (!imageTitle && lessonTitle) {
+      if (lessonTitle.includes('Chân')) moveName = 'Động tác Chân';
+      else if (lessonTitle.includes('Lườn')) moveName = 'Động tác Lườn';
+      else if (lessonTitle.includes('Bụng')) moveName = 'Động tác Bụng';
+      else if (lessonTitle.includes('Vươn thở')) moveName = 'Động tác Vươn thở';
+      else if (lessonTitle.includes('Tay')) moveName = 'Động tác Tay';
+      else if (lessonTitle.includes('Toàn thân')) moveName = 'Động tác Toàn thân';
+      else if (lessonTitle.includes('Nhảy')) moveName = 'Động tác Nhảy';
+      else if (lessonTitle.includes('Điều hòa')) moveName = 'Động tác Điều hòa';
+    }
+
     return {
-      name: isGame ? 'Trò chơi vận động tiếp sức' : 'Động tác kỹ thuật bài thể dục',
-      category: isGame ? 'tro_choi' : 'dong_tac',
-      targetColumn: isGame ? 'hs' : 'content',
-      lvd: isGame ? "4 - 5'" : "5 - 7'",
-      caption: isGame
-        ? 'Hình minh họa luật chơi và sơ đồ tham gia trò chơi rèn luyện phản xạ.'
-        : 'Tư thế động tác chuẩn xác, biên độ mở rộng theo nhịp đếm, hít thở sâu.',
+      name: moveName,
+      category: 'dong_tac',
+      targetColumn: 'content',
+      lvd: "5 - 7'",
+      caption:
+        caption ||
+        'Tư thế động tác chuẩn xác theo SGK GDTC, biên độ mở rộng theo nhịp đếm, hít thở sâu.',
       technicalCues: [
-        'Giữ thăng bằng trọng tâm cơ thể, thân người thẳng',
-        'Phối hợp tay chân nhịp nhàng với nhịp hô hấp tự nhiên',
-        'Tiếp đất nhẹ nhàng bằng nửa trước bàn chân để giảm chấn động'
+        'Tư thế chuẩn bị (TTCB) đứng nghiêm, thân người thẳng',
+        'Phối hợp tay chân nhịp nhàng, đúng phương hướng và biên độ kỹ thuật',
+        'Hít thở sâu nhịp nhàng theo nhịp vận động'
       ],
       commonErrors: [
         'Cúi đầu hoặc cong lưng làm mất thăng bằng',
         'Thực hiện vội vàng chưa mở hết biên độ cánh tay'
       ],
-      gvScript: '- GV làm mẫu chuẩn xác 2-3 lần kết hợp phân tích kỹ thuật từng nhịp.\n- Cho HS quan sát hình ảnh SGK đính kèm.\n- Hô nhịp dứt khoát và hướng dẫn HS sửa sai tư thế.',
-      hsScript: '- Đội hình 4 hàng ngang cự ly 1 sải tay so le.\n- Quan sát mẫu của GV và thực hiện đồng loạt theo nhịp đếm.'
+      gvScript:
+        '- GV làm mẫu chuẩn xác 2-3 lần kết hợp phân tích kỹ thuật từng nhịp.\n- Cho HS quan sát hình ảnh SGK đính kèm.\n- Hô nhịp dứt khoát và hướng dẫn HS sửa sai tư thế.',
+      hsScript:
+        '- Đội hình 4 hàng ngang cự ly 1 sải tay so le.\n- Chú ý quan sát động tác mẫu của GV và thực hiện theo nhịp hô.'
     };
   };
 
@@ -310,30 +507,51 @@ app.post('/api/ai/analyze-vision', async (req: Request, res: Response) => {
     };
 
     const textPart = {
-      text: `Bạn là chuyên gia giảng dạy môn Giáo dục Thể chất tiểu học (GDTC) tại Việt Nam theo Chương trình GDPT 2018.
-Khối lớp mục tiêu: Khối ${grade || 1}. Tiết học: ${lessonTitle || 'Bài thể dục phát triển chung'}.
-Hãy quan sát hình ảnh vừa bóc tách từ sách giáo khoa và phân tích chi tiết:
-1. Nhận diện tên động tác kỹ thuật hoặc tên sơ đồ/trò chơi vận động thể hiện trong ảnh.
-2. Xác định category: "dong_tac" (ảnh động tác kỹ thuật cá nhân - ghép vào Cột Nội dung), "tap_luyen" (sơ đồ đội hình tập luyện), hoặc "tro_choi" (trò chơi vận động).
-3. Xác định targetColumn: "content" (Cột Nội dung) nếu là "dong_tac"; hoặc "hs" (Cột Hoạt động HS) nếu là "tap_luyen" / "tro_choi".
-4. Lượng vận động gợi ý (lvd, VD: "5 - 7'", "2x8 nhịp").
-5. Chú thích ngắn gọn (caption, 1-2 câu miêu tả kỹ thuật).
-6. 2-3 Yếu lĩnh kỹ thuật cốt lõi (technicalCues).
-7. 2 Lỗi sai học sinh tiểu học hay mắc (commonErrors).
-8. Kịch bản sư phạm Giáo viên (gvScript): khẩu lệnh, thị phạm, chỉ ra sai sót.
-9. Kịch bản sư phạm Học sinh (hsScript): đội hình, động tác thực hiện.
+      text: `Bạn là chuyên gia giảng dạy môn Giáo dục Thể chất tiểu học (GDTC) tại Việt Nam theo Chương trình GDPT 2018 (Công văn 2345/BGDĐT).
+Khối lớp mục tiêu: Khối ${grade || 1}. Tiết học: "${lessonTitle || 'Bài thể dục phát triển chung'}".
+Thông tin ban đầu từ tệp hình ảnh bóc tách:
+- Tiêu đề tệp: "${imageTitle || ''}"
+- Ghi chú/chú thích: "${caption || ''}"
+- Thư mục/nhóm: "${folder || category || ''}"
 
-Trả về DUY NHẤT chuỗi JSON hợp lệ, không bọc markdown khác:
+HÃY QUAN SÁT VÀ ĐỌC KỸ HÌNH TRÊN (bao gồm hình vẽ nhân vật học sinh và các chữ in hoa/thường trên trang sách):
+QUY TẮC BẮT BUỘC THEO CÔNG VĂN 2345/BGDĐT:
+1. Nếu hình ảnh vẽ 2 học sinh quay mặt vào nhau luyện tập (có chữ "Luyện tập cặp đôi" hoặc "cặp đôi", "đối diện"):
+   -> name = "Luyện tập cặp đôi sửa sai cho nhau"
+   -> category = "tap_luyen"
+   -> targetColumn = "hs" (BẮT BUỘC Cột 4 Hoạt động HS - TUYỆT ĐỐI KHÔNG GÁN VÀO CỘT 1 NỘI DUNG!)
+2. Nếu hình ảnh vẽ 4 tổ ở 4 góc sân hoặc nhóm học sinh có tổ trưởng chỉ huy:
+   -> name = "Luyện tập theo tổ / nhóm"
+   -> category = "tap_luyen"
+   -> targetColumn = "hs"
+3. Nếu hình ảnh vẽ cả lớp đứng 4 hàng ngang giãn cách:
+   -> name = "Luyện tập đồng loạt cả lớp"
+   -> category = "tap_luyen"
+   -> targetColumn = "hs"
+4. Nếu hình ảnh vẽ sơ đồ chạy, thi đấu trò chơi (tiếp sức, kéo co, con sâu, bắt bóng...):
+   -> name = Tên trò chơi cụ thể
+   -> category = "tro_choi"
+   -> targetColumn = "hs"
+5. Nếu hình ảnh vẽ học sinh vận dụng vào đời sống (chào cờ nghiêm túc, tập buổi sáng ở nhà, dọn vệ sinh...):
+   -> name = "Vận dụng thực tế cuộc sống"
+   -> category = "van_dung"
+   -> targetColumn = "hs"
+6. CHỈ KHI hình vẽ tranh phân thế kỹ thuật chi tiết các nhịp (TTCB, Nhịp 1, 2, 3...) của 1 học sinh thực hiện động tác mới:
+   -> name = Tên động tác cụ thể (VD: "Động tác Chân", "Động tác Lườn", "Động tác Vươn thở"...)
+   -> category = "dong_tac"
+   -> targetColumn = "content" (Cột 1 Nội dung)
+
+Trả về DUY NHẤT chuỗi JSON hợp lệ:
 {
-  "name": "Tên động tác / sơ đồ",
-  "category": "dong_tac",
-  "targetColumn": "content",
+  "name": "Tên động tác / Hình ảnh tập luyện / Tên trò chơi",
+  "category": "tap_luyen" | "dong_tac" | "tro_choi" | "van_dung",
+  "targetColumn": "hs" | "content",
   "lvd": "5 - 7'",
-  "caption": "Mô tả tư thế",
+  "caption": "Mô tả ghi chú tự động chuẩn mực sư phạm",
   "technicalCues": ["Yếu lĩnh 1", "Yếu lĩnh 2"],
-  "commonErrors": ["Lỗi 1", "Lỗi 2"],
-  "gvScript": "- GV làm mẫu...",
-  "hsScript": "- Đội hình..."
+  "commonErrors": ["Lỗi sai 1", "Lỗi sai 2"],
+  "gvScript": "- Kịch bản GV...",
+  "hsScript": "- Kịch bản HS..."
 }`
     };
 
@@ -346,6 +564,42 @@ Trả về DUY NHẤT chuỗi JSON hợp lệ, không bọc markdown khác:
     });
 
     const parsed = JSON.parse(response.text || '{}');
+
+    // Strict pedagogical sanity check & override if needed
+    const checkText = `${parsed.name || ''} ${imageTitle || ''} ${caption || ''} ${folder || ''}`.toLowerCase();
+    if (
+      checkText.includes('cặp đôi') ||
+      checkText.includes('cap doi') ||
+      checkText.includes('đối diện')
+    ) {
+      parsed.category = 'tap_luyen';
+      parsed.targetColumn = 'hs';
+      if (!parsed.name || parsed.name.includes('Động tác')) {
+        parsed.name = 'Luyện tập cặp đôi sửa sai cho nhau';
+      }
+    } else if (
+      checkText.includes('đồng loạt') ||
+      checkText.includes('tổ nhóm') ||
+      checkText.includes('theo tổ')
+    ) {
+      parsed.category = 'tap_luyen';
+      parsed.targetColumn = 'hs';
+    } else if (
+      checkText.includes('trò chơi') ||
+      checkText.includes('tiếp sức') ||
+      checkText.includes('kéo co')
+    ) {
+      parsed.category = 'tro_choi';
+      parsed.targetColumn = 'hs';
+    } else if (
+      checkText.includes('vận dụng') ||
+      checkText.includes('chào cờ') ||
+      checkText.includes('thể dục sáng')
+    ) {
+      parsed.category = 'van_dung';
+      parsed.targetColumn = 'hs';
+    }
+
     return res.json({
       success: true,
       source: 'gemini-3.8-flash-vision',

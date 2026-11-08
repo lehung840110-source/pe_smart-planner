@@ -800,26 +800,35 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 5,
     lessonNum: 17,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG VỚI GẬY (Tiết 1)',
-    movementNames: ['Động tác Vặn mình với gậy', 'Động tác Bụng với gậy'],
-    suggestedGame: 'Trò chơi: Chuyển bóng tiếp sức'
+    title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 1)',
+    movementNames: ['Động tác Bụng với gậy', 'Động tác Vặn mình với gậy (Học 2 động tác mới)'],
+    suggestedGame: 'Trò chơi: Ai kéo khoẻ hơn'
   },
   {
     week: 9,
     grade: 5,
     lessonNum: 18,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG VỚI GẬY (Tiết 2)',
-    movementNames: ['Động tác Vặn mình với gậy', 'Động tác Bụng với gậy', 'Ôn Vươn thở, Tay, Chân'],
-    suggestedGame: 'Trò chơi: Lò cò qua cọc tiêu'
+    title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 2)',
+    movementNames: ['Ôn Bụng, Vặn mình với gậy', 'Động tác Toàn thân với gậy (Học 1 động tác mới)'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
     week: 10,
     grade: 5,
     lessonNum: 19,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
-    movementNames: ['Động tác Phối hợp với gậy', 'Động tác Nhảy với gậy', 'Động tác Điều hòa'],
+    title: 'Bài 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
+    movementNames: ['Động tác Thăng bằng với gậy', 'Động tác Nhảy với gậy (Học 2 động tác mới)'],
+    suggestedGame: 'Trò chơi: Nhảy tiếp sức'
+  },
+  {
+    week: 10,
+    grade: 5,
+    lessonNum: 20,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 2)',
+    movementNames: ['Ôn Thăng bằng, Nhảy với gậy', 'Động tác Điều hòa với gậy (Học 1 động tác mới)'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   }
 ];

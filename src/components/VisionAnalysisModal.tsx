@@ -41,33 +41,184 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
 }) => {
   const [selectedRowIndex, setSelectedRowIndex] = useState<number>(1);
   const [targetColumn, setTargetColumn] = useState<'content' | 'hs'>('content');
+  const [currentCategory, setCurrentCategory] = useState<ImageCategory>('dong_tac');
   const [name, setName] = useState<string>('');
   const [lvd, setLvd] = useState<string>('');
   const [gvScript, setGvScript] = useState<string>('');
   const [hsScript, setHsScript] = useState<string>('');
 
+  // Find optimal row index based on category and title keywords
+  const findOptimalRow = (cat: ImageCategory, movementTitle: string) => {
+    const raw = `${movementTitle} ${imageItem?.title || ''} ${imageItem?.caption || ''}`.toLowerCase();
+    let idx = -1;
+
+    if (raw.includes('cặp đôi') || raw.includes('cap doi') || raw.includes('đối diện')) {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('cặp đôi') || r.content.includes('3.3')
+      );
+      if (idx === -1) {
+        idx = lessonRows.findIndex(
+          (r) => r.content.toLowerCase().includes('luyện tập') || r.content.includes('3.')
+        );
+      }
+    } else if (raw.includes('theo tổ') || raw.includes('tổ nhóm') || raw.includes('to nhom') || raw.includes('4 góc')) {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('theo tổ') || r.content.toLowerCase().includes('tổ nhóm') || r.content.includes('3.2')
+      );
+      if (idx === -1) {
+        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+      }
+    } else if (raw.includes('đồng loạt') || raw.includes('dong loat') || raw.includes('cả lớp')) {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('đồng loạt') || r.content.includes('3.1')
+      );
+      if (idx === -1) {
+        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+      }
+    } else if (cat === 'tap_luyen') {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('luyện tập') || r.content.includes('3.')
+      );
+    } else if (cat === 'tro_choi' || cat === 'tro_choi_khoi_dong') {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('trò chơi') || r.content.includes('3.5') || r.content.includes('3.4')
+      );
+      if (idx === -1) {
+        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+      }
+    } else if (cat === 'van_dung') {
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('vận dụng') || r.content.toLowerCase().includes('hồi tĩnh') || r.content.includes('4.')
+      );
+    } else {
+      // dong_tac: Mục 2 Hình thành kiến thức
+      idx = lessonRows.findIndex(
+        (r) => r.content.toLowerCase().includes('hình thành kiến thức') || r.content.toLowerCase().includes('khám phá') || r.content.includes('2.')
+      );
+    }
+
+    if (idx !== -1) return idx;
+    if (cat === 'tro_choi') return Math.min(3, lessonRows.length - 1);
+    if (cat === 'tap_luyen') return Math.min(2, lessonRows.length - 1);
+    if (cat === 'van_dung') return Math.max(0, lessonRows.length - 1);
+    return Math.min(1, lessonRows.length - 1);
+  };
+
   useEffect(() => {
     if (analysis) {
-      setName(analysis.name || 'Động tác kỹ thuật SGK');
-      setLvd(analysis.lvd || "5 - 7'");
-      setGvScript(analysis.gvScript || '');
-      setHsScript(analysis.hsScript || '');
+      let effCat: ImageCategory = analysis.category;
+      let effCol: 'content' | 'hs' = analysis.targetColumn;
+      let effName = analysis.name || 'Động tác kỹ thuật SGK';
+      let effLvd = analysis.lvd || "5 - 7'";
+      let effGv = analysis.gvScript || '';
+      let effHs = analysis.hsScript || '';
 
-      const col = analysis.targetColumn === 'hs' ? 'hs' : 'content';
-      setTargetColumn(col);
+      const combinedText = `${effName} ${imageItem?.title || ''} ${imageItem?.caption || ''} ${imageItem?.folder || ''}`.toLowerCase();
 
-      // Select default row based on category
-      if (analysis.category === 'tro_choi') {
-        setSelectedRowIndex(3); // 3.5 Trò chơi
-      } else if (analysis.category === 'tap_luyen') {
-        setSelectedRowIndex(2); // 3. Luyện tập
-      } else {
-        setSelectedRowIndex(1); // 2. Hình thành kiến thức mới
+      const isPairPractice =
+        combinedText.includes('cặp đôi') ||
+        combinedText.includes('cap doi') ||
+        combinedText.includes('đối diện') ||
+        combinedText.includes('doi dien');
+
+      const isGroupPractice =
+        combinedText.includes('theo tổ') ||
+        combinedText.includes('tổ nhóm') ||
+        combinedText.includes('to nhom') ||
+        combinedText.includes('4 góc');
+
+      const isMassPractice =
+        combinedText.includes('đồng loạt') ||
+        combinedText.includes('dong loat') ||
+        combinedText.includes('cả lớp');
+
+      const isGame =
+        effCat === 'tro_choi' ||
+        effCat === 'tro_choi_khoi_dong' ||
+        combinedText.includes('trò chơi') ||
+        combinedText.includes('tiếp sức') ||
+        combinedText.includes('kéo co') ||
+        combinedText.includes('con sâu');
+
+      const isVanDung =
+        effCat === 'van_dung' ||
+        combinedText.includes('vận dụng') ||
+        combinedText.includes('hồi tĩnh') ||
+        combinedText.includes('chào cờ');
+
+      if (isPairPractice) {
+        effCat = 'tap_luyen';
+        effCol = 'hs';
+        if (!effName || effName.includes('Động tác')) {
+          effName = 'Luyện tập cặp đôi sửa sai cho nhau';
+        }
+        effLvd = "3 - 5' (2 - 3 lượt đổi vai)";
+      } else if (isGroupPractice) {
+        effCat = 'tap_luyen';
+        effCol = 'hs';
+        if (!effName || effName.includes('Động tác')) {
+          effName = 'Luyện tập theo tổ nhóm 4 góc sân';
+        }
+        effLvd = "4 - 6' (3 - 4 lần)";
+      } else if (isMassPractice) {
+        effCat = 'tap_luyen';
+        effCol = 'hs';
+        if (!effName || effName.includes('Động tác')) {
+          effName = 'Luyện tập đồng loạt cả lớp 4 hàng ngang';
+        }
+        effLvd = "5 - 7' (2x8 nhịp/động tác)";
+      } else if (isGame) {
+        effCat = 'tro_choi';
+        effCol = 'hs';
+        effLvd = "4 - 6' (2 - 3 lượt chơi)";
+      } else if (isVanDung) {
+        effCat = 'van_dung';
+        effCol = 'hs';
+        effLvd = "2 - 3'";
       }
+
+      setCurrentCategory(effCat);
+      setName(effName);
+      setLvd(effLvd);
+      setGvScript(effGv);
+      setHsScript(effHs);
+      setTargetColumn(effCol);
+
+      const matchedIdx = findOptimalRow(effCat, effName);
+      setSelectedRowIndex(matchedIdx);
     }
-  }, [analysis]);
+  }, [analysis, imageItem]);
 
   if (!isOpen || !imageItem || !analysis) return null;
+
+  const handleCategoryChange = (newCat: ImageCategory) => {
+    setCurrentCategory(newCat);
+    if (newCat === 'dong_tac') {
+      setTargetColumn('content');
+    } else {
+      setTargetColumn('hs');
+    }
+    const matchedIdx = findOptimalRow(newCat, name);
+    setSelectedRowIndex(matchedIdx);
+  };
+
+  const getCategoryBadge = (cat?: ImageCategory) => {
+    switch (cat) {
+      case 'dong_tac':
+        return { label: '🎯 Hình ảnh động tác kỹ thuật mới (Cột 1)', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+      case 'tap_luyen':
+        return { label: '👥 Hình ảnh tập luyện động tác (Cột 4)', bg: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+      case 'tro_choi':
+      case 'tro_choi_khoi_dong':
+        return { label: '🏆 Hình ảnh trò chơi vận động (Cột 4)', bg: 'bg-amber-100 text-amber-800 border-amber-200' };
+      case 'van_dung':
+        return { label: '🌱 Hình ảnh vận dụng thực tế (Cột 4)', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+      default:
+        return { label: '📷 Tư liệu minh họa GDTC', bg: 'bg-slate-100 text-slate-800 border-slate-200' };
+    }
+  };
+
+  const badge = getCategoryBadge(currentCategory);
 
   const handleApply = () => {
     onApplyToLesson(
@@ -93,10 +244,10 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-sm">
-                Kết Quả AI Vision Phân Tích Động Tác SGK
+                Kết Quả AI Vision Phân Tích & Phân Loại Hình Ảnh SGK
               </h3>
               <p className="text-[11px] text-slate-500">
-                Tự động trích xuất tên kỹ thuật, khẩu lệnh sư phạm và vị trí cột chuẩn
+                Tự động nhận diện động tác, tập luyện, trò chơi, vận dụng kèm chú thích chuẩn
               </p>
             </div>
           </div>
@@ -117,8 +268,13 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
               />
             </div>
             <div className="sm:col-span-2 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="text-[10px] font-bold uppercase text-slate-400">Tên Nhận Diện Được</label>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.bg}`}>
+                  {badge.label}
+                </span>
+              </div>
               <div>
-                <label className="text-[10px] font-bold uppercase text-slate-400">Tên Động Tác Nhận Diện Được</label>
                 <input
                   type="text"
                   value={name}
@@ -126,8 +282,58 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
                   className="w-full font-bold text-xs text-blue-900 bg-white border border-slate-300 rounded-lg p-2 mt-0.5 focus:border-blue-500 focus:outline-none"
                 />
               </div>
-              <p className="text-[11px] text-slate-600 leading-relaxed italic">
-                "{analysis.caption}"
+
+              {/* Fast Category Selector Pills */}
+              <div className="flex items-center gap-1.5 pt-1">
+                <span className="text-[10px] font-semibold text-slate-500">Phân loại nhanh:</span>
+                <button
+                  type="button"
+                  onClick={() => handleCategoryChange('dong_tac')}
+                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
+                    currentCategory === 'dong_tac'
+                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Động tác mới
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCategoryChange('tap_luyen')}
+                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
+                    currentCategory === 'tap_luyen'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Luyện tập
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCategoryChange('tro_choi')}
+                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
+                    currentCategory === 'tro_choi'
+                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Trò chơi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCategoryChange('van_dung')}
+                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
+                    currentCategory === 'van_dung'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Vận dụng
+                </button>
+              </div>
+
+              <p className="text-[11px] text-slate-600 leading-relaxed italic bg-white/80 p-1.5 rounded-md border border-slate-200/60">
+                <strong>Ghi chú tự động:</strong> "{analysis.caption}"
               </p>
               {analysis.technicalCues && analysis.technicalCues.length > 0 && (
                 <div className="text-[10.5px] text-slate-700 bg-blue-50/60 p-2 rounded-lg border border-blue-100">
@@ -187,6 +393,19 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Pedagogical Guidance Badge */}
+          {targetColumn === 'hs' ? (
+            <div className="text-[11px] text-emerald-800 bg-emerald-50/90 border border-emerald-200 rounded-lg p-2 flex items-start gap-1.5">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <span><strong>Đúng chuẩn Công văn 2345/BGDĐT:</strong> Hình ảnh luyện tập (cặp đôi, tổ nhóm, đồng loạt) hoặc sơ đồ trò chơi được gắn vào <strong>Cột 4 (Hoạt động của HS)</strong> để thể hiện đội hình và cách thức học sinh thực hiện.</span>
+            </div>
+          ) : (
+            <div className="text-[11px] text-blue-800 bg-blue-50/90 border border-blue-200 rounded-lg p-2 flex items-start gap-1.5">
+              <BookOpen className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <span><strong>Đúng chuẩn Công văn 2345/BGDĐT:</strong> Cột 1 (Nội dung) chỉ dành riêng cho <strong>tranh phân thế động tác kỹ thuật mới</strong> ở Mục 2 (Khám phá & Hình thành kiến thức mới).</span>
+            </div>
+          )}
 
           <div>
             <label className="block font-semibold text-slate-700 mb-1">Lượng Vận Động (LVD)</label>

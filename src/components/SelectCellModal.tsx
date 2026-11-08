@@ -21,19 +21,29 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
   const [targetColumn, setTargetColumn] = useState<'content' | 'hs'>('content');
 
   useEffect(() => {
-    if (imageItem) {
+    if (imageItem && lessonRows && lessonRows.length > 0) {
       if (imageItem.category === 'dong_tac') {
+        // Động tác kỹ thuật: Luôn ở Cột 1 của Hoạt động Hình thành kiến thức mới (Hàng 2 / index 1)
+        const rowIdx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('hình thành kiến thức') || r.content.toLowerCase().includes('khám phá'));
+        setSelectedRow(rowIdx >= 0 ? rowIdx : 1);
         setTargetColumn('content');
-        setSelectedRow(1); // 2. Hình thành kiến thức mới
       } else if (imageItem.category === 'tro_choi') {
+        // Trò chơi vận động: Luôn ở Cột 4 (Sơ đồ sân bãi trò chơi) của Hoạt động Trò chơi
+        const rowIdx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('trò chơi vận động') || r.content.toLowerCase().includes('3.4') || r.content.toLowerCase().includes('3.5'));
+        setSelectedRow(rowIdx >= 0 ? rowIdx : Math.min(3, lessonRows.length - 1));
         setTargetColumn('hs');
-        setSelectedRow(3); // 3.5 Trò chơi vận động
+      } else if (imageItem.category === 'khoi_dong' || imageItem.category === 'tro_choi_khoi_dong') {
+        // Khởi động: Ở Cột 4 của Hoạt động Mở đầu (Hàng 1 / index 0)
+        setSelectedRow(0);
+        setTargetColumn('hs');
       } else {
+        // Hình ảnh / Sơ đồ Luyện tập (tap_luyen): Theo chuẩn GDTC thuộc Cột 4 (Hoạt động HS & Sơ đồ) của Hoạt động Luyện tập
+        const rowIdx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('hoạt động luyện tập') || r.content.toLowerCase().includes('3.1') || r.content.toLowerCase().includes('luyện tập'));
+        setSelectedRow(rowIdx >= 0 ? rowIdx : 2);
         setTargetColumn('hs');
-        setSelectedRow(2); // 3. Hoạt động luyện tập
       }
     }
-  }, [imageItem]);
+  }, [imageItem, lessonRows]);
 
   if (!isOpen || !imageItem) return null;
 
@@ -145,6 +155,26 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
               </label>
             </div>
           </div>
+
+          {/* Pedagogical Rule Badge */}
+          {imageItem.category === 'dong_tac' && targetColumn !== 'content' && (
+            <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-800 text-[11px] leading-relaxed">
+              ⚠️ <strong>Lưu ý sư phạm:</strong> Tranh kỹ thuật phân thế động tác mới thường được đặt tại <strong>Cột 1 (Nội dung)</strong> ở Hoạt động Khám phá để học sinh đối chiếu khi giáo viên làm mẫu.
+            </div>
+          )}
+
+          {imageItem.category === 'tap_luyen' && targetColumn === 'content' && (
+            <div className="p-2.5 bg-red-50 rounded-xl border border-red-200 text-red-800 text-[11px] leading-relaxed">
+              🚫 <strong>Sai quy chuẩn giáo án GDTC:</strong> Cột 1 của Hoạt động Luyện tập chỉ chứa văn bản các bước (3.1 Tập đồng loạt, 3.2 Tập tổ nhóm). Hình ảnh và sơ đồ luyện tập <strong>bắt buộc phải nằm ở Cột 4 (Hoạt động HS)</strong>.
+            </div>
+          )}
+
+          {imageItem.category === 'tro_choi' && (
+            <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-800 text-[11px] leading-relaxed flex items-center gap-1.5">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Đã chọn đúng <strong>Cột 4</strong> để chèn sơ đồ sân bãi và luật chơi trò chơi vận động.</span>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2.5 pt-4 mt-4 border-t border-slate-100">

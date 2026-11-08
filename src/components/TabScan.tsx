@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { SgkImageItem, ImageCategory } from '../types/gdtc';
+import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import {
   removeBackgroundCanvas,
   autoCropCanvas,
@@ -53,6 +53,8 @@ interface TabScanProps {
   onAnalyzeVision?: (img: SgkImageItem) => void;
   onOpenSmartClean?: (img: SgkImageItem) => void;
   onOpenBatchUpload?: () => void;
+  initialGrade?: 1 | 3 | 5;
+  initialPage?: number;
 }
 
 export const TabScan: React.FC<TabScanProps> = ({
@@ -61,11 +63,13 @@ export const TabScan: React.FC<TabScanProps> = ({
   onAnalyzeVision,
   onOpenSmartClean,
   onOpenBatchUpload,
+  initialGrade,
+  initialPage,
 }) => {
   // Active Grade & Textbook selection
-  const [selectedGrade, setSelectedGrade] = useState<1 | 3 | 5>(1);
+  const [selectedGrade, setSelectedGrade] = useState<1 | 3 | 5>(initialGrade || 1);
   const [fileName, setFileName] = useState<string>('SGK GDTC Lớp 1 (Kết nối tri thức)');
-  const [currentPage, setCurrentPage] = useState<number>(28); // Default to Bài 1 (Trang 28 PDF)
+  const [currentPage, setCurrentPage] = useState<number>(initialPage || 28); // Default to Bài 1 (Trang 28 PDF)
   const [totalPages, setTotalPages] = useState<number>(97);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingText, setLoadingText] = useState<string>('Đang mở trang sách...');
@@ -75,7 +79,7 @@ export const TabScan: React.FC<TabScanProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isTreeExpanded, setIsTreeExpanded] = useState<boolean>(true);
   const [selectedFolderId, setSelectedFolderId] = useState<string>('k1_cd2_b1');
-  const [selectedSubCategory, setSelectedSubCategory] = useState<'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'vanDung'>('kyThuat');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<SubFolderType>('kyThuat');
   const [selectedTopicFilter, setSelectedTopicFilter] = useState<'all' | 'dhdn' | 'the_duc' | 'knvd' | 'bong_ro' | 'boi'>('all');
 
   // Extraction states & Auto-save prevention
@@ -83,7 +87,7 @@ export const TabScan: React.FC<TabScanProps> = ({
   const [pendingCrop, setPendingCrop] = useState<SgkImageItem | null>(null);
   const [pendingCropTitle, setPendingCropTitle] = useState<string>('');
   const [pendingCropGrade, setPendingCropGrade] = useState<string>('1');
-  const [pendingCropFolder, setPendingCropFolder] = useState<'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'vanDung'>('kyThuat');
+  const [pendingCropFolder, setPendingCropFolder] = useState<SubFolderType>('kyThuat');
 
   const [recentExtracted, setRecentExtracted] = useState<SgkImageItem[]>([]);
   const [isBatchScanning, setIsBatchScanning] = useState<boolean>(false);
@@ -108,8 +112,24 @@ export const TabScan: React.FC<TabScanProps> = ({
 
   // Load Grade PDF on mount or grade switch
   useEffect(() => {
-    loadPdfFromPath(gradePdfMap[selectedGrade].file, gradePdfMap[selectedGrade].name, gradePdfMap[selectedGrade].defaultPage);
+    loadPdfFromPath(gradePdfMap[selectedGrade].file, gradePdfMap[selectedGrade].name, initialPage || gradePdfMap[selectedGrade].defaultPage);
   }, [selectedGrade]);
+
+  // Sync when initialGrade or initialPage changes from parent
+  useEffect(() => {
+    if (initialGrade && initialGrade !== selectedGrade) {
+      setSelectedGrade(initialGrade);
+    }
+  }, [initialGrade]);
+
+  useEffect(() => {
+    if (initialPage && initialPage > 0 && initialPage !== currentPage) {
+      setCurrentPage(initialPage);
+      if (pdfDocRef.current) {
+        renderPdfPage(pdfDocRef.current, initialPage, zoomScale);
+      }
+    }
+  }, [initialPage]);
 
   // Tự động đồng bộ bài học & thư mục con (Kỹ thuật động tác mới vs Luyện tập) theo khối lớp và số trang hiện tại
   useEffect(() => {
@@ -421,8 +441,8 @@ export const TabScan: React.FC<TabScanProps> = ({
     ) || sgkCurriculumTree.find((f) => f.id === selectedFolderId) ||
          sgkCurriculumTree.find((f) => f.grade === selectedGrade);
 
-    // 2. Tự động phân loại: Đâu là Kỹ thuật động tác mới, đâu là Luyện tập, đâu là Trò chơi khởi động
-    let autoFolder: 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'vanDung' = selectedSubCategory;
+    // 2. Tự động phân loại: Đâu là Kỹ thuật động tác mới, đâu là Luyện tập, đâu là Trò chơi
+    let autoFolder: SubFolderType = selectedSubCategory;
     let autoTitle = customTitle || '';
 
     if (!autoTitle && activeFolder) {
@@ -461,14 +481,52 @@ export const TabScan: React.FC<TabScanProps> = ({
       }
     }
 
+    // Keyword refinement from custom title or auto title
+    const lowerTitle = (autoTitle || '').toLowerCase();
+    if (
+      lowerTitle.includes('trò chơi vận động') ||
+      lowerTitle.includes('tiếp sức') ||
+      lowerTitle.includes('kéo co') ||
+      lowerTitle.includes('mèo đuổi chuột') ||
+      lowerTitle.includes('tam giác') ||
+      lowerTitle.includes('con thỏ') ||
+      lowerTitle.includes('lò cò')
+    ) {
+      autoFolder = 'troChoi';
+    } else if (
+      lowerTitle.includes('luyện tập') ||
+      lowerTitle.includes('tập luyện') ||
+      lowerTitle.includes('đồng loạt') ||
+      lowerTitle.includes('tổ nhóm') ||
+      lowerTitle.includes('cặp đôi')
+    ) {
+      autoFolder = 'luyenTap';
+    } else if (
+      lowerTitle.includes('động tác') ||
+      lowerTitle.includes('kỹ thuật') ||
+      lowerTitle.includes('vươn thở') ||
+      lowerTitle.includes('tay') ||
+      lowerTitle.includes('chân') ||
+      lowerTitle.includes('lườn') ||
+      lowerTitle.includes('bụng') ||
+      lowerTitle.includes('vặn mình') ||
+      lowerTitle.includes('toàn thân') ||
+      lowerTitle.includes('nhảy') ||
+      lowerTitle.includes('điều hòa') ||
+      lowerTitle.includes('đi đều')
+    ) {
+      autoFolder = 'kyThuat';
+    }
+
     if (!autoTitle) {
       autoTitle = `Động tác thể dục - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
     }
 
-    // Determine category from autoFolder
+    // Determine category from autoFolder strictly according to GDTC standards
     let cat: ImageCategory = 'dong_tac';
     if (autoFolder === 'khoiDong') cat = 'khoi_dong';
     else if (autoFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
+    else if (autoFolder === 'troChoi') cat = 'tro_choi';
     else if (autoFolder === 'kyThuat') cat = 'dong_tac';
     else if (autoFolder === 'luyenTap') cat = 'tap_luyen';
     else if (autoFolder === 'vanDung') cat = 'van_dung';
@@ -507,6 +565,7 @@ export const TabScan: React.FC<TabScanProps> = ({
     let cat: ImageCategory = 'dong_tac';
     if (pendingCropFolder === 'khoiDong') cat = 'khoi_dong';
     else if (pendingCropFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
+    else if (pendingCropFolder === 'troChoi') cat = 'tro_choi';
     else if (pendingCropFolder === 'kyThuat') cat = 'dong_tac';
     else if (pendingCropFolder === 'luyenTap') cat = 'tap_luyen';
     else if (pendingCropFolder === 'vanDung') cat = 'van_dung';
@@ -1398,6 +1457,17 @@ export const TabScan: React.FC<TabScanProps> = ({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setPendingCropFolder('troChoi')}
+                      className={`px-2 py-1.5 rounded-lg text-left font-semibold border transition text-[11px] flex items-center gap-1 ${
+                        pendingCropFolder === 'troChoi'
+                          ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      🎯 Trò Chơi Vận Động
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setPendingCropFolder('troChoiKhoiDong')}
                       className={`px-2 py-1.5 rounded-lg text-left font-semibold border transition text-[11px] flex items-center gap-1 ${
                         pendingCropFolder === 'troChoiKhoiDong'
@@ -1427,7 +1497,7 @@ export const TabScan: React.FC<TabScanProps> = ({
                           : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                       }`}
                     >
-                      🎯 Vận Dụng & Thực Tiễn
+                      🌱 Vận Dụng & Hồi Tĩnh
                     </button>
                   </div>
                 </div>

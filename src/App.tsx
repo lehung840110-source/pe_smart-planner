@@ -15,6 +15,7 @@ import { SmartCleanModal } from './components/SmartCleanModal';
 import { FormationStudioModal } from './components/FormationStudioModal';
 import { SelectFormationModal } from './components/SelectFormationModal';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
+import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { FormationDiagram, saveCustomFormationToStorage } from './data/formationDiagrams';
 import { ParsedLessonFileResult, parseLessonFile } from './utils/documentParser';
 import { exportWordDocument } from './utils/exportUtils';
@@ -26,9 +27,10 @@ import {
 } from './data/defaultData';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from './data/masterTemplateTuan8';
 import { masterPlansTuan9 } from './data/masterTemplateTuan9';
-import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow } from './types/gdtc';
+import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory } from './types/gdtc';
 import {
   getAllImagesDB,
+  saveImageDB,
   saveImagesDB,
   getAllScenariosDB,
   saveScenariosDB,
@@ -91,6 +93,20 @@ export default function App() {
   // Google Drive Modal State
   const [isGoogleDriveOpen, setIsGoogleDriveOpen] = useState<boolean>(false);
 
+  // Backup & Restore Modal State
+  const [isBackupRestoreOpen, setIsBackupRestoreOpen] = useState<boolean>(false);
+
+  // SGK Page Jump State
+  const [scanInitialGrade, setScanInitialGrade] = useState<1 | 3 | 5 | undefined>(undefined);
+  const [scanInitialPage, setScanInitialPage] = useState<number | undefined>(undefined);
+
+  const handleNavigateToScanFromLesson = (targetGrade: 1 | 3 | 5, targetPage?: number) => {
+    setScanInitialGrade(targetGrade);
+    setScanInitialPage(targetPage);
+    setActiveTab('tab-scan');
+    showToast(`📖 Đang mở SGK Lớp ${targetGrade}${targetPage ? ` (Trang ${targetPage})` : ''} để bóc tách...`);
+  };
+
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isDbLoadedRef = useRef<boolean>(false);
@@ -101,17 +117,17 @@ export default function App() {
       try {
         const storedImages = await getAllImagesDB();
         if (storedImages && storedImages.length > 0) {
-          // Upgrade any legacy synthetic SVGs to authentic textbook photos if available
-          const upgraded = storedImages.map((img: SgkImageItem) => {
-            const defMatch = defaultSgkImages.find((d) => d.id === img.id);
-            if (defMatch && (img.imgUrl.startsWith('data:image/svg+xml') || !img.imgUrl)) {
-              return { ...img, imgUrl: defMatch.imgUrl };
+          // Keep user's stored images intact without reverting SVGs or replaced images
+          const sanitized = storedImages.map((img: SgkImageItem) => {
+            if (!img.imgUrl) {
+              const defMatch = defaultSgkImages.find((d) => d.id === img.id);
+              if (defMatch) return { ...img, imgUrl: defMatch.imgUrl };
             }
             return img;
           });
-          // Ensure all default authentic images are present
-          const existingIds = new Set(upgraded.map((i: SgkImageItem) => i.id));
-          const merged = [...upgraded];
+          // Merge any missing default images if not in user's library
+          const existingIds = new Set(sanitized.map((i: SgkImageItem) => i.id));
+          const merged = [...sanitized];
           defaultSgkImages.forEach((def) => {
             if (!existingIds.has(def.id)) {
               merged.push(def);
@@ -142,103 +158,36 @@ export default function App() {
         setSchoolSettings(storedSettings);
 
         const storedAllPlans = await getAppStateDB('gdtc_all_master_plans', null);
-        if (storedAllPlans && typeof storedAllPlans === 'object') {
+        if (storedAllPlans && typeof storedAllPlans === 'object' && Object.keys(storedAllPlans).length > 0) {
           const normalizedMap: Record<string, MasterPlanItem> = {
+            ...masterPlansTuan8,
             ...masterPlansTuan9
           };
+          // User's edited plans in IndexedDB MUST have absolute priority over default templates!
           Object.keys(storedAllPlans).forEach((key) => {
             const plan = normalizeMasterPlan(storedAllPlans[key]);
-            // Ensure Row 2 has authentic image rather than legacy SVG
-            if (plan.rows && plan.rows.length >= 2) {
-              const r2 = plan.rows[1];
-              if (r2.contentImgUrl?.startsWith('data:image/svg+xml') || !r2.contentImgUrl) {
-                if (key.includes('k3_t17') || key.includes('k3_t18')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vươn thở & Động tác Tay (SGK GDTC Lớp 3)';
-                } else if (key.includes('k3_t16')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp (SGK GDTC Lớp 3)';
-                } else if (key.includes('k3_t15')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k3_di_deu_dung_lai.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Đi đều, Đứng lại (SGK GDTC Lớp 3)';
-                } else if (key.includes('k1_t15')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vươn thở (SGK GDTC Lớp 1)';
-                } else if (key.includes('k1_t16')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k1_tay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Tay (SGK GDTC Lớp 1)';
-                } else if (key.includes('k1_t17')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k1_chan.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Chân & Vặn mình (SGK GDTC Lớp 1)';
-                } else if (key.includes('k1_t18')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k1_bung.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Bụng (SGK GDTC Lớp 1)';
-                } else if (key.includes('k5_t15')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_vuon_tho_tay_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vươn thở, Tay với gậy (SGK GDTC Lớp 5)';
-                } else if (key.includes('k5_t16')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_chan_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Chân với gậy (SGK GDTC Lớp 5)';
-                } else if (key.includes('k5_t17')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_bung_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Bụng với gậy (SGK GDTC Lớp 5)';
-                } else if (key.includes('k5_t18')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vặn mình với gậy (SGK GDTC Lớp 5)';
-                } else if (key.includes('k5_t19')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Toàn thân với gậy (SGK GDTC Lớp 5)';
-                }
-              }
-
-              // Self-heal any stored plans that have mismatched Grade 5 images or fabricated games
-              const cLower = (r2.content || '').toLowerCase();
-              if (plan.grade === 5) {
-                if (cLower.includes('động tác bụng') || cLower.includes('học động tác bụng')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_bung_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Bụng với gậy (SGK GDTC Lớp 5)';
-                } else if (cLower.includes('động tác vặn mình') || cLower.includes('học động tác vặn mình')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_van_minh_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Vặn mình với gậy (SGK GDTC Lớp 5)';
-                } else if (cLower.includes('động tác toàn thân') || cLower.includes('học động tác toàn thân')) {
-                  r2.contentImgUrl = '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg';
-                  r2.contentImgTitle = 'Hình ảnh Kỹ thuật: Động tác Toàn thân với gậy (SGK GDTC Lớp 5)';
-                }
-
-                // Sanitize game rows
-                plan.rows.forEach((r) => {
-                  if (r.content && r.content.includes('Kéo co thể thao')) {
-                    r.content = r.content.replace(/Kéo co thể thao/g, 'Trao gậy tiếp sức');
-                    r.contentImgUrl = '/assets/sgk_chuan/k5_tro_choi_trao_gay_tiep_suc.jpg';
-                    r.contentImgTitle = 'Trò chơi vận động: Trao gậy tiếp sức - SGK GDTC 5';
-                  }
-                });
-              }
-            }
-            // If stored plan is mismatched with authentic Week 9 plans, prefer authoritative Week 9 plan
-            if (masterPlansTuan9[key]) {
-              normalizedMap[key] = masterPlansTuan9[key];
-            } else {
-              normalizedMap[key] = plan;
-            }
+            normalizedMap[key] = plan;
           });
           setAllMasterPlans(normalizedMap);
+        } else {
+          // First time initialization
+          const defaultMap: Record<string, MasterPlanItem> = {
+            ...masterPlansTuan8,
+            ...masterPlansTuan9
+          };
+          setAllMasterPlans(defaultMap);
+          await setAppStateDB('gdtc_all_master_plans', defaultMap);
         }
 
-        const storedMasterPlan = await getAppStateDB('master_plan', masterPlansTuan8.k1_t15);
+        const storedMasterPlan = await getAppStateDB<MasterPlanItem | null>('master_plan', null);
         if (storedMasterPlan) {
-          const plan = normalizeMasterPlan(storedMasterPlan);
-          if (plan.rows && plan.rows.length >= 2 && plan.rows[1].contentImgUrl?.startsWith('data:image/svg+xml')) {
-            plan.rows[1].contentImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
-          }
-          setCurrentMasterPlan(plan);
+          setCurrentMasterPlan(normalizeMasterPlan(storedMasterPlan));
         }
 
-        const storedRows = await getAppStateDB('current_lesson_rows', initialLessonsData.k1_t15.rows);
-        if (storedRows && storedRows.length >= 2 && storedRows[1].contentImgUrl?.startsWith('data:image/svg+xml')) {
-          storedRows[1].contentImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
+        const storedRows = await getAppStateDB<LessonRow[] | null>('current_lesson_rows', null);
+        if (storedRows && Array.isArray(storedRows) && storedRows.length > 0) {
+          setLessonRows(storedRows);
         }
-        setLessonRows(storedRows);
 
         // Restore active week and lesson metadata
         const savedWeek = await getAppStateDB('active_week', 9);
@@ -276,15 +225,21 @@ export default function App() {
   }, [scenarios]);
 
   useEffect(() => {
-    setAppStateDB('school_settings', schoolSettings);
+    if (isDbLoadedRef.current) {
+      setAppStateDB('school_settings', schoolSettings);
+    }
   }, [schoolSettings]);
 
   useEffect(() => {
-    setAppStateDB('master_plan', currentMasterPlan);
+    if (isDbLoadedRef.current) {
+      setAppStateDB('master_plan', currentMasterPlan);
+    }
   }, [currentMasterPlan]);
 
   useEffect(() => {
-    setAppStateDB('gdtc_all_master_plans', allMasterPlans);
+    if (isDbLoadedRef.current) {
+      setAppStateDB('gdtc_all_master_plans', allMasterPlans);
+    }
   }, [allMasterPlans]);
 
   // Synchronized Plan Updater: updates allMasterPlans reactively
@@ -302,11 +257,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    setAppStateDB('current_lesson_rows', lessonRows);
+    if (isDbLoadedRef.current) {
+      setAppStateDB('current_lesson_rows', lessonRows);
+    }
   }, [lessonRows]);
 
   // Tự động đồng bộ currentMasterPlan & allMasterPlans ngay khi giáo án tuần mới được sinh hoặc chỉnh sửa
   useEffect(() => {
+    if (!isDbLoadedRef.current) return; // Do NOT overwrite DB on initial mount
     if (!lessonRows || lessonRows.length === 0) return;
     const key = `k${grade}_t${lessonNum}`;
     const syncedPlan: MasterPlanItem = {
@@ -387,20 +345,15 @@ export default function App() {
   };
 
   const handleImageExtracted = (newImg: SgkImageItem) => {
+    // Save directly to IndexedDB and localStorage mirror
+    saveImageDB(newImg).catch((err) => console.warn('Lỗi ghi IndexedDB:', err));
+
     setImages((prev) => {
-      const exists = prev.some(
-        (im) =>
-          im.id === newImg.id ||
-          (im.title === newImg.title && im.grade === newImg.grade && im.page === newImg.page)
-      );
-      if (exists) {
-        return prev;
-      }
-      const updated = [newImg, ...prev];
-      saveImagesDB(updated).catch((err) => console.warn('Lỗi ghi IndexedDB:', err));
-      return updated;
+      // Filter by ID only so subsequent crops are never silently dropped
+      const filtered = prev.filter((im) => im.id !== newImg.id);
+      return [newImg, ...filtered];
     });
-    showToast(`Đã lưu "${newImg.title}" an toàn vào Thư viện!`);
+    showToast(`✅ Đã quét và lưu thành công "${newImg.title}" vào Thư viện!`);
   };
 
   const handleOpenSelectCellModal = (img: SgkImageItem) => {
@@ -452,6 +405,7 @@ export default function App() {
   };
 
   // Gemini Vision AI Analysis
+  // Gemini Vision AI Analysis
   const handleAnalyzeVision = async (img: SgkImageItem) => {
     setIsAnalyzingVision(true);
     showToast('Gemini Vision AI đang đọc hình ảnh động tác SGK...');
@@ -464,6 +418,10 @@ export default function App() {
           imageBase64: img.imgUrl,
           grade,
           lessonTitle: title,
+          imageTitle: img.title,
+          caption: img.caption,
+          folder: img.folder,
+          category: img.category,
         }),
       });
 
@@ -472,23 +430,88 @@ export default function App() {
         setVisionImage(img);
         setVisionResult(data.analysis);
         setIsVisionModalOpen(true);
-        showToast('✨ Gemini Vision đã nhận diện xong động tác!');
+        showToast('✨ Gemini Vision đã nhận diện xong hình ảnh!');
       } else {
         throw new Error(data.error || 'Lỗi nhận diện');
       }
     } catch (err: any) {
       console.warn('Vision analysis fallback notice:', err);
+      const rawText = `${img.title || ''} ${img.caption || ''} ${img.folder || ''} ${img.category || ''} ${title || ''}`.toLowerCase();
+      const isPairPractice =
+        rawText.includes('cặp đôi') ||
+        rawText.includes('cap doi') ||
+        rawText.includes('đối diện') ||
+        rawText.includes('doi dien');
+      const isGame =
+        img.category === 'tro_choi' ||
+        img.category === 'tro_choi_khoi_dong' ||
+        img.folder === 'troChoi' ||
+        rawText.includes('trò chơi') ||
+        rawText.includes('tiếp sức') ||
+        rawText.includes('kéo co');
+      const isVanDung =
+        img.category === 'van_dung' ||
+        img.folder === 'vanDung' ||
+        rawText.includes('vận dụng') ||
+        rawText.includes('hồi tĩnh');
+
+      let fallbackCategory: ImageCategory = img.category;
+      let fallbackTargetCol: 'content' | 'hs' = 'hs';
+      let fallbackName = img.title || 'Động tác kỹ thuật SGK';
+      let fallbackLvd = "5 - 7'";
+      let fallbackGv =
+        '- GV làm mẫu chuẩn xác 2-3 lần kết hợp phân tích kỹ thuật từng nhịp.\n- Cho HS quan sát hình ảnh SGK đính kèm.\n- Hô nhịp dứt khoát và hướng dẫn HS sửa sai tư thế.';
+      let fallbackHs =
+        '- Đội hình 4 hàng ngang cự ly 1 sải tay so le.\n- Quan sát mẫu của GV và thực hiện đồng loạt theo nhịp đếm.';
+
+      if (isPairPractice) {
+        fallbackCategory = 'tap_luyen';
+        fallbackTargetCol = 'hs';
+        fallbackName = 'Luyện tập cặp đôi sửa sai cho nhau';
+        fallbackLvd = "3 - 5' (2 - 3 lượt đổi vai)";
+        fallbackGv =
+          '- Chia lớp thành từng cặp đứng đối diện nhau cự ly 1.5 - 2 mét.\n- Giao nhiệm vụ: một bạn thực hiện động tác theo nhịp hô, một bạn quan sát giúp bạn uốn nắn tư thế rồi đổi vai.\n- GV luân phiên đi bao quát các cặp, uốn nắn và biểu dương cặp đôi phối hợp tích cực.';
+        fallbackHs =
+          '- Từng cặp đứng đối diện nhau nghiêm túc, cự ly 1.5m.\n- Bạn A thực hiện động tác theo nhịp hô, bạn B quan sát hỗ trợ sửa sai; sau đó đổi vai theo hiệu lệnh của GV.';
+      } else if (isGame) {
+        fallbackCategory = 'tro_choi';
+        fallbackTargetCol = 'hs';
+        fallbackName = img.title || 'Trò chơi vận động rèn luyện phản xạ';
+        fallbackLvd = "4 - 6' (2 - 3 lượt chơi)";
+        fallbackGv =
+          '- GV nêu tên trò chơi, luật chơi và các lỗi phạm quy cần tránh.\n- Cho 1 nhóm chơi thử 1 lượt, sau đó tổ chức thi đua hào hứng giữa các tổ có tính điểm khen thưởng.';
+        fallbackHs =
+          '- Đội hình theo các tổ tập trung trước vạch xuất phát.\n- Tích cực tham gia thi đua với tinh thần đoàn kết, trung thực và cổ vũ hết mình.';
+      } else if (isVanDung) {
+        fallbackCategory = 'van_dung';
+        fallbackTargetCol = 'hs';
+        fallbackName = 'Hoạt động vận dụng thực tế cuộc sống';
+        fallbackLvd = "2 - 3'";
+        fallbackGv =
+          '- Nêu câu hỏi vận dụng liên hệ thực tế: "Em nên tập bài thể dục này vào thời điểm nào trong ngày để tăng cường sức khỏe?"\n- Nhắc nhở HS giữ gìn vệ sinh, cùng nhau thu dọn cọc tiêu và trang thiết bị sân tập ngăn nắp.';
+        fallbackHs =
+          '- Hào hứng phát biểu liên hệ thực tế: Tập thể dục buổi sáng ở nhà cùng người thân.\n- Tự giác dọn dẹp vệ sinh sân tập và cất dụng cụ cẩn thận.';
+      } else if (img.category === 'dong_tac') {
+        fallbackTargetCol = 'content';
+      }
+
       setVisionImage(img);
       setVisionResult({
-        name: img.title || 'Động tác kỹ thuật SGK',
-        category: img.category,
-        targetColumn: img.category === 'dong_tac' ? 'content' : 'hs',
-        lvd: "5 - 7'",
-        caption: img.caption || 'Tư thế động tác chuẩn xác, thân người thẳng, hít thở sâu.',
-        technicalCues: ['Giữ thẳng thân người', 'Biên độ tay chân mở rộng dứt khoát', 'Hít thở đều đặn'],
-        commonErrors: ['Cúi đầu mất thăng bằng', 'Chưa thẳng cánh tay'],
-        gvScript: '- GV làm mẫu chuẩn xác 2-3 lần.\n- Cho HS quan sát tranh ảnh SGK đính kèm.\n- Hô nhịp dứt khoát và hướng dẫn HS sửa sai.',
-        hsScript: '- Đội hình 4 hàng ngang cự ly 1 sải tay so le.\n- Chú ý quan sát và thực hiện theo nhịp hô.',
+        name: fallbackName,
+        category: fallbackCategory,
+        targetColumn: fallbackTargetCol,
+        lvd: fallbackLvd,
+        caption:
+          img.caption ||
+          'Hình thức tập luyện chuẩn mực chuyên môn GDTC theo chương trình GDPT 2018.',
+        technicalCues: [
+          'Giữ cự ly và thăng bằng cơ thể',
+          'Biên độ tay chân mở rộng dứt khoát',
+          'Hít thở đều đặn và phối hợp cùng bạn'
+        ],
+        commonErrors: ['Đứng quá gần hoặc nói chuyện', 'Chưa thẳng thân người'],
+        gvScript: fallbackGv,
+        hsScript: fallbackHs,
       });
       setIsVisionModalOpen(true);
     } finally {
@@ -508,22 +531,28 @@ export default function App() {
     setLessonRows((prev) => {
       const copy = [...prev];
       if (copy[rowIndex]) {
-        const firstLine = copy[rowIndex].content.split('\n')[0];
+        let updatedContent = copy[rowIndex].content;
+        if (targetCol === 'content') {
+          // Chỉ thêm dòng động tác vào Cột Nội dung nếu là tranh phân thế kỹ thuật mới
+          const firstLine = copy[rowIndex].content.split('\n')[0];
+          if (!copy[rowIndex].content.includes(movementName)) {
+            updatedContent = `${firstLine}\n- ${movementName}\n${copy[rowIndex].content.substring(firstLine.length).trim()}`;
+          }
+          copy[rowIndex].contentImgUrl = imgItem.imgUrl;
+          copy[rowIndex].contentImgTitle = movementName;
+        } else {
+          // Nếu là Cột Hoạt động HS (Luyện tập cặp đôi, đồng loạt, tổ nhóm, trò chơi)
+          copy[rowIndex].hsImgUrl = imgItem.imgUrl;
+          copy[rowIndex].hsImgTitle = movementName;
+        }
+
         copy[rowIndex] = {
           ...copy[rowIndex],
-          content: `${firstLine}\n- ${movementName}`,
+          content: updatedContent,
           lvd: lvdVal || copy[rowIndex].lvd,
           gv: gvScriptVal || copy[rowIndex].gv,
           hs: hsScriptVal || copy[rowIndex].hs,
         };
-
-        if (targetCol === 'content') {
-          copy[rowIndex].contentImgUrl = imgItem.imgUrl;
-          copy[rowIndex].contentImgTitle = movementName;
-        } else {
-          copy[rowIndex].hsImgUrl = imgItem.imgUrl;
-          copy[rowIndex].hsImgTitle = movementName;
-        }
       }
       return copy;
     });
@@ -662,6 +691,7 @@ export default function App() {
         onResetData={handleResetData}
         onOpenImport={() => setIsImportModalOpen(true)}
         onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
+        onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
         onOpenFormationStudio={() => setIsGlobalStudioOpen(true)}
         onOpenFormationLibrary={() => setIsGlobalFormationLibraryOpen(true)}
         onOpenPpctManager={() => {
@@ -686,6 +716,8 @@ export default function App() {
             onOpenBatchUpload={() => {
               setActiveTab('tab-img-library');
             }}
+            initialGrade={scanInitialGrade}
+            initialPage={scanInitialPage}
           />
         )}
 
@@ -755,6 +787,7 @@ export default function App() {
             currentMasterPlan={currentMasterPlan}
             onSwitchToExport={handleSwitchToExportFromGenerator}
             onSwitchToMasterTemplate={() => setActiveTab('tab-extract')}
+            onNavigateToScan={handleNavigateToScanFromLesson}
             showToast={showToast}
             onOpenImport={() => setIsImportModalOpen(true)}
           />
@@ -959,6 +992,39 @@ export default function App() {
               showToast(`Lỗi khi nạp file từ Drive: ${err?.message || err}`);
             }
           }}
+        />
+      )}
+
+      {/* Backup and Restore Modal */}
+      {isBackupRestoreOpen && (
+        <BackupRestoreModal
+          isOpen={isBackupRestoreOpen}
+          onClose={() => setIsBackupRestoreOpen(false)}
+          images={images}
+          scenarios={scenarios}
+          schoolSettings={schoolSettings}
+          allMasterPlans={allMasterPlans}
+          currentMasterPlan={currentMasterPlan}
+          lessonRows={lessonRows}
+          activeWeek={week}
+          activeGrade={grade}
+          activeLessonNum={lessonNum}
+          activeTopic={topic}
+          activeTitle={title}
+          onRestoreSuccess={(data) => {
+            if (data.images) setImages(data.images);
+            if (data.scenarios) setScenarios(data.scenarios);
+            if (data.schoolSettings) setSchoolSettings(data.schoolSettings);
+            if (data.allMasterPlans) setAllMasterPlans(data.allMasterPlans);
+            if (data.currentMasterPlan) setCurrentMasterPlan(data.currentMasterPlan);
+            if (data.lessonRows) setLessonRows(data.lessonRows);
+            if (data.activeWeek) setWeek(data.activeWeek);
+            if (data.activeGrade) setGrade(data.activeGrade);
+            if (data.activeLessonNum) setLessonNum(data.activeLessonNum);
+            if (data.activeTopic) setTopic(data.activeTopic);
+            if (data.activeTitle) setTitle(data.activeTitle);
+          }}
+          showToast={showToast}
         />
       )}
     </div>

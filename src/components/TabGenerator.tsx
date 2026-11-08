@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Sparkles,
   Wand2,
@@ -39,6 +39,7 @@ import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationStudioModal } from './FormationStudioModal';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
+import { getSgkPageForLesson } from '../data/sgkCurriculumTree';
 
 interface TabGeneratorProps {
   week: number;
@@ -59,6 +60,7 @@ interface TabGeneratorProps {
   onSwitchToExport: () => void;
   onSwitchToMasterTemplate: () => void;
   onOpenImport?: () => void;
+  onNavigateToScan?: (targetGrade: 1 | 3 | 5, targetPage?: number) => void;
   showToast: (msg: string) => void;
 }
 
@@ -80,10 +82,14 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   currentMasterPlan,
   onSwitchToExport,
   onSwitchToMasterTemplate,
+  onNavigateToScan,
   showToast,
 }) => {
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
   const [lastAutoMatch, setLastAutoMatch] = useState<AutoMatchResult | null>(null);
+
+  // Compute textbook PDF page for current lesson
+  const sgkInfo = useMemo(() => getSgkPageForLesson(grade, title, topic), [grade, title, topic]);
 
   // Modals for manual picking
   const [targetRowForFormation, setTargetRowForFormation] = useState<number | null>(null);
@@ -156,6 +162,15 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     setLessonRows(balanced);
     showToast(
       '✨ Đã tách 3.1 (đồng loạt), 3.2 (tổ nhóm), 3.3 (cặp đôi) thành từng ô riêng, điền đầy Cột GV 100-120 từ và khớp ảnh chuẩn 100%!'
+    );
+  };
+
+  // 1-Click: Rà soát & Chuẩn hóa sư phạm (Loại bỏ ảnh chèn sai, khớp đúng tranh kỹ thuật và sơ đồ SGK)
+  const handleAuditAndFixPedagogicalRules = () => {
+    const result = autoScanLibraryAndAttachToRows(lessonRows, images, grade, title);
+    setLessonRows(result.updatedRows);
+    showToast(
+      `🛡️ Đã rà soát & chuẩn hóa sư phạm: Loại bỏ các ảnh chèn sai ở Cột 1 và khớp đúng tranh kỹ thuật động tác mới!`
     );
   };
 
@@ -432,6 +447,17 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             />
 
             <div className="flex items-center gap-2 flex-wrap">
+              {onNavigateToScan && (
+                <button
+                  onClick={() => onNavigateToScan(grade as 1 | 3 | 5, sgkInfo.page)}
+                  className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition shrink-0"
+                  title={`Mở trang ${sgkInfo.page} của SGK Lớp ${grade} để bóc tách hoặc đối chiếu`}
+                >
+                  <BookOpen className="w-4 h-4 text-white" />
+                  📖 Mở SGK Điện Tử (Trang {sgkInfo.page})
+                </button>
+              )}
+
               <button
                 onClick={handleAutoGenerateFromMaster}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition shrink-0"
@@ -459,6 +485,28 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 ⚡ Quét Thư Viện Gắn Ảnh
               </button>
             </div>
+          </div>
+
+          {/* Pedagogical Rule Guidance & Textbook Page Info */}
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-[11px] font-semibold">
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              {grade === 5 ? (
+                (title.toLowerCase().includes('tiết 2') || title.toLowerCase().includes('tiết 18') || title.toLowerCase().includes('tiết 16') || lessonNum % 2 === 0)
+                  ? 'Quy chuẩn GDPT 2018 (Tiết 2): Ôn 2 động tác trước + Học 1 động tác mới thứ ba'
+                  : 'Quy chuẩn GDPT 2018 (Tiết 1): Học 2 động tác mới đầu tiên'
+              ) : (
+                (title.toLowerCase().includes('tiết 2') || lessonNum % 2 === 0)
+                  ? 'Quy chuẩn GDPT 2018 (Tiết 2): Ôn Động tác 1 + Học Động tác 2'
+                  : 'Quy chuẩn GDPT 2018 (Tiết 1): Học Động tác 1'
+              )}
+            </span>
+            {sgkInfo.lesson && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                Trang SGK chuẩn: <strong>Trang {sgkInfo.page} - {sgkInfo.lesson.endPage}</strong> ({sgkInfo.movements.join(', ')})
+              </span>
+            )}
           </div>
         </div>
 
@@ -532,7 +580,16 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleAuditAndFixPedagogicalRules}
+              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+              title="Tự động kiểm tra và loại bỏ các ảnh chèn sai vị trí, khớp đúng tranh kỹ thuật động tác mới theo chuẩn SGK"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              Rà Soát Chuẩn Sư Phạm (Sửa Ảnh Sai)
+            </button>
+
             <button
               onClick={handleAiRefine}
               disabled={isAiGenerating}
@@ -582,75 +639,96 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       className="w-full p-2 text-xs rounded-lg border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
                     />
 
-                    {/* Button to attach/swap movement image */}
-                    <button
-                      onClick={() => setTargetRowForImage(idx)}
-                      className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
-                    >
-                      <ImageIcon className="w-3 h-3 text-emerald-600" />
-                      {row.contentImgUrl ? 'Đổi ảnh kỹ thuật Cột 1' : '+ Gắn ảnh kỹ thuật Cột 1'}
-                    </button>
-
-                    {/* Image Preview in Column 1 */}
-                    {row.contentImgUrl ? (
-                      <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
-                        <img
-                          src={row.contentImgUrl}
-                          alt={row.contentImgTitle || 'Ảnh kỹ thuật'}
-                          className="max-h-36 w-full object-contain rounded"
-                        />
-                        <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                          <button
-                            onClick={() => downloadSvgAsPng(row.contentImgUrl!, `anh_ky_thuat_dong_${idx + 1}.png`)}
-                            className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                            title="Tải ảnh PNG xuống máy"
-                          >
-                            <Download className="w-3 h-3 text-emerald-400" /> PNG
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => {
-                            setLessonRows((prev) => {
-                              const updated = [...prev];
-                              delete updated[idx].contentImgUrl;
-                              delete updated[idx].contentImgTitle;
-                              return updated;
-                            });
-                          }}
-                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                          title="Xóa ảnh"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      /* Thông báo khi chưa có ảnh kỹ thuật, nêu rõ tên động tác cần chèn */
-                      <div className="p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-xl text-center space-y-1">
-                        <p className="text-[10px] text-amber-900 font-medium">
-                          ⚠️ Chưa có ảnh kỹ thuật cho:{' '}
-                          <strong className="font-bold underline text-amber-950">
-                            {idx === 0
-                              ? 'Khởi động chung / xoay khớp'
-                              : idx === 1
-                              ? (extractMovementNamesFromTitle(title)[0] || 'Kỹ thuật động tác mới')
-                              : idx === 2
-                              ? '3.1. Tập đồng loạt'
-                              : idx === 3
-                              ? '3.2. Tập theo tổ / nhóm'
-                              : idx === 4
-                              ? '3.3. Tập cặp đôi sửa sai'
-                              : idx === 5
-                              ? '3.4. Thi đua / Trò chơi'
-                              : 'Hồi tĩnh & Vận dụng'}
-                          </strong>
-                        </p>
+                    {/* Tranh kỹ thuật Cột 1: Chỉ bắt buộc và ưu tiên cho Hoạt động 2 (Hình thành kiến thức mới / Khám phá) */}
+                    {idx === 1 ? (
+                      <>
                         <button
                           onClick={() => setTargetRowForImage(idx)}
-                          className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded-lg text-[10px] inline-flex items-center gap-1 shadow-2xs transition"
+                          className="w-full bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
                         >
-                          <ImageIcon className="w-3 h-3" /> Chèn ảnh từ thư viện
+                          <ImageIcon className="w-3 h-3 text-blue-600" />
+                          {row.contentImgUrl ? 'Đổi tranh kỹ thuật SGK (Cột 1)' : '+ Gắn tranh kỹ thuật SGK (Cột 1)'}
                         </button>
-                      </div>
+
+                        {row.contentImgUrl ? (
+                          <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
+                            <img
+                              src={row.contentImgUrl}
+                              alt={row.contentImgTitle || 'Ảnh kỹ thuật'}
+                              className="max-h-36 w-full object-contain rounded"
+                            />
+                            <div className="text-[10px] text-slate-500 font-medium text-center mt-1 truncate">
+                              {row.contentImgTitle || 'Tranh kỹ thuật động tác mới'}
+                            </div>
+                            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                              <button
+                                onClick={() => downloadSvgAsPng(row.contentImgUrl!, `anh_ky_thuat_${idx + 1}.png`)}
+                                className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                title="Tải ảnh PNG xuống máy"
+                              >
+                                <Download className="w-3 h-3 text-emerald-400" /> PNG
+                              </button>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setLessonRows((prev) => {
+                                  const updated = [...prev];
+                                  delete updated[idx].contentImgUrl;
+                                  delete updated[idx].contentImgTitle;
+                                  return updated;
+                                });
+                              }}
+                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                              title="Xóa ảnh"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-xl text-center space-y-1">
+                            <p className="text-[10px] text-amber-900 font-medium">
+                              ⚠️ Chưa có tranh kỹ thuật cho:{' '}
+                              <strong className="font-bold underline text-amber-950">
+                                {extractMovementNamesFromTitle(title)[0] || 'Kỹ thuật động tác mới'}
+                              </strong>
+                            </p>
+                            <button
+                              onClick={() => setTargetRowForImage(idx)}
+                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded-lg text-[10px] inline-flex items-center gap-1 shadow-2xs transition"
+                            >
+                              <ImageIcon className="w-3 h-3" /> Chèn tranh kỹ thuật chuẩn
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      /* Các hoạt động khác (Khởi động, Luyện tập, Trò chơi, Vận dụng): Cột 1 chỉ chứa văn bản theo chuẩn Công văn 2345 */
+                      row.contentImgUrl ? (
+                        <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
+                          <img
+                            src={row.contentImgUrl}
+                            alt={row.contentImgTitle || 'Ảnh đính kèm'}
+                            className="max-h-28 w-full object-contain rounded"
+                          />
+                          <p className="text-[9.5px] text-slate-500 text-center mt-1 truncate">
+                            {row.contentImgTitle || 'Ảnh bổ trợ'}
+                          </p>
+                          <button
+                            onClick={() => {
+                              setLessonRows((prev) => {
+                                const updated = [...prev];
+                                delete updated[idx].contentImgUrl;
+                                delete updated[idx].contentImgTitle;
+                                return updated;
+                              });
+                            }}
+                            className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                            title="Xóa ảnh khỏi Cột 1 (Theo chuẩn GDTC sơ đồ nên nằm ở Cột 4)"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : null
                     )}
                   </td>
 

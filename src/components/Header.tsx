@@ -15,7 +15,8 @@ import {
   Palette,
   Users,
   Calendar,
-  HardDrive
+  HardDrive,
+  Database
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 
@@ -33,6 +34,7 @@ interface HeaderProps {
   onOpenPpctManager?: () => void;
   currentWeek?: number;
   onSelectCurrentWeek?: () => void;
+  onOpenBackupRestore?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -49,6 +51,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenPpctManager,
   currentWeek = 9,
   onSelectCurrentWeek,
+  onOpenBackupRestore,
 }) => {
   const navTabs = [
     { id: 'tab-scan', label: '1. Quét & Bóc Tách SGK', icon: ScanLine },
@@ -148,6 +151,17 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <HardDrive className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Google Drive</span>
+              </button>
+            )}
+
+            {onOpenBackupRestore && (
+              <button
+                onClick={onOpenBackupRestore}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs shadow-2xs transition"
+                title="Sao lưu & Khôi phục dữ liệu (Bảo vệ dữ liệu khi chạy trên Vercel / Chuyển máy)"
+              >
+                <Database className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline">Sao Lưu / Khôi Phục</span>
               </button>
             )}
 

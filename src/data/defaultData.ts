@@ -878,8 +878,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 51,
     category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
-    caption: 'Trò chơi kéo co đồng đội phát triển sức mạnh bắp chân và tinh thần đoàn kết tập thể.',
+    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_keo_co')?.svgDataUrl || standardFormationDiagrams[8].svgDataUrl,
+    caption: 'Sơ đồ sân bãi và vị trí hai đội kéo co đồng đội phát triển sức mạnh bắp chân và tinh thần đoàn kết.',
     selected: false,
     createdAt: Date.now() - 1160000
   },
@@ -894,8 +894,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 35,
     category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
-    caption: 'Trò chơi vận động Đua ô tô: học sinh cầm vòng tượng trưng vô lăng chạy khéo léo qua cọc tiêu tiếp sức.',
+    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_ziczac')?.svgDataUrl || standardFormationDiagrams[9].svgDataUrl,
+    caption: 'Sơ đồ sân bãi trò chơi vận động Đua ô tô / Chạy zíc zắc qua cọc tiêu tiếp sức cho học sinh khối 3.',
     selected: false,
     createdAt: Date.now() - 1150000
   },
@@ -910,13 +910,13 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 29,
     category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
-    caption: 'Kỹ thuật trao và nhận gậy tiếp sức tốc độ cao, phối hợp đồng đội nhịp nhàng và chính xác.',
+    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_tiep_suc')?.svgDataUrl || standardFormationDiagrams[8].svgDataUrl,
+    caption: 'Sơ đồ 4 làn chạy tiếp sức cự ly 10m chuẩn kỹ thuật trao và nhận gậy tốc độ cao.',
     selected: false,
     createdAt: Date.now() - 1140000
   },
 
-  // 3. Hình ảnh luyện tập của bài học
+  // 3. Hình ảnh / Sơ đồ luyện tập của bài học (Được gán vào Cột 4 - Hoạt động HS & Sơ đồ)
   {
     id: 'img_sgk_k1_luyen_tap',
     title: 'Hình ảnh luyện tập: Tập đồng loạt 4 hàng ngang giãn cách - Khối 1',
@@ -928,8 +928,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'luyenTap',
     page: 37,
     category: 'tap_luyen',
-    imgUrl: '/assets/sgk_chuan/k1_chan.jpg',
-    caption: 'Toàn lớp đứng so le cự ly 1 sải tay đồng loạt thực hiện bài thể dục theo nhịp hô.',
+    imgUrl: standardFormationDiagrams[3].svgDataUrl,
+    caption: 'Sơ đồ đội hình luyện tập đồng loạt: Toàn lớp đứng 4 hàng ngang so le cự ly 1 sải tay.',
     selected: false,
     createdAt: Date.now() - 1130000
   },
@@ -944,8 +944,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'luyenTap',
     page: 33,
     category: 'tap_luyen',
-    imgUrl: '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg',
-    caption: '4 tổ luyện tập tại 4 khu vực sân bãi, tổ trưởng điều khiển, các thành viên hỗ trợ sửa sai cho nhau.',
+    imgUrl: standardFormationDiagrams[4].svgDataUrl,
+    caption: 'Sơ đồ 4 tổ luyện tập tại 4 khu vực sân bãi, tổ trưởng điều khiển, các thành viên hỗ trợ sửa sai cho nhau.',
     selected: false,
     createdAt: Date.now() - 1120000
   },
@@ -960,8 +960,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'luyenTap',
     page: 25,
     category: 'tap_luyen',
-    imgUrl: '/assets/sgk_chuan/k5_chan_voi_gay.jpg',
-    caption: 'Từng cặp hai bạn đứng đối diện nhau quan sát và góp ý tư thế nâng gậy song song và khuỵu gối lưng thẳng.',
+    imgUrl: standardFormationDiagrams[5].svgDataUrl,
+    caption: 'Sơ đồ từng cặp hai bạn đứng đối diện nhau quan sát và góp ý tư thế nâng gậy song song và khuỵu gối lưng thẳng.',
     selected: false,
     createdAt: Date.now() - 1110000
   }

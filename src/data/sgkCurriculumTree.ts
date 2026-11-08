@@ -2180,3 +2180,65 @@ export const sgkCurriculumTree: SgkLessonFolder[] = [
     },
   },
 ];
+
+/**
+ * Finds an authentic lesson folder from the SGK Curriculum tree matching grade, title, or topic.
+ */
+export function findSgkLessonByTopicOrTitle(
+  grade: number,
+  title: string,
+  topic?: string
+): SgkLessonFolder | undefined {
+  const cleanTitle = (title || '').toLowerCase();
+
+  // 1. Exact match on grade and lesson movements
+  const matched = sgkCurriculumTree.find((folder) => {
+    if (folder.grade !== grade) return false;
+    const lName = folder.lessonName.toLowerCase();
+
+    // Check lesson number e.g. "bài 1", "bài 2"
+    const bMatchFolder = lName.match(/bài\s*(\d+)/i);
+    const bMatchTitle = cleanTitle.match(/bài\s*(\d+)/i);
+    if (bMatchFolder && bMatchTitle && bMatchFolder[1] !== bMatchTitle[1]) {
+      return false;
+    }
+
+    // Check movements
+    for (const m of folder.movements) {
+      if (cleanTitle.includes(m.toLowerCase())) return true;
+    }
+
+    // Check words in lessonName
+    const words = lName.replace(/bài\s*\d+\s*[:\-]?\s*/i, '').split(/\s+/).filter((w) => w.length > 3);
+    const hasWord = words.some((w) => cleanTitle.includes(w));
+    if (hasWord) return true;
+
+    return false;
+  });
+
+  return matched || sgkCurriculumTree.find((f) => f.grade === grade);
+}
+
+/**
+ * Returns the exact textbook PDF start page and movements for the lesson.
+ */
+export function getSgkPageForLesson(
+  grade: number,
+  title: string,
+  topic?: string
+): { page: number; lesson: SgkLessonFolder | null; movements: string[] } {
+  const folder = findSgkLessonByTopicOrTitle(grade, title, topic);
+  if (folder) {
+    return {
+      page: folder.startPage,
+      lesson: folder,
+      movements: folder.movements,
+    };
+  }
+  const defaultPages: Record<number, number> = { 1: 28, 3: 27, 5: 25 };
+  return {
+    page: defaultPages[grade] || 25,
+    lesson: null,
+    movements: [],
+  };
+}

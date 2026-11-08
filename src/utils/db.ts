@@ -45,9 +45,10 @@ function openDatabase(): Promise<IDBDatabase> {
 
 // --- Images Store Operations ---
 export async function getAllImagesDB(): Promise<SgkImageItem[]> {
+  let idbImages: SgkImageItem[] = [];
   try {
     const db = await openDatabase();
-    return new Promise((resolve, reject) => {
+    idbImages = await new Promise<SgkImageItem[]>((resolve, reject) => {
       const tx = db.transaction(STORES.IMAGES, 'readonly');
       const store = tx.objectStore(STORES.IMAGES);
       const req = store.getAll();
@@ -55,54 +56,149 @@ export async function getAllImagesDB(): Promise<SgkImageItem[]> {
       req.onerror = () => reject(req.error);
     });
   } catch (err) {
-    console.warn('Fallback to empty images due to IndexedDB error:', err);
-    return [];
+    console.warn('Fallback to localStorage mirror due to IndexedDB read notice:', err);
   }
+
+  // Also check localStorage mirror for any user custom / scanned images
+  let customMirror: SgkImageItem[] = [];
+  try {
+    const raw = localStorage.getItem('gdtc_user_custom_images');
+    if (raw) {
+      customMirror = JSON.parse(raw);
+    }
+  } catch {
+    // ignore JSON error
+  }
+
+  // Merge unique by ID
+  const map = new Map<string, SgkImageItem>();
+  idbImages.forEach((img) => map.set(img.id, img));
+  customMirror.forEach((img) => {
+    if (!map.has(img.id)) {
+      map.set(img.id, img);
+    }
+  });
+
+  return Array.from(map.values());
+}
+
+// Helper to determine if an image is user-created (scanned, uploaded, or generated) vs factory default
+export function isUserCustomImage(image: SgkImageItem): boolean {
+  if (!image || !image.id) return false;
+  // Factory default images begin with 'img_sgk_' or 'img_default_'
+  if (image.id.startsWith('img_sgk_') || image.id.startsWith('img_default_')) {
+    return false;
+  }
+  return (
+    image.id.startsWith('crop_') ||
+    image.id.startsWith('img_user_') ||
+    image.id.startsWith('img_ai_') ||
+    image.id.startsWith('zip_') ||
+    image.id.startsWith('custom_') ||
+    Boolean(image.createdAt && image.createdAt > 1700000000000)
+  );
 }
 
 export async function saveImageDB(image: SgkImageItem): Promise<void> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.IMAGES, 'readwrite');
     const store = tx.objectStore(STORES.IMAGES);
     const req = store.put(image);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
+    tx.onabort = () => reject(new Error('Transaction aborted'));
   });
+
+  // Mirror custom images in localStorage for fail-safe persistence on Vercel
+  if (isUserCustomImage(image)) {
+    try {
+      const raw = localStorage.getItem('gdtc_user_custom_images');
+      const list: SgkImageItem[] = raw ? JSON.parse(raw) : [];
+      const updated = [image, ...list.filter((it) => it.id !== image.id)];
+      // Keep up to 60 most recent custom images in localStorage mirror
+      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(updated.slice(0, 60)));
+    } catch (e) {
+      console.warn('LocalStorage custom image mirror notice (IndexedDB preserved):', e);
+    }
+  }
 }
 
 export async function saveImagesDB(images: SgkImageItem[]): Promise<void> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.IMAGES, 'readwrite');
     const store = tx.objectStore(STORES.IMAGES);
-    store.clear(); // Clear all old records so deleted images do NOT linger!
-    images.forEach((img) => store.put(img));
+
+    // Retrieve all existing keys to safely remove deleted ones without clearing entire DB
+    const getKeysReq = store.getAllKeys();
+    getKeysReq.onsuccess = () => {
+      const existingKeys = new Set((getKeysReq.result || []).map(String));
+      const incomingKeys = new Set(images.map((img) => String(img.id)));
+
+      // Delete only keys that were removed
+      existingKeys.forEach((key) => {
+        if (!incomingKeys.has(key)) {
+          store.delete(key);
+        }
+      });
+
+      // Put all current images
+      images.forEach((img) => {
+        store.put(img);
+      });
+    };
+
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(new Error('Transaction aborted'));
   });
+
+  // Sync ONLY user custom images to localStorage mirror (never bloat with factory defaults)
+  try {
+    const customImages = images.filter(isUserCustomImage);
+    if (customImages.length > 0) {
+      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(customImages.slice(0, 60)));
+    }
+  } catch (e) {
+    console.warn('LocalStorage custom images batch notice:', e);
+  }
 }
 
 export async function deleteImageDB(id: string): Promise<void> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.IMAGES, 'readwrite');
     const store = tx.objectStore(STORES.IMAGES);
     const req = store.delete(id);
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
+
+  // Remove from localStorage mirror as well
+  try {
+    const raw = localStorage.getItem('gdtc_user_custom_images');
+    if (raw) {
+      const list: SgkImageItem[] = JSON.parse(raw);
+      const filtered = list.filter((item) => item.id !== id);
+      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(filtered));
+    }
+  } catch {}
 }
 
 export async function clearImagesDB(): Promise<void> {
   const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(STORES.IMAGES, 'readwrite');
     const store = tx.objectStore(STORES.IMAGES);
     const req = store.clear();
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error);
   });
+
+  try {
+    localStorage.removeItem('gdtc_user_custom_images');
+  } catch {}
 }
 
 // --- Scenarios Store Operations ---

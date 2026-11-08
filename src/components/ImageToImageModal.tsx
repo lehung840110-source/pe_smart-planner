@@ -10,19 +10,19 @@ import {
   Upload,
   Image as ImageIcon,
   Key,
-  HelpCircle,
-  RefreshCw,
   CheckCircle2,
-  FileText,
   SlidersHorizontal,
-  ChevronRight,
   Replace,
   Wand2,
   AlertTriangle,
-  ZoomIn
+  Users,
+  Activity,
+  Layers,
+  ArrowRight,
+  ShieldCheck
 } from 'lucide-react';
 import { SgkImageItem, SubFolderType, ImageCategory } from '../types/gdtc';
-import { generateSgk2dSequenceSvg } from '../utils/sgkVectorGenerator';
+import { generateSgk2dSequenceSvg, generateFormationSvg, MovementBeats } from '../utils/sgkVectorGenerator';
 import { enhanceSgkImage } from '../utils/imageEnhancer';
 
 interface ImageToImageModalProps {
@@ -42,11 +42,26 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
   onReplaceImage,
   showToast,
 }) => {
+  // Modal Type: Movement sequence (phân thế từng nhịp) vs Formation Diagram (sơ đồ đội hình tập luyện)
+  const [generationType, setGenerationType] = useState<'movement' | 'formation'>('movement');
+
   const [activeTab, setActiveTab] = useState<'restore' | 'local_2d' | 'chatgpt' | 'api'>('restore');
   const [movementName, setMovementName] = useState<string>('');
   const [targetGrade, setTargetGrade] = useState<string>('1');
   const [targetFolder, setTargetFolder] = useState<SubFolderType>('kyThuat');
-  const [exerciseDetails, setExerciseDetails] = useState<string>('');
+
+  // Movement beats breakdown
+  const [ttcb, setTtcb] = useState<string>('Đứng nghiêm, thân thẳng, hai tay buông tự nhiên');
+  const [nhip1, setNhip1] = useState<string>('Hai tay dang ngang bàn tay sấp, kiễng gót chân');
+  const [nhip2, setNhip2] = useState<string>('Khuỵu gối chụm vào nhau, hai tay chống hông');
+  const [nhip3, setNhip3] = useState<string>('Như nhịp 1 (đứng thẳng lên, kiễng gót, hai tay dang ngang sấp)');
+  const [nhip4, setNhip4] = useState<string>('Về lại Tư thế chuẩn bị (TTCB)');
+  const [nhip58, setNhip58] = useState<string>('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân / đổi bên');
+
+  // Formation settings
+  const [formationTeacher, setFormationTeacher] = useState<string>('Đứng phía trước cách hàng 1 khoảng 3 - 4m quan sát và chỉ huy');
+  const [formationSpacing, setFormationSpacing] = useState<string>('Cự ly 1 sải tay, 4 hàng ngang đứng so le nhau');
+
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [generationSource, setGenerationSource] = useState<string>('');
   const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -60,6 +75,25 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
   const [selectedApiProvider, setSelectedApiProvider] = useState<'openai' | 'gemini'>('openai');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Auto detect if image is a formation diagram or movement sequence
+  const isFormationTitle = (title: string, folder?: string) => {
+    const t = (title || '').toLowerCase();
+    return (
+      t.includes('hàng ngang') ||
+      t.includes('hàng dọc') ||
+      t.includes('đội hình') ||
+      t.includes('sơ đồ') ||
+      t.includes('so le') ||
+      t.includes('giãn cách') ||
+      t.includes('vòng tròn') ||
+      t.includes('luyện tập') ||
+      t.includes('tiếp sức') ||
+      t.includes('trò chơi') ||
+      folder === 'luyenTap' ||
+      folder === 'troChoi'
+    );
+  };
 
   // Initialize data when sourceImage changes
   useEffect(() => {
@@ -75,22 +109,64 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
       setGeneratedImageUrl(null);
       setGenerationSource('');
 
+      // Auto detect mode
+      if (isFormationTitle(clean, sourceImage.folder)) {
+        setGenerationType('formation');
+      } else {
+        setGenerationType('movement');
+      }
+
       // Auto deduce technical sequence hints strictly matching Vietnamese GDTC SGK
       const mLower = clean.toLowerCase();
       if (mLower.includes('tay') && !mLower.includes('cổ tay')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa ra trước vỗ vào nhau (CẤM VẼ DANG NGANG). Nhịp 2: Hai tay dang ngang, bàn tay ngửa (CẤM VẼ GIƠ LÊN ĐẦU). Nhịp 3: Hai tay như nhịp 1 (đưa ra trước vỗ vào nhau). Nhịp 4: Về TTCB. Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Chân trái bước sang ngang rộng bằng vai, hai tay đưa ra trước vỗ vào nhau');
+        setNhip2('Hai tay dang ngang, lòng bàn tay ngửa');
+        setNhip3('Hai tay đưa ra trước vỗ vào nhau (như nhịp 1)');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 bước chân phải');
       } else if (mLower.includes('vươn thở')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Chân trái bước lên trước, hai tay vươn chếch chữ V lên cao ngửa đầu hít sâu. Nhịp 2: Thu chân về, hai tay hạ chéo trước bụng cúi đầu thở ra. Nhịp 3: Như nhịp 1 đổi chân phải. Nhịp 4: Về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Chân trái bước lên trước, hai tay vươn chếch chữ V lên cao ngửa đầu hít sâu');
+        setNhip2('Thu chân về, hai tay hạ chéo trước bụng cúi đầu thở ra');
+        setNhip3('Như nhịp 1 nhưng bước chân phải lên trước');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Thực hiện tương tự nhịp 1, 2, 3, 4');
       } else if (mLower.includes('chân') && !mLower.includes('cổ chân')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Nhón gót hai chân, hai tay chống hông. Nhịp 2: Khuỵu sâu hai đầu gối, lưng thẳng, hai tay đưa thẳng ra trước song song lòng bàn tay sấp. Nhịp 3: Đứng thẳng lên nhón gót, hai tay dang ngang lòng bàn tay ngửa. Nhịp 4: Về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Nhón gót hai chân, hai tay chống hông');
+        setNhip2('Khuỵu sâu hai gối, lưng thẳng, hai tay đưa trước song song lòng bàn tay sấp');
+        setNhip3('Đứng thẳng lên nhón gót, hai tay dang ngang lòng bàn tay ngửa');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Thực hiện tương tự nhịp 1, 2, 3, 4');
       } else if (mLower.includes('lườn')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay chống hông. Nhịp 2: Nghiêng lườn sâu sang trái, tay phải vươn cao ép sát tai, tay trái chống hông. Nhịp 3: Đứng thẳng hai tay dang ngang lòng bàn tay ngửa. Nhịp 4: Về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Chân trái bước sang ngang rộng bằng vai, hai tay chống hông');
+        setNhip2('Nghiêng lườn sâu sang trái, tay phải vươn cao ép sát tai, tay trái chống hông');
+        setNhip3('Đứng thẳng người lên, hai tay dang ngang lòng bàn tay ngửa');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi nghiêng lườn sang phải');
       } else if (mLower.includes('bụng') || mLower.includes('gập thân')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay giơ cao song song lòng bàn tay hướng vào nhau. Nhịp 2: Cúi gập thân sâu ra trước, hai tay chạm mu bàn chân. Nhịp 3: Đứng thẳng lên, hai tay dang ngang. Nhịp 4: Về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Chân trái bước sang ngang rộng hơn vai, hai tay vươn cao song song lòng bàn tay hướng vào nhau');
+        setNhip2('Cúi gập thân sâu ra trước, hai tay chạm mu bàn chân');
+        setNhip3('Đứng thẳng thân người lên, hai tay dang ngang bàn tay ngửa');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 bước chân phải');
       } else if (mLower.includes('nhảy')) {
-        setExerciseDetails('TTCB: Đứng nghiêm. Nhịp 1: Bật nhảy tách hai chân sang hai bên, hai tay vươn cao vỗ trên đầu (hoặc đưa gậy lên cao). Nhịp 2: Bật nhảy khép chân về, hạ tay xuôi theo thân (hoặc hạ gậy ngang đùi). Nhịp 3: Như nhịp 1. Nhịp 4: Về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng');
+        setNhip1('Bật nhảy tách hai chân sang hai bên, hai tay vươn cao vỗ trên đầu');
+        setNhip2('Bật nhảy khép chân về, hạ hai tay xuôi theo thân');
+        setNhip3('Bật nhảy tách hai chân sang hai bên, hai tay vươn cao vỗ trên đầu');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Thực hiện tương tự nhịp 1, 2, 3, 4');
       } else {
-        setExerciseDetails(sourceImage.caption || 'TTCB: Đứng nghiêm. Nhịp 1: Bắt đầu động tác. Nhịp 2: Đạt biên độ tối đa kỹ thuật. Nhịp 3: Như nhịp 1. Nhịp 4: Trở về TTCB.');
+        setTtcb('Đứng nghiêm, thân thẳng, hai tay buông tự nhiên');
+        setNhip1('Hai tay dang ngang bàn tay sấp, kiễng gót chân');
+        setNhip2('Khuỵu gối chụm vào nhau, hai tay chống hông');
+        setNhip3('Như nhịp 1 (đứng thẳng lên, kiễng gót, hai tay dang ngang sấp)');
+        setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+        setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân / đổi bên');
       }
     }
   }, [sourceImage, isOpen]);
@@ -128,22 +204,36 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
 
   if (!isOpen || !sourceImage) return null;
 
-  // Build the specialized ChatGPT / Gemini prompt with strict pedagogical constraints
+  // Build the specialized ChatGPT / Gemini prompt tailored for EITHER Movement Sequence OR Formation Layout
   const hasStick = movementName.toLowerCase().includes('gậy') || String(targetGrade) === '5';
-  const chatGptPrompt = `Hãy vẽ lại tranh kỹ thuật phân thế sách giáo khoa môn Giáo dục Thể chất tiểu học Việt Nam (Bộ Kết Nối Tri Thức).
+
+  const movementChatGptPrompt = `Hãy vẽ lại tranh kỹ thuật phân thế sách giáo khoa môn Giáo dục Thể chất tiểu học Việt Nam (Bộ Kết Nối Tri Thức).
 Tên động tác: "${movementName}" - Khối Lớp ${targetGrade}.
 Nhân vật: Học sinh tiểu học Việt Nam, mặc đồng phục thể thao chuẩn: áo thun trắng có cổ viền xanh dương, quần thể thao dài màu xanh dương có sọc trắng bên hông, mang giày thể thao.
 Phong cách: Nét vẽ minh họa 2D vector phẳng (flat cel-shading), màu sắc trong sáng, nền trắng sạch tinh (#ffffff) phục vụ in ấn. TUYỆT ĐỐI KHÔNG TẠO HÌNH 3D ĐẤT NẶN HAY BÚP BÊ NHỰA.
 
 YÊU CẦU BẮT BUỘC KHỚP KỸ THUẬT ĐỘNG TÁC TỪNG NHỊP CỦA SGK:
 Bố cục nằm ngang tuần tự gồm 5 hình học sinh từ trái sang phải:
-- Hình 1: TTCB (Đứng nghiêm, thân thẳng${hasStick ? ', hai tay cầm gậy ngang đùi' : ''})
-- Hình 2: Nhịp 1 (${exerciseDetails.split('Nhịp 2:')[0]?.replace('TTCB:', '')?.replace('Nhịp 1:', '')?.trim() || 'Thực hiện nhịp 1'})
-- Hình 3: Nhịp 2 (${exerciseDetails.split('Nhịp 2:')[1]?.split('Nhịp 3:')[0]?.trim() || 'Thực hiện nhịp 2'})
-- Hình 4: Nhịp 3 (Trở về như tư thế Nhịp 1)
-- Hình 5: Nhịp 4 (Về lại Tư thế chuẩn bị TTCB)
-Kèm dòng tiêu đề: "1. ${movementName}" và dòng chú thích phía dưới: "Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân / đổi bên".
+- Hình 1: TTCB (${ttcb}${hasStick ? ', hai tay cầm gậy ngang đùi' : ''})
+- Hình 2: Nhịp 1 (${nhip1})
+- Hình 3: Nhịp 2 (${nhip2})
+- Hình 4: Nhịp 3 (${nhip3})
+- Hình 5: Nhịp 4 (${nhip4})
+Kèm dòng tiêu đề: "1. ${movementName}" và dòng chú thích phía dưới: "${nhip58}".
 CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ TRÊN, KHÔNG ĐƯỢC TỰ Ý THAY ĐỔI DANG TAY HAY GIƠ TAY LÊN ĐẦU NẾU KHÔNG CÓ TRONG MÔ TẢ.`;
+
+  const formationChatGptPrompt = `Hãy vẽ sơ đồ bố trí đội hình tập luyện thể dục tiểu học Việt Nam (Bộ Kết Nối Tri Thức Với Cuộc Sống).
+Tên sơ đồ: "${movementName}" - Khối Lớp ${targetGrade}.
+Bố cục sơ đồ chiến thuật thể dục 2D phẳng nhìn từ trên xuống hoặc phối cảnh thẳng:
+1. Phía trên: Vị trí Giáo viên (khung chữ nhật màu đỏ có biểu tượng ghi "GV HƯỚNG DẪN", cách hàng 1 khoảng 3 - 4m).
+2. Phía dưới: 4 hàng ngang học sinh đứng so le nhau, mỗi hàng 5-6 học sinh (vẽ biểu tượng thể thao rõ ràng, học sinh mặc đồng phục áo trắng viền xanh, quần xanh có sọc trắng).
+3. Thước đo cự ly giãn cách: Ký hiệu mũi tên hai chiều "↔ 1 sải tay ↔" giữa các học sinh trong hàng.
+4. Mũi tên hướng nhìn: Mũi tên xanh chỉ từ học sinh hướng thẳng lên Giáo viên phía trước.
+5. Bên trái sơ đồ: Ghi rõ các nhãn "Hàng 1 ▶", "Hàng 2 ▶", "Hàng 3 ▶", "Hàng 4 ▶".
+6. Phía dưới có thanh ghi chú sư phạm: "Đội hình 4 hàng ngang đứng so le cự ly 1 sải tay, đồng loạt thực hiện bài thể dục theo nhịp hô".
+Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch lạc, nền trắng tinh khiết (#ffffff) phục vụ in giáo án. TUYỆT ĐỐI KHÔNG TẠO ĐỘNG TÁC CÁ NHÂN VÌ ĐÂY LÀ SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN.`;
+
+  const activeChatGptPrompt = generationType === 'formation' ? formationChatGptPrompt : movementChatGptPrompt;
 
   // 1. Phục Chế & Làm Nét Ảnh SGK Gốc (Khuyên dùng nhất)
   const handleRestoreAndSharpen = async () => {
@@ -166,22 +256,83 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
     }
   };
 
-  // 2. Generate Internal 2D Vector SGK Sequence
+  // 2. Generate Internal 2D Vector SGK Diagram / Sequence
   const handleGenerateLocal2d = () => {
     try {
-      const rawSvg = generateSgk2dSequenceSvg(movementName, targetGrade, 'single', 'male');
-      const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
-      setGeneratedImageUrl(dataUrl);
-      setGenerationSource('local_2d_svg');
-      showToast('⚡ Đã sinh thành công Tranh Phân Thế 2D chuẩn SGK GDTC!');
+      if (generationType === 'formation') {
+        const rawSvg = generateFormationSvg(movementName, targetGrade);
+        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
+        setGeneratedImageUrl(dataUrl);
+        setGenerationSource('local_formation_svg');
+        showToast('⚡ Đã sinh thành công Sơ đồ Đội hình 4 hàng ngang giãn cách chuẩn SGK!');
+      } else {
+        const customBeats: MovementBeats = {
+          ttcb,
+          nhip1,
+          nhip2,
+          nhip3,
+          nhip4,
+          nhip58
+        };
+        const rawSvg = generateSgk2dSequenceSvg(movementName, targetGrade, 'single', 'male', customBeats);
+        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
+        setGeneratedImageUrl(dataUrl);
+        setGenerationSource('local_2d_svg');
+        showToast('⚡ Đã sinh thành công Tranh Phân Thế 2D chuẩn kỹ thuật từng nhịp!');
+      }
     } catch (err: any) {
-      showToast('Lỗi sinh tranh phân thế: ' + err?.message);
+      showToast('Lỗi sinh tranh: ' + err?.message);
+    }
+  };
+
+  // Preset quick fill for Movement beats
+  const applyMovementPreset = (presetKey: string) => {
+    if (presetKey === 'hung_special') {
+      setTtcb('Đứng nghiêm, thân thẳng, hai tay buông tự nhiên');
+      setNhip1('Hai tay dang ngang bàn tay sấp, kiễng gót chân');
+      setNhip2('Khuỵu gối chụm vào nhau, hai tay chống hông');
+      setNhip3('Như nhịp 1 (đứng thẳng lên, kiễng gót, hai tay dang ngang sấp)');
+      setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+      setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân / đổi bên');
+      showToast('⭐ Đã áp dụng mẫu cử động: Kiễng gót dang sấp ➔ Khuỵu gối chống hông');
+    } else if (presetKey === 'sgk_tay') {
+      setTtcb('Đứng nghiêm, thân thẳng');
+      setNhip1('Chân trái bước sang ngang rộng bằng vai, hai tay đưa ra trước vỗ vào nhau');
+      setNhip2('Hai tay dang ngang, lòng bàn tay ngửa');
+      setNhip3('Hai tay đưa ra trước vỗ vào nhau (như nhịp 1)');
+      setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+      setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 bước chân phải');
+      showToast('Đã áp dụng mẫu Động tác Tay SGK Lớp 1');
+    } else if (presetKey === 'sgk_vuon_tho') {
+      setTtcb('Đứng nghiêm, thân thẳng');
+      setNhip1('Chân trái bước lên trước, hai tay vươn chếch chữ V lên cao ngửa đầu hít sâu');
+      setNhip2('Thu chân về, hai tay hạ chéo trước bụng cúi đầu thở ra');
+      setNhip3('Như nhịp 1 nhưng bước chân phải lên trước');
+      setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+      setNhip58('Nhịp 5, 6, 7, 8: Thực hiện tương tự nhịp 1, 2, 3, 4');
+      showToast('Đã áp dụng mẫu Động tác Vươn thở SGK');
+    } else if (presetKey === 'sgk_chan') {
+      setTtcb('Đứng nghiêm, thân thẳng');
+      setNhip1('Nhón gót hai chân, hai tay chống hông');
+      setNhip2('Khuỵu sâu hai gối, lưng thẳng, hai tay đưa trước song song lòng bàn tay sấp');
+      setNhip3('Đứng thẳng lên nhón gót, hai tay dang ngang lòng bàn tay ngửa');
+      setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+      setNhip58('Nhịp 5, 6, 7, 8: Thực hiện tương tự nhịp 1, 2, 3, 4');
+      showToast('Đã áp dụng mẫu Động tác Chân SGK');
+    } else if (presetKey === 'sgk_bung') {
+      setTtcb('Đứng nghiêm, thân thẳng');
+      setNhip1('Chân trái bước sang ngang rộng hơn vai, hai tay vươn cao song song lòng bàn tay hướng vào nhau');
+      setNhip2('Cúi gập thân sâu ra trước, hai tay chạm mu bàn chân');
+      setNhip3('Đứng thẳng thân người lên, hai tay dang ngang bàn tay ngửa');
+      setNhip4('Về lại Tư thế chuẩn bị (TTCB)');
+      setNhip58('Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 bước chân phải');
+      showToast('Đã áp dụng mẫu Động tác Bụng SGK');
     }
   };
 
   // Copy ChatGPT Prompt
   const handleCopyPrompt = () => {
-    navigator.clipboard.writeText(chatGptPrompt);
+    navigator.clipboard.writeText(activeChatGptPrompt);
     setIsCopied(true);
     showToast('📋 Đã sao chép Prompt chuẩn cho ChatGPT vào Clipboard!');
     setTimeout(() => setIsCopied(false), 2500);
@@ -236,16 +387,20 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
     }
 
     setIsCallingApi(true);
-    showToast(`Đang kết nối API ${selectedApiProvider === 'openai' ? 'OpenAI DALL-E 3' : 'Gemini'} để tạo tranh phân thế...`);
+    showToast(`Đang kết nối API ${selectedApiProvider === 'openai' ? 'OpenAI DALL-E 3' : 'Gemini'} để tạo tranh...`);
 
     try {
+      const descPayload = generationType === 'formation'
+        ? `Sơ đồ đội hình: ${movementName}. GV hướng dẫn phía trước, 4 hàng ngang học sinh đứng so le cự ly 1 sải tay.`
+        : `TTCB: ${ttcb}. Nhịp 1: ${nhip1}. Nhịp 2: ${nhip2}. Nhịp 3: ${nhip3}. Nhịp 4: ${nhip4}. ${nhip58}`;
+
       const res = await fetch('/api/ai/generate-3d-cartoon', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           movementName,
           grade: targetGrade,
-          description: exerciseDetails,
+          description: descPayload,
           sourceImageBase64: sourceImage.imgUrl,
           style: 'sgk_vector',
           provider: selectedApiProvider,
@@ -274,8 +429,8 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
     if (!generatedImageUrl) return;
 
     let cat: ImageCategory = 'dong_tac';
-    if (targetFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
-    else if (targetFolder === 'luyenTap') cat = 'tap_luyen';
+    if (generationType === 'formation' || targetFolder === 'luyenTap') cat = 'tap_luyen';
+    else if (targetFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
     else if (targetFolder === 'vanDung') cat = 'van_dung';
     else if (targetFolder === 'troChoi') cat = 'tro_choi';
     else if (targetFolder === 'khoiDong') cat = 'khoi_dong';
@@ -287,7 +442,9 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
       folder: targetFolder,
       category: cat,
       imgUrl: generatedImageUrl,
-      caption: `Tranh phân thế kỹ thuật chuẩn SGK GDTC Khối ${targetGrade}. Đúng đồng phục áo trắng viền xanh, quần xanh sọc trắng.`,
+      caption: generationType === 'formation'
+        ? `Sơ đồ đội hình tập luyện chuẩn SGK GDTC Khối ${targetGrade}. 4 hàng ngang so le cự ly 1 sải tay.`
+        : `Tranh phân thế kỹ thuật chuẩn SGK GDTC Khối ${targetGrade}. Đúng đồng phục áo trắng viền xanh, quần xanh sọc trắng.`,
       updatedAt: Date.now()
     };
 
@@ -306,15 +463,15 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
     if (!generatedImageUrl) return;
 
     let cat: ImageCategory = 'dong_tac';
-    if (targetFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
-    else if (targetFolder === 'luyenTap') cat = 'tap_luyen';
+    if (generationType === 'formation' || targetFolder === 'luyenTap') cat = 'tap_luyen';
+    else if (targetFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
     else if (targetFolder === 'vanDung') cat = 'van_dung';
     else if (targetFolder === 'troChoi') cat = 'tro_choi';
     else if (targetFolder === 'khoiDong') cat = 'khoi_dong';
 
     const newItem: SgkImageItem = {
       id: `img_ai_sgk_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      title: `${movementName} (Chuẩn SGK 2D)`,
+      title: `${movementName} (${generationType === 'formation' ? 'Sơ Đồ Đội Hình' : 'Chuẩn SGK 2D'})`,
       grade: targetGrade,
       topicId: sourceImage.topicId,
       topicTitle: sourceImage.topicTitle,
@@ -324,7 +481,9 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
       page: sourceImage.page || 1,
       category: cat,
       imgUrl: generatedImageUrl,
-      caption: `Tranh phân thế kỹ thuật chuẩn SGK GDTC Khối ${targetGrade}. Tư thế chuẩn xác, nền sạch, phục vụ in ấn.`,
+      caption: generationType === 'formation'
+        ? `Sơ đồ đội hình tập luyện 4 hàng ngang giãn cách Khối ${targetGrade}. Phục vụ in ấn rõ nét.`
+        : `Tranh phân thế kỹ thuật chuẩn SGK GDTC Khối ${targetGrade}. Tư thế chuẩn xác, nền sạch, phục vụ in ấn.`,
       selected: false,
       createdAt: Date.now()
     };
@@ -345,7 +504,7 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
     showToast('📥 Đã tải ảnh mẫu gốc xuống để gửi kèm vào ChatGPT!');
   };
 
-  // Download generated PNG
+  // Download generated PNG/SVG
   const handleDownloadResultPng = () => {
     if (!generatedImageUrl) return;
     const a = document.createElement('a');
@@ -375,7 +534,7 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                 </span>
               </div>
               <p className="text-xs text-blue-100 mt-0.5">
-                Bảo toàn 100% kỹ thuật SGK Bộ GD&ĐT · Khử mờ ảnh scan · Vẽ lại tranh 2D phân thế (TTCB ➔ Nhịp 1 ➔ Nhịp 2 ➔ Nhịp 3 ➔ Nhịp 4)
+                Bảo toàn 100% kỹ thuật SGK Bộ GD&ĐT · Khử mờ ảnh scan · Vẽ lại tranh 2D phân thế từng nhịp & Sơ đồ đội hình tập luyện
               </p>
             </div>
           </div>
@@ -389,24 +548,45 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 overflow-y-auto flex-1 space-y-5 bg-slate-50 text-xs">
+        <div className="p-5 overflow-y-auto flex-1 space-y-4 bg-slate-50 text-xs">
 
-          {/* Core Pedagogical Notice explaining AI hallucinations & solution */}
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 text-amber-950 flex items-start gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="space-y-1 text-[11px] leading-relaxed">
-              <p className="font-bold text-amber-900">
-                Lý giải chuyên môn vì sao ChatGPT tạo ảnh không khớp với sách giáo khoa:
+          {/* MODE SELECTOR: Movement beats sequence vs Formation Diagram */}
+          <div className="p-3 bg-white rounded-xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
+            <div>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                PHÂN LOẠI NỘI DUNG HÌNH ẢNH:
+              </span>
+              <p className="text-xs font-bold text-slate-800 mt-0.5">
+                Chọn đúng loại hình để hệ thống sinh chính xác tranh phân thế hoặc sơ đồ đội hình:
               </p>
-              <p>
-                1. <strong>AI công cộng bị "ảo giác" động tác:</strong> ChatGPT không có dữ liệu giải phẫu SGK Việt Nam nên tự đoán (ví dụ Động tác tay ở Nhịp 1 đưa trước vỗ tay thì ChatGPT lại vẽ dang ngang, Nhịp 2 dang ngang thì ChatGPT lại vẽ vỗ tay trên đầu).
-              </p>
-              <p>
-                2. <strong>Hết lượt tạo ảnh:</strong> Tài khoản ChatGPT miễn phí bị khóa sau 1-2 lần tạo ảnh.
-              </p>
-              <p className="font-semibold text-blue-800">
-                👉 <strong>Giải pháp chuẩn xác cho Thầy:</strong> Bấm <strong>"✨ Phục Chế Làm Sắc Nét Ảnh Gốc"</strong> bên dưới để lấy ngay bức vẽ chuẩn 100% của Nhà xuất bản Giáo dục (khử mờ, tăng nét 2x, nền trắng tinh), hoặc dùng <strong>"📐 Tranh Phân Thế 2D Vector SGK"</strong> đã được vẽ đúng chuẩn từng cử động tay chân!
-              </p>
+            </div>
+
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setGenerationType('movement')}
+                className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                  generationType === 'movement'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>🤸 Động Tác Kỹ Thuật (Từng nhịp)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setGenerationType('formation')}
+                className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                  generationType === 'formation'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>📐 Sơ Đồ Đội Hình (Hàng ngang / Tập luyện)</span>
+              </button>
             </div>
           </div>
           
@@ -468,6 +648,8 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                     {generatedImageUrl
                       ? generationSource === 'restored_sgk_hd'
                         ? 'Ảnh SGK gốc đã được phục chế nét cao · Nền trắng tinh'
+                        : generationSource === 'local_formation_svg'
+                        ? 'Sơ đồ 4 hàng ngang giãn cách so le cự ly 1 sải tay'
                         : generationSource === 'local_2d_svg'
                         ? 'Tranh 2D vector phân thế 5 nhịp chuẩn SGK'
                         : 'Ảnh mới sẵn sàng sử dụng'
@@ -493,9 +675,9 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                   <div className="text-center space-y-2">
                     <div className="w-9 h-9 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto" />
                     <p className="font-bold text-slate-800 text-xs">
-                      {isRestoring ? 'Đang phục chế làm nét và tách nền trắng ảnh SGK...' : 'Đang gọi AI tạo tranh phân thế...'}
+                      {isRestoring ? 'Đang phục chế làm nét và tách nền trắng ảnh SGK...' : 'Đang xử lý hình ảnh chuẩn mực...'}
                     </p>
-                    <p className="text-[10px] text-slate-500">Khử mờ hạt và tái tạo đường nét</p>
+                    <p className="text-[10px] text-slate-500">Khử mờ hạt và bảo toàn tư thế</p>
                   </div>
                 ) : generatedImageUrl ? (
                   <img
@@ -564,13 +746,13 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
           <div className="bg-white p-3.5 rounded-xl border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 shadow-2xs">
             <div className="sm:col-span-2">
               <label className="text-[11px] font-bold text-slate-700 block mb-1">
-                Tên Động Tác Trọng Tâm:
+                {generationType === 'formation' ? 'Tiêu Đề Sơ Đồ Đội Hình:' : 'Tên Động Tác Trọng Tâm:'}
               </label>
               <input
                 type="text"
                 value={movementName}
                 onChange={(e) => setMovementName(e.target.value)}
-                placeholder="VD: Động tác tay, Động tác chân, Động tác bụng..."
+                placeholder={generationType === 'formation' ? 'VD: Tập đồng loạt 4 hàng ngang giãn cách...' : 'VD: Động tác tay, Động tác chân...'}
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>
@@ -608,6 +790,169 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
             </div>
           </div>
 
+          {/* DETAILED BEATS / FORMATION SPECS INPUT AREA */}
+          {generationType === 'movement' ? (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <span className="text-[11px] font-black text-blue-700 uppercase tracking-wider block">
+                    ĐẶC TẢ CHI TIẾT TỪNG NHỊP KỸ THUẬT (CHUẨN SGK GDTC):
+                  </span>
+                  <p className="text-[11px] text-slate-500">
+                    Nhập đúng cử động tay chân từng nhịp để hệ thống vẽ chính xác cử động, không lo AI vẽ sai lệch:
+                  </p>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] font-bold text-slate-500">Mẫu nhanh:</span>
+                  <button
+                    type="button"
+                    onClick={() => applyMovementPreset('hung_special')}
+                    className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-md text-[10.5px] font-bold transition border border-amber-300"
+                    title="Kiễng gót dang sấp ➔ Khuỵu gối chống hông"
+                  >
+                    ⭐ Mẫu Thầy Hưng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMovementPreset('sgk_tay')}
+                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-md text-[10.5px] font-medium transition border border-blue-200"
+                  >
+                    Động tác Tay
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMovementPreset('sgk_vuon_tho')}
+                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-md text-[10.5px] font-medium transition border border-blue-200"
+                  >
+                    Vươn thở
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMovementPreset('sgk_chan')}
+                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-md text-[10.5px] font-medium transition border border-blue-200"
+                  >
+                    Động tác Chân
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyMovementPreset('sgk_bung')}
+                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-800 rounded-md text-[10.5px] font-medium transition border border-blue-200"
+                  >
+                    Động tác Bụng
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    1. Tư thế chuẩn bị (TTCB):
+                  </label>
+                  <input
+                    type="text"
+                    value={ttcb}
+                    onChange={(e) => setTtcb(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-blue-700 block mb-1">
+                    2. Nhịp 1 (Bắt đầu):
+                  </label>
+                  <input
+                    type="text"
+                    value={nhip1}
+                    onChange={(e) => setNhip1(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-blue-700 block mb-1">
+                    3. Nhịp 2 (Cao trào kỹ thuật):
+                  </label>
+                  <input
+                    type="text"
+                    value={nhip2}
+                    onChange={(e) => setNhip2(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    4. Nhịp 3:
+                  </label>
+                  <input
+                    type="text"
+                    value={nhip3}
+                    onChange={(e) => setNhip3(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    5. Nhịp 4:
+                  </label>
+                  <input
+                    type="text"
+                    value={nhip4}
+                    onChange={(e) => setNhip4(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    6. Nhịp 5, 6, 7, 8 (Ghi chú dưới):
+                  </label>
+                  <input
+                    type="text"
+                    value={nhip58}
+                    onChange={(e) => setNhip58(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 shadow-2xs">
+              <span className="text-[11px] font-black text-indigo-700 uppercase tracking-wider block">
+                THÔNG SỐ SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN:
+              </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Vị trí Giáo viên hướng dẫn:
+                  </label>
+                  <input
+                    type="text"
+                    value={formationTeacher}
+                    onChange={(e) => setFormationTeacher(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+
+                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="text-[10.5px] font-bold text-slate-700 block mb-1">
+                    Cự ly giãn cách và bố trí học sinh:
+                  </label>
+                  <input
+                    type="text"
+                    value={formationSpacing}
+                    onChange={(e) => setFormationSpacing(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded px-2 py-1 text-xs text-slate-800 font-medium"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Workflow Tabs */}
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-2xs">
             <div className="flex border-b border-slate-200 bg-slate-100/75 p-1 gap-1">
@@ -632,7 +977,7 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                 }`}
               >
                 <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-                <span>Cách 2: Tranh Phân Thế 2D Vector SGK (Ngoại tuyến)</span>
+                <span>{generationType === 'formation' ? 'Cách 2: Sơ Đồ Đội Hình 2D Vector (Ngoại tuyến)' : 'Cách 2: Tranh Phân Thế 2D Vector (Ngoại tuyến)'}</span>
               </button>
 
               <button
@@ -644,7 +989,7 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                 }`}
               >
                 <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Cách 3: ChatGPT / Gemini (Kèm Prompt cấm sai)</span>
+                <span>Cách 3: ChatGPT / Gemini (Prompt chuẩn sư phạm)</span>
               </button>
 
               <button
@@ -670,10 +1015,10 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                       Phục chế ảnh gốc từ Sách Giáo Khoa (Khử mờ, tăng nét 2x, nền trắng tinh)
                     </h5>
                     <p className="text-[11px] text-emerald-700 mt-1 leading-relaxed">
-                      Ảnh gốc từ SGK Lớp 1 Trang 37 là bản vẽ chính thức của Nhà xuất bản Giáo dục Việt Nam (Bộ GD&ĐT). Khi dùng chức năng này, hệ thống sẽ:
+                      Ảnh gốc từ SGK là bản vẽ chính thức của Nhà xuất bản Giáo dục Việt Nam (Bộ GD&ĐT). Khi dùng chức năng này, hệ thống sẽ:
                       <br />• <strong>Tăng độ tương phản & làm trắng nền 100%:</strong> Xóa bỏ hoàn toàn vệt vàng ố, nền xám do scan.
                       <br />• <strong>Khử mờ & sắc nét đường viền (Unsharp Masking):</strong> Làm rõ từng khớp ngón tay, mắt nhìn, góc độ thân người.
-                      <br />• <strong>Không sợ AI vẽ sai lệch:</strong> 100% khớp đúng chuẩn sư phạm GDPT 2018.
+                      <br />• <strong>Bảo toàn 100% bản quyền và kỹ thuật sư phạm GDPT 2018.</strong>
                     </p>
                   </div>
                   <button
@@ -688,16 +1033,20 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
               </div>
             )}
 
-            {/* TAB 2: INTERNAL 2D VECTOR SEQUENCE */}
+            {/* TAB 2: INTERNAL 2D VECTOR */}
             {activeTab === 'local_2d' && (
               <div className="p-4 space-y-4">
                 <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 flex items-center justify-between">
                   <div>
                     <h5 className="font-bold text-blue-900 text-xs">
-                      📐 Bộ Sinh Tranh Phân Thế 2D Vector Chuẩn SGK (Ngoại tuyến 100%)
+                      {generationType === 'formation'
+                        ? '📐 Bộ Sinh Sơ Đồ Đội Hình 4 Hàng Ngang Giãn Cách (Ngoại tuyến 100%)'
+                        : '📐 Bộ Sinh Tranh Phân Thế 2D Vector Chuẩn Từng Nhịp (Ngoại tuyến 100%)'}
                     </h5>
                     <p className="text-[11px] text-blue-700 mt-0.5">
-                      Đã được cập nhật chuẩn xác từng động tác: <strong>Động tác Tay</strong> (Nhịp 1 vỗ tay trước ngực, Nhịp 2 dang ngang ngửa tay, Nhịp 3 vỗ tay, Nhịp 4 về TTCB). Không sợ AI đoán mò.
+                      {generationType === 'formation'
+                        ? 'Sinh bản vẽ sơ đồ sân tập: GV ở trên, 4 hàng ngang học sinh đứng so le, thước đo 1 sải tay, mũi tên nhìn hướng lên GV.'
+                        : 'Sinh tranh 5 nhịp chính xác theo các thông số cử động Thầy đã nhập ở trên. Không bao giờ lo AI đoán mò!'}
                     </p>
                   </div>
                   <button
@@ -705,35 +1054,25 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs shrink-0"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>⚡ Sinh Tranh 2D Ngay Lập Tức</span>
+                    <span>{generationType === 'formation' ? '⚡ Sinh Sơ Đồ Đội Hình Ngay' : '⚡ Sinh Tranh 2D Từng Nhịp Ngay'}</span>
                   </button>
-                </div>
-
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-700 block">
-                    Đặc tả kỹ thuật động tác đã đối chiếu SGK:
-                  </span>
-                  <input
-                    type="text"
-                    value={exerciseDetails}
-                    onChange={(e) => setExerciseDetails(e.target.value)}
-                    className="w-full bg-white border border-slate-300 rounded-lg p-2 text-xs text-slate-800"
-                  />
                 </div>
               </div>
             )}
 
-            {/* TAB 3: CHATGPT WITH STRICT NEGATIVE CONSTRAINTS */}
+            {/* TAB 3: CHATGPT WITH PEDAGOGICAL CONSTRAINTS */}
             {activeTab === 'chatgpt' && (
               <div className="p-4 space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-amber-50/80 p-3 rounded-xl border border-amber-200">
                   <div>
                     <h5 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-600" />
-                      Quy trình ChatGPT kèm câu lệnh ràng buộc cấm vẽ sai:
+                      Quy trình kết nối ChatGPT kèm câu lệnh chuyên sâu:
                     </h5>
                     <p className="text-[11px] text-amber-800 mt-0.5">
-                      Prompt dưới đây đã được bổ sung quy định nghiêm ngặt cấm ChatGPT tự vẽ dang tay ở nhịp 1 hay giơ tay lên đầu ở nhịp 2.
+                      {generationType === 'formation'
+                        ? 'Prompt đã được thiết kế riêng cho SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN (cấm ChatGPT vẽ phân thế động tác cá nhân).'
+                        : 'Prompt đã được liên kết trực tiếp với từng cử động nhịp Thầy nhập ở trên, bảo đảm ChatGPT không vẽ sai.'}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -760,7 +1099,7 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-[11px] font-bold text-slate-700">
-                      Nội dung Prompt chuyên sâu (Kèm ràng buộc cấm sai lệch):
+                      Nội dung Prompt đã khớp chuẩn xác với yêu cầu của Thầy:
                     </label>
                     <button
                       onClick={handleCopyPrompt}
@@ -771,8 +1110,8 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                     </button>
                   </div>
                   <textarea
-                    rows={6}
-                    value={chatGptPrompt}
+                    rows={7}
+                    value={activeChatGptPrompt}
                     readOnly
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-[11px] text-slate-800 font-mono leading-relaxed focus:outline-none select-all"
                   />
@@ -857,32 +1196,32 @@ CHÚ Ý BẮT BUỘC: ĐÚNG TƯ THẾ BÀN TAY VÀ TAY CHÂN THEO ĐẶC TẢ T
                   <button
                     disabled={isCallingApi}
                     onClick={handleCallApi}
-                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs"
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition"
                   >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>{isCallingApi ? 'Đang Gọi API Tạo Tranh...' : '🚀 Bắt Đầu Tạo Ảnh Qua API'}</span>
+                    <Key className="w-3.5 h-3.5" />
+                    <span>{isCallingApi ? 'Đang Sinh Tranh Qua API...' : 'Bắt Đầu Sinh Tranh Qua API'}</span>
                   </button>
                 </div>
               </div>
             )}
+
           </div>
 
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-white border-t border-slate-200 flex items-center justify-between">
-          <p className="text-slate-500 text-[11px] flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>Cam kết tuân thủ tuyệt đối chuẩn GDPT 2018: học sinh tiểu học, đúng đồng phục, bố cục phân thế rõ ràng.</span>
-          </p>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-slate-300 rounded-xl font-semibold text-slate-700 hover:bg-slate-100 transition"
-            >
-              Đóng Cửa Sổ
-            </button>
+        <div className="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between text-xs">
+          <div className="text-[11px] text-slate-600 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Cam kết tuân thủ chuẩn GDPT 2018: học sinh tiểu học, đúng đồng phục, bố cục rõ ràng, nền trắng in ấn.</span>
           </div>
+
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold text-xs transition"
+          >
+            Đóng Cửa Sổ
+          </button>
         </div>
 
       </div>
