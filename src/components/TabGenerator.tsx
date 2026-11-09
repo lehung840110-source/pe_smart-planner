@@ -31,6 +31,8 @@ import {
   autoScanLibraryAndAttachToRows,
   extractMovementNamesFromTitle,
   createBalanced7LessonRows,
+  createBalancedGranularLessonRows,
+  splitAndAlignRows1to1,
   splitAndBalanceExistingRows,
   resolveAccurateMovement
 } from '../utils/planAutoMatcher';
@@ -156,12 +158,12 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     );
   };
 
-  // 1-Click: Split 3.1, 3.2, 3.3 into separate rows and balance teacher text to 100-120 words
+  // 1-Click: Split activities into separate 1:1 horizontally aligned rows
   const handleSplitAndBalanceRows = () => {
-    const balanced = createBalanced7LessonRows(grade, title, images);
+    const balanced = createBalancedGranularLessonRows(grade, title, images);
     setLessonRows(balanced);
     showToast(
-      '✨ Đã tách 3.1 (đồng loạt), 3.2 (tổ nhóm), 3.3 (cặp đôi) thành từng ô riêng, điền đầy Cột GV 100-120 từ và khớp ảnh chuẩn 100%!'
+      `✨ Đã chuẩn hóa bảng thành ${balanced.length} hoạt động tương xứng 1:1 theo chiều ngang (Trò chơi, Luyện tập, Động tác mới có dòng riêng biệt)!`
     );
   };
 

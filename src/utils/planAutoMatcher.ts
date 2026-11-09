@@ -877,7 +877,299 @@ export function createBalanced7LessonRows(
 }
 
 /**
- * Splits collapsed practice rows (3.1, 3.2, 3.3) into separate rows and expands Cột GV to 100-120 words.
+ * Creates 11 granular, 1:1 horizontally aligned lesson rows where each sub-activity
+ * (Nhận lớp, Khởi động, Trò chơi khởi động, Động tác mới, Tập đồng loạt, Tập tổ, Tập cặp đôi, Thi đua, Trò chơi vận động, Hồi tĩnh, Vận dụng & Dặn dò)
+ * has its OWN ROW, with Col 1 (Nội dung & Ảnh), Col 2 (LVĐ), Col 3 (GV), and Col 4 (HS & Sơ đồ) perfectly aligned horizontally.
+ */
+export function createBalancedGranularLessonRows(
+  grade: number = 1,
+  title: string = 'Bài tập rèn luyện thể dục phát triển chung',
+  userImages: SgkImageItem[] = [],
+  customWarmupGame?: string,
+  customPracticeGame?: string
+): LessonRow[] {
+  const accurate = resolveAccurateMovement('', title, grade, userImages);
+  const mName = accurate.movementName;
+
+  const isG1Bai2 =
+    grade === 1 &&
+    (title.toLowerCase().includes('chân') ||
+      title.toLowerCase().includes('vặn mình') ||
+      title.toLowerCase().includes('bụng') ||
+      title.toLowerCase().includes('bài 2'));
+  const isG1Bai3 =
+    grade === 1 &&
+    (title.toLowerCase().includes('phối hợp') ||
+      title.toLowerCase().includes('điều hòa') ||
+      title.toLowerCase().includes('bài 3'));
+
+  const defaultG1Warmup = isG1Bai2 ? 'Kết bạn' : 'Làm theo hiệu lệnh';
+  const defaultG1Practice = isG1Bai2 ? 'Lò cò tiếp sức' : isG1Bai3 ? 'Mèo đuổi chuột' : 'Thỏ nhường hang';
+
+  const resolvedWarmup =
+    customWarmupGame ||
+    (grade === 1 ? defaultG1Warmup : grade === 3 ? 'Chui qua hầm' : 'Ai kéo khoẻ hơn');
+  const resolvedPractice =
+    customPracticeGame ||
+    (grade === 1 ? defaultG1Practice : grade === 3 ? 'Đua ô tô' : 'Trao gậy tiếp sức');
+
+  const warmupImg = resolveAccurateGameImage(resolvedWarmup, grade, 'tro_choi_kd', userImages);
+  const practiceImg = resolveAccurateGameImage(resolvedPractice, grade, 'tro_choi_vd', userImages);
+
+  const equipmentDesc =
+    grade === 5
+      ? 'Gậy thể dục, cọc tiêu an toàn theo chuẩn nội dung trò chơi.'
+      : 'Sân bãi sạch sẽ, vạch xuất phát, cọc tiêu đích an toàn theo đúng chuẩn SGK.';
+
+  return [
+    // 1. NHẬN LỚP
+    {
+      content: `1. HOẠT ĐỘNG MỞ ĐẦU\n1.1. Nhận lớp:\n- Kiểm tra vệ sinh sân tập, trang phục, giày dép và tình trạng sức khỏe học sinh.\n- Phổ biến mục tiêu, nội dung và yêu cầu cần đạt của tiết học.`,
+      lvd: `1 - 2 phút`,
+      gv: `- GV tập trung lớp, thăm hỏi tình hình sức khỏe học sinh (nhắc em nào mệt, đau ốm báo ngay để nghỉ tập hoặc tập nhẹ); kiểm tra sân bãi sạch sẽ, trang phục giày thể thao đúng quy định.\n- Phổ biến mục tiêu, yêu cầu cần đạt của bài học một cách ngắn gọn, truyền cảm hứng và tạo tâm thế học tập hứng khởi.`,
+      hs: `- Cán sự tập hợp lớp thành 4 hàng ngang, điểm số, chỉnh đốn hàng ngũ và báo cáo sĩ số cho GV.\n- Toàn lớp đứng nghiêm trang, lắng nghe phổ biến và ghi nhớ mục tiêu tiết học.`,
+      hsImgUrl: standardFormationDiagrams[0].svgDataUrl,
+      hsImgTitle: 'Đội hình nhận lớp (4 hàng ngang cự ly hẹp)',
+      hsImages: [
+        {
+          id: 'diag_1_nhan_lop',
+          url: standardFormationDiagrams[0].svgDataUrl,
+          title: 'Đội hình nhận lớp (4 hàng ngang cự ly hẹp)'
+        }
+      ]
+    },
+
+    // 2. KHỞI ĐỘNG CHUYÊN MÔN
+    {
+      content: `1.2. Khởi động chung & chuyên môn:\n- Xoay kỹ các khớp: cổ tay, cổ chân, khớp vai, cánh tay, hông, đầu gối, ép dọc, ép ngang (thực hiện theo nhịp nhạc hoặc nhịp đếm).`,
+      lvd: `2L x 8N\n2 - 3 phút`,
+      gv: `- Hướng dẫn cán sự điều khiển lớp khởi động xoay kỹ các khớp theo nhạc hoặc nhịp hô dứt khoát.\n- GV di chuyển quan sát, nhắc nhở học sinh xoay đúng biên độ, nhịp nhàng, không làm vội vàng để phòng tránh chấn thương khớp.`,
+      hs: `- Đội hình khởi động: 4 hàng ngang so le, cự ly giãn cách 1 sải tay.\n- Toàn lớp tích cực xoay kỹ các khớp theo nhịp đếm của cán sự, động tác dứt khoát, đúng biên độ và đều đẹp.`,
+      hsImgUrl: standardFormationDiagrams[1].svgDataUrl,
+      hsImgTitle: 'Đội hình khởi động (4 hàng ngang so le 1 sải tay)',
+      hsImages: [
+        {
+          id: 'diag_2_khoi_dong',
+          url: standardFormationDiagrams[1].svgDataUrl,
+          title: 'Đội hình khởi động (4 hàng ngang so le 1 sải tay)'
+        }
+      ]
+    },
+
+    // 3. TRÒ CHƠI BỔ TRỢ KHỞI ĐỘNG
+    {
+      content: `1.3. Trò chơi bổ trợ khởi động: "${resolvedWarmup}":\n- Mục đích: Tạo phản xạ nhanh nhẹn, tinh thần sảng khoái và hưng phấn trước khi học động tác mới.\n- Luật chơi: Học sinh thực hiện nhanh theo hiệu lệnh của GV, ai làm sai sẽ thực hiện động tác phạt vui nhộn.`,
+      lvd: `2 - 3 phút\n1 - 2 lượt`,
+      gv: `- GV nêu tên trò chơi khởi động "${resolvedWarmup}", phổ biến ngắn gọn luật chơi và cách chơi.\n- Hô hiệu lệnh điều hành học sinh tham gia trò chơi tạo không khí sôi nổi, vui tươi trước khi vào phần trọng tâm.`,
+      hs: `- Học sinh chăm chú lắng nghe hướng dẫn luật chơi, hào hứng tham gia trò chơi theo khẩu lệnh của giáo viên.\n- Chấp hành nghiêm túc hiệu lệnh, di chuyển nhanh nhẹn, vui tươi, trật tự.`,
+      contentImgUrl: warmupImg?.url,
+      contentImgTitle: warmupImg?.title,
+      hsImgUrl: getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong').svgDataUrl,
+      hsImgTitle: getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong').name,
+      hsImages: [
+        {
+          id: 'diag_3_tc_kd',
+          url: getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong').svgDataUrl,
+          title: getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong').name
+        }
+      ]
+    },
+
+    // 4. HÌNH THÀNH KIẾN THỨC MỚI (Khám phá động tác)
+    {
+      content: `2. HOẠT ĐỘNG HÌNH THÀNH KIẾN THỨC MỚI\n2.1. Khám phá & Làm quen động tác mới:\n${accurate.movementSteps.startsWith('*') ? accurate.movementSteps : `* Học ${mName}:\n${accurate.movementSteps}`}`,
+      lvd: `6 - 8 phút\n2 - 3 lần`,
+      gv: accurate.gvExplanation,
+      hs: accurate.hsTask,
+      contentImgUrl: accurate.imgUrl,
+      contentImgTitle: accurate.imgTitle,
+      contentImages: accurate.imgUrl ? [{ id: 'img_kt_1', url: accurate.imgUrl, title: accurate.imgTitle }] : [],
+      hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
+      hsImgTitle: 'Đội hình quan sát tranh mẫu & GV làm mẫu',
+      hsImages: [
+        {
+          id: 'diag_4_quan_sat',
+          url: standardFormationDiagrams[2].svgDataUrl,
+          title: 'Đội hình quan sát tranh mẫu & GV làm mẫu'
+        }
+      ]
+    },
+
+    // 5. LUYỆN TẬP: 3.1. TẬP ĐỒNG LOẠT
+    {
+      content: `3. HOẠT ĐỘNG LUYỆN TẬP\n3.1. Tập đồng loạt cả lớp:\n- Toàn lớp thực hiện ${mName} theo nhịp hô của giáo viên (2 - 3 lần, mỗi lần 2x8 nhịp).\n- Cán sự lớp lên điều hành hô nhịp cho cả lớp cùng tập luyện.\n- Rèn luyện kỹ thuật động tác đều, dứt khoát, đúng tư thế và phối hợp ${accurate.practiceFocus}.`,
+      lvd: `3 - 4 phút\n2 - 3 lần\n(2x8 nhịp)`,
+      gv: `- GV đứng ở vị trí trung tâm phía trước lớp, hô nhịp to, rõ ràng, dứt khoát để cả lớp cùng thực hiện động tác đồng loạt lần 1.\n- Quan sát bao quát toàn thể học sinh, chú ý điều chỉnh nhịp đếm phù hợp với nhịp hít thở và biên độ vận động của các em.\n- Mời cán sự lớp lên điều hành hô nhịp lần 2 và 3; GV di chuyển linh hoạt dọc các hàng ngang để quan sát góc độ tay, chân và tư thế thân người của từng học sinh.\n- Nhắc nhở các lỗi sai còn tồn tại ở nhiều em; yêu cầu cả lớp giữ cự ly thẳng hàng và chú trọng ${accurate.practiceFocus}.\n- Nhận xét nhanh và biểu dương tinh thần tập luyện nghiêm túc của toàn lớp.`,
+      hs: `- Đội hình tập luyện đồng loạt: 4 hàng ngang so le, cự ly giãn cách 1 sải tay.\n- Toàn lớp tập trung cao độ, thực hiện động tác chuẩn xác, nhịp nhàng theo khẩu lệnh của GV và cán sự lớp.\n- Chú ý giữ đúng biên độ kỹ thuật và tư thế thân người, không nói chuyện riêng.\n- Chỉnh đốn tư thế theo nhắc nhở của thầy cô.`,
+      hsImgUrl: standardFormationDiagrams[3].svgDataUrl,
+      hsImgTitle: 'Đội hình tập luyện đồng loạt 4 hàng ngang giãn cách',
+      hsImages: [
+        {
+          id: 'diag_5_dong_loat',
+          url: standardFormationDiagrams[3].svgDataUrl,
+          title: 'Đội hình tập đồng loạt (4 hàng ngang giãn cách)'
+        }
+      ]
+    },
+
+    // 6. LUYỆN TẬP: 3.2. TẬP THEO TỔ / NHÓM
+    {
+      content: `3.2. Tập luyện theo tổ / nhóm:\n- Lớp chia làm 4 tổ di chuyển về 4 khu vực quy định trên sân bãi.\n- Tổ trưởng điều khiển tổ mình ôn luyện ${mName} (2 - 3 lần).\n- Các thành viên trong tổ tự giác quan sát, đếm nhịp và sửa sai cho nhau.\n- Giúp đỡ các bạn có thể lực yếu hoặc còn lúng túng.`,
+      lvd: `4 - 5 phút\n2 - 3 lần\n(2x8 nhịp)`,
+      gv: `- Phân chia rõ ràng 4 khu vực sân tập cho 4 tổ (đảm bảo khoảng cách an toàn, không vướng vật cản và đủ không gian thoáng mát).\n- Giao nhiệm vụ cụ thể cho từng tổ trưởng: hô nhịp dõng dạc, quan sát các thành viên và điều hành tổ tập luyện nghiêm túc, chú trọng rèn ${accurate.practiceFocus}.\n- GV đi lần lượt đến từng tổ, theo dõi tiến độ tập luyện; trực tiếp uốn nắn, cầm tay sửa góc độ cho những học sinh còn thực hiện chưa đúng.\n- Quan sát thể trạng của từng em, cho học sinh có biểu hiện mệt mỏi nghỉ ngơi tại chỗ.\n- Đánh giá khả năng tự quản, tinh thần hợp tác và đoàn kết của từng nhóm.`,
+      hs: `- Đội hình tập luyện theo tổ: 4 tổ di chuyển trật tự về 4 góc sân quy định, xếp thành hàng ngang hoặc vòng tròn.\n- Học sinh chấp hành sự chỉ huy của tổ trưởng, luân phiên nhau hô nhịp để cùng luyện tập.\n- Chăm chú theo dõi tư thế của bạn bên cạnh, góp ý thân thiện giúp bạn sửa sai nhịp thở và biên độ tay.\n- Chủ động xin phép thầy cô nghỉ ngơi nếu thấy mệt trong người.`,
+      hsImgUrl: standardFormationDiagrams[4].svgDataUrl,
+      hsImgTitle: 'Đội hình tập theo tổ / nhóm (4 góc sân)',
+      hsImages: [
+        {
+          id: 'diag_6_to_nhom',
+          url: standardFormationDiagrams[4].svgDataUrl,
+          title: 'Đội hình tập theo tổ / nhóm (4 góc sân bãi)'
+        }
+      ]
+    },
+
+    // 7. LUYỆN TẬP: 3.3. TẬP CẶP ĐÔI SỬA SAI
+    {
+      content: `3.3. Tập luyện cặp đôi & cá nhân sửa sai:\n- Từng cặp hai bạn quay mặt đối diện nhau để tập luyện.\n- 1 bạn thực hiện ${mName} kết hợp tự đếm nhịp, 1 bạn quan sát nhận xét, sau đó đổi vai.\n- Tự giác hoàn thiện kỹ thuật cá nhân; khắc phục triệt để các lỗi sai đã được chỉ dẫn.`,
+      lvd: `3 - 4 phút\n1 - 2 lần\nđổi vai`,
+      gv: `- Phát khẩu lệnh cho học sinh quay mặt vào nhau tạo thành từng cặp đôi đối diện, giữ cự ly tối thiểu 1.5m.\n- Hướng dẫn phương pháp kiểm tra chéo: bạn đứng ngoài quan sát kỹ xem bạn mình đã thực hiện chuẩn ${accurate.practiceFocus} hay chưa; sau đó dùng lời nói nhẹ nhàng, tích cực để góp ý cho bạn.\n- GV đi kiểm tra từng cặp đôi, khích lệ sự tự tin và tinh thần tương trợ giữa các học sinh; thị phạm trực tiếp cho các cặp còn bỡ ngỡ.\n- Cho các em đổi vai để cả hai đều được luyện tập và sửa sai; tuyên dương những cặp đôi hợp tác tốt.`,
+      hs: `- Đội hình cặp đôi: Đứng đối diện nhau theo từng đôi một cách nghiêm túc.\n- Bạn A thực hiện động tác 2 lần 8 nhịp, bạn B chăm chú quan sát và góp ý chân thành về tư thế, biên độ và nhịp thở; sau đó hai bạn đổi vai cho nhau.\n- Tiếp thu ý kiến đóng góp của bạn với thái độ cầu thị, tự điều chỉnh động tác cho thuần thục, đẹp mắt.\n- Báo cáo với giáo viên khi cả hai đã thực hiện tốt.`,
+      hsImgUrl: standardFormationDiagrams[5].svgDataUrl,
+      hsImgTitle: 'Đội hình cặp đôi đối diện quay mặt vào nhau sửa sai',
+      hsImages: [
+        {
+          id: 'diag_7_cap_doi',
+          url: standardFormationDiagrams[5].svgDataUrl,
+          title: 'Đội hình cặp đôi đối diện quay mặt vào nhau sửa sai'
+        }
+      ]
+    },
+
+    // 8. LUYỆN TẬP: 3.4. THI ĐUA TRÌNH DIỄN GIỮA CÁC TỔ
+    {
+      content: `3.4. Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp (theo nhịp hô của tổ trưởng).\n- Các tổ ngồi xem quan sát, theo dõi, nhận xét và chấm điểm chéo cho nhau.`,
+      lvd: `3 - 4 phút\n1 lượt / tổ`,
+      gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng nhịp.`,
+      hs: `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
+      hsImgUrl: standardFormationDiagrams[6]?.svgDataUrl || standardFormationDiagrams[3].svgDataUrl,
+      hsImgTitle: 'Đội hình thi đua trình diễn động tác giữa các tổ',
+      hsImages: [
+        {
+          id: 'diag_8_thi_dua',
+          url: standardFormationDiagrams[6]?.svgDataUrl || standardFormationDiagrams[3].svgDataUrl,
+          title: 'Đội hình thi đua trình diễn động tác giữa các tổ'
+        }
+      ]
+    },
+
+    // 9. LUYỆN TẬP: 3.5. TRÒ CHƠI VẬN ĐỘNG (HÀNG RIÊNG TƯƠNG XỨNG 1:1)
+    {
+      content: `3.5. Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đoàn kết.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`,
+      lvd: `4 - 5 phút\n2 - 3 lượt`,
+      gv: `- GV giới thiệu tên trò chơi vận động "${resolvedPractice}", giải thích mục đích, phổ biến luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm học sinh làm mẫu thao tác tham gia trò chơi để cả lớp nắm rõ quy trình.\n- Điều hành 4 đội thi đấu chính thức 2 - 3 lượt sôi nổi; nhắc nhở học sinh giữ cự ly an toàn tuyệt đối khi tiếp sức.\n- Nhận xét tinh thần thi đấu, tuyên dương đội chiến thắng và khích lệ các đội còn lại.`,
+      hs: `- Học sinh chú ý lắng nghe GV giới thiệu tên trò chơi và phổ biến luật chơi; quan sát nhóm bạn chơi mẫu.\n- Đội hình trò chơi: 4 hàng dọc đứng sau vạch xuất phát, hướng về cọc tiêu.\n- Tham gia thi đấu hào hứng, nhanh nhẹn, đoàn kết, chấp hành nghiêm chỉnh luật chơi và tiếp sức an toàn cho bạn.\n- Cổ vũ nhiệt tình, thể hiện tinh thần thể thao trung thực, chúc mừng đội bạn khi giành chiến thắng.`,
+      contentImgUrl: practiceImg?.url,
+      contentImgTitle: practiceImg?.title,
+      contentImages: practiceImg?.url ? [{ id: 'img_tc_1', url: practiceImg.url, title: practiceImg.title }] : [],
+      hsImgUrl: getFormationDiagramByKeyword(resolvedPractice, 'tro_choi').svgDataUrl,
+      hsImgTitle: getFormationDiagramByKeyword(resolvedPractice, 'tro_choi').name,
+      hsImages: [
+        {
+          id: 'diag_9_tro_choi',
+          url: getFormationDiagramByKeyword(resolvedPractice, 'tro_choi').svgDataUrl,
+          title: getFormationDiagramByKeyword(resolvedPractice, 'tro_choi').name
+        }
+      ]
+    },
+
+    // 10. HỒI TĨNH (HÀNG RIÊNG)
+    {
+      content: `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng toàn thân, cúi người rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi để cơ thể hồi phục.`,
+      lvd: `2 - 3 phút\n1 - 2 lần`,
+      gv: `- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ mềm cơ bắp tay, rung thả lỏng cơ đùi, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n- Nhắc học sinh thả lỏng tự nhiên, không gồng cứng cơ thể.`,
+      hs: `- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n- Rũ tay, thả lỏng bắp chân nhịp nhàng, cảm nhận cơ thể hồi phục sảng khoái.`,
+      hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
+      hsImgTitle: 'Đội hình hồi tĩnh và thả lỏng toàn thân',
+      hsImages: [
+        {
+          id: 'diag_10_hoi_tinh',
+          url: standardFormationDiagrams[15].svgDataUrl,
+          title: 'Đội hình hồi tĩnh và thả lỏng toàn thân'
+        }
+      ]
+    },
+
+    // 11. VẬN DỤNG, NHẬN XÉT & DẶN DÒ (HÀNG RIÊNG)
+    {
+      content: `4.2. Vận dụng & Dặn dò về nhà:\n- Câu hỏi thực tế: "Em nên tập động tác này vào thời điểm nào trong ngày để rèn luyện sức khỏe?"\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, thu dọn dụng cụ đúng nơi quy định.\n- Nhận xét thái độ học tập; giao nhiệm vụ tự tập ở nhà.\n4.3. Xuống lớp.`,
+      lvd: `2 - 3 phút`,
+      gv: `- Đặt câu hỏi tương tác thực tế giúp học sinh khắc sâu kiến thức; liên hệ thói quen tập thể dục buổi sáng cùng gia đình để tăng cường sức đề kháng.\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.`,
+      hs: `- Tích cực xung phong trả lời câu hỏi vận dụng kiến thức vào thực tế cuộc sống.\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe dặn dò của thầy cô, chào giáo viên và xếp hàng trật tự đi về lớp học.`,
+      hsImgUrl: standardFormationDiagrams[0].svgDataUrl,
+      hsImgTitle: 'Đội hình kết thúc tiết học và xuống lớp',
+      hsImages: [
+        {
+          id: 'diag_11_ket_thuc',
+          url: standardFormationDiagrams[0].svgDataUrl,
+          title: 'Đội hình kết thúc tiết học và xuống lớp'
+        }
+      ]
+    }
+  ];
+}
+
+/**
+ * Takes any existing lesson rows (e.g. 5 or 7 rows) and splits merged activities into 1:1 horizontally aligned rows,
+ * ensuring that every single sub-activity (especially games with their pictures and rules) stands on its OWN row.
+ */
+export function splitAndAlignRows1to1(
+  rows: LessonRow[],
+  grade: number = 1,
+  title: string = '',
+  userImages: SgkImageItem[] = [],
+  customWarmupGame?: string,
+  customPracticeGame?: string
+): LessonRow[] {
+  // If already 10 or more rows, it's already granularly separated!
+  if (rows && rows.length >= 10) {
+    return rows;
+  }
+
+  // Create clean 1:1 granular rows
+  const granular11 = createBalancedGranularLessonRows(grade, title, userImages, customWarmupGame, customPracticeGame);
+
+  // If input rows is empty or not provided, return the full 11
+  if (!rows || rows.length === 0) {
+    return granular11;
+  }
+
+  // Preserve any custom images or texts teacher wrote into rows if possible
+  // Find movement photo from input rows:
+  const customMovementRow = rows.find((r) => r.contentImgUrl && !r.contentImgUrl.includes('tro_choi'));
+  if (customMovementRow?.contentImgUrl && granular11[3]) {
+    granular11[3].contentImgUrl = customMovementRow.contentImgUrl;
+    granular11[3].contentImgTitle = customMovementRow.contentImgTitle;
+    granular11[3].contentImages = customMovementRow.contentImages || [
+      { id: 'custom_mov', url: customMovementRow.contentImgUrl, title: customMovementRow.contentImgTitle || 'Ảnh động tác' }
+    ];
+  }
+
+  // Find practice game photo if teacher attached one:
+  const customGameRow = rows.find((r) => (r.content && r.content.toLowerCase().includes('trò chơi vận động')) || r.contentImgTitle?.toLowerCase().includes('trò chơi'));
+  if (customGameRow?.contentImgUrl && granular11[8]) {
+    granular11[8].contentImgUrl = customGameRow.contentImgUrl;
+    granular11[8].contentImgTitle = customGameRow.contentImgTitle;
+    granular11[8].contentImages = customGameRow.contentImages || [
+      { id: 'custom_game', url: customGameRow.contentImgUrl, title: customGameRow.contentImgTitle || 'Ảnh trò chơi' }
+    ];
+  }
+
+  return granular11;
+}
+
+/**
+ * Splits collapsed practice rows into separate 1:1 horizontally aligned rows.
  */
 export function splitAndBalanceExistingRows(
   rows: LessonRow[],
@@ -885,13 +1177,7 @@ export function splitAndBalanceExistingRows(
   title: string = '',
   userImages: SgkImageItem[] = []
 ): LessonRow[] {
-  // If already 7 rows, just return
-  if (rows.length >= 7) {
-    return rows;
-  }
-
-  // Generate the clean 7 balanced rows
-  return createBalanced7LessonRows(grade, title, userImages);
+  return splitAndAlignRows1to1(rows, grade, title, userImages);
 }
 
 /**
@@ -908,11 +1194,11 @@ export function generateNextWeekPlan(
   userImages: SgkImageItem[] = []
 ): AutoMatchResult {
   const detectedMovements = extractMovementNamesFromTitle(title);
-  const newRows = createBalanced7LessonRows(grade, title, userImages);
+  const newRows = createBalancedGranularLessonRows(grade, title, userImages);
 
-  const matchedImages = [
-    { rowIdx: 1, col: 'content' as const, title: newRows[1]?.contentImgTitle || 'Ảnh kỹ thuật động tác' }
-  ];
+  const matchedImages = newRows
+    .map((r, idx) => ({ rowIdx: idx, col: 'content' as const, title: r.contentImgTitle || '' }))
+    .filter((item) => !!item.title);
 
   const matchedFormations = newRows.map((r, idx) => ({
     rowIdx: idx,

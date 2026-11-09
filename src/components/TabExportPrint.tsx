@@ -60,7 +60,13 @@ import { PpctManagerModal } from './PpctManagerModal';
 import { getStoredPpctData, saveStoredPpctData } from '../data/defaultPpctData';
 import { extractIntegrationFromPlan } from '../utils/ppctParser';
 import { setAppStateDB, getAppStateDB } from '../utils/db';
-import { createBalanced7LessonRows, resolveAccurateMovement, resolveAccurateGameImage } from '../utils/planAutoMatcher';
+import {
+  createBalanced7LessonRows,
+  createBalancedGranularLessonRows,
+  splitAndAlignRows1to1,
+  resolveAccurateMovement,
+  resolveAccurateGameImage
+} from '../utils/planAutoMatcher';
 import {
   cleanLessonTitleForHeader,
   cleanTopicForDisplay,
@@ -529,7 +535,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   };
 
 
-  // Builds standard 7-row official lesson structure with separated 3.1, 3.2, 3.3, 3.4 and balanced column heights (100-120 words for GV)
+  // Builds standard 1:1 granular horizontally aligned lesson rows where each sub-activity stands on its own row
   const buildOfficialLessonRows = (
     gradeVal: 1 | 3 | 5,
     pNum: number,
@@ -538,7 +544,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     warmupGame?: string,
     practiceGame?: string
   ): LessonRow[] => {
-    return createBalanced7LessonRows(gradeVal, titleName, images, warmupGame, practiceGame);
+    return createBalancedGranularLessonRows(gradeVal, titleName, images, warmupGame, practiceGame);
   };
 
   // Helper to resolve a grade's master plan
@@ -606,6 +612,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           : buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame);
     }
 
+    // Automatically align rows 1:1 horizontally so each activity has its own row
+    rawRows = splitAndAlignRows1to1(rawRows, g, resolvedTitle, images, rule.warmupGame, rule.practiceGame);
+
     // Guarantee disabled students accommodations are never missing
     if (!specialComp?.disabledStudents || specialComp.disabledStudents.trim().length === 0) {
       specialComp = {
@@ -621,8 +630,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     }
 
     const rows = rawRows.map((r, rIdx) => {
-      // Row 0: Warmup game
-      if (rIdx === 0) {
+      const isWarmupGame = r.content.includes('1.3') || (r.content.toLowerCase().includes('trò chơi') && r.content.toLowerCase().includes('khởi động'));
+      const isMovement = r.content.includes('2.1') || r.content.toLowerCase().includes('khám phá') || r.content.toLowerCase().includes('kỹ thuật');
+      const isPracticeGame = r.content.includes('3.5') || (r.content.toLowerCase().includes('trò chơi') && r.content.toLowerCase().includes('vận động'));
+
+      // Warmup game row
+      if (isWarmupGame) {
         const gameImg = resolveAccurateGameImage(rule.warmupGame, g, 'tro_choi_kd', images);
         let contentText = r.content || '';
         if (rule.warmupGame && !contentText.toLowerCase().includes(rule.warmupGame.toLowerCase())) {
@@ -652,8 +665,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         };
       }
 
-      // Row 1: Technical movement exploration row: ensure authentic textbook photo, never artificial SVG or mismatched movement
-      if (rIdx === 1) {
+      // Technical movement exploration row: ensure authentic textbook photo, never artificial SVG or mismatched movement
+      if (isMovement) {
         const acc = resolveAccurateMovement(r.content || '', resolvedTitle, g, images);
         const currentUrl = r.contentImgUrl || '';
         const cLower = (r.content || '').toLowerCase();
@@ -678,8 +691,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }
       }
 
-      // Row 5: Practice Game
-      if (rIdx === 5 || (rawRows.length === 7 && rIdx === 5) || rIdx === rawRows.length - 2) {
+      // Practice Game
+      if (isPracticeGame) {
         const gameImg = resolveAccurateGameImage(rule.practiceGame, g, 'tro_choi_vd', images);
         let contentText = r.content || '';
         if (contentText.includes('Kéo co thể thao')) {
@@ -1035,6 +1048,82 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
     recordHistory(newPlans);
     showToast('Đã xóa sơ đồ khỏi cột hoạt động!');
+  };
+
+  // Normalize a plan's rows into 1:1 granular horizontally aligned rows
+  const handleNormalizePlanRows1to1 = (planId: string) => {
+    const targetPlan = plansByGrade.find((p) => p.id === planId);
+    if (!targetPlan) return;
+
+    const rule = getCurriculumRule(targetPlan.grade as 1 | 3 | 5, targetPlan.lessonNum, selectedWeek);
+
+    const updatedRows = splitAndAlignRows1to1(
+      targetPlan.rows,
+      targetPlan.grade,
+      targetPlan.title,
+      images,
+      rule.warmupGame,
+      rule.practiceGame
+    );
+
+    const newPlans = plansByGrade.map((p) => (p.id === planId ? { ...p, rows: updatedRows } : p));
+    recordHistory(newPlans);
+    showToast(`✨ Đã chuẩn hóa bảng Khối ${targetPlan.grade} thành ${updatedRows.length} hoạt động tương xứng 1:1 theo chiều ngang!`);
+  };
+
+  // Add a new activity row to a plan
+  const handleAddActivityRow = (planId: string, insertAtIndex?: number) => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      const newRows = [...p.rows];
+      const newRow: LessonRow = {
+        content: '* Hoạt động mới:\n- Nội dung chi tiết hoạt động...',
+        lvd: '3 - 5 phút',
+        gv: '- GV hướng dẫn, quan sát, uốn nắn tư thế cho học sinh...',
+        hs: '- Học sinh tập trung lắng nghe và tích cực thực hiện...',
+        hsImgUrl: standardFormationDiagrams[3].svgDataUrl,
+        hsImgTitle: 'Đội hình tập luyện'
+      };
+      if (insertAtIndex !== undefined && insertAtIndex >= 0 && insertAtIndex < newRows.length) {
+        newRows.splice(insertAtIndex + 1, 0, newRow);
+      } else {
+        newRows.push(newRow);
+      }
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
+    showToast('✨ Đã thêm 1 dòng hoạt động mới vào bảng!');
+  };
+
+  // Delete an activity row from a plan
+  const handleDeleteActivityRow = (planId: string, rowIndex: number) => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      if (p.rows.length <= 1) {
+        showToast('⚠️ Kế hoạch bài dạy phải có ít nhất 1 dòng hoạt động!');
+        return p;
+      }
+      const newRows = p.rows.filter((_, idx) => idx !== rowIndex);
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
+    showToast('🗑️ Đã xóa dòng hoạt động!');
+  };
+
+  // Move an activity row up or down
+  const handleMoveActivityRow = (planId: string, rowIndex: number, direction: 'up' | 'down') => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      const targetIndex = direction === 'up' ? rowIndex - 1 : rowIndex + 1;
+      if (targetIndex < 0 || targetIndex >= p.rows.length) return p;
+
+      const newRows = [...p.rows];
+      const temp = newRows[rowIndex];
+      newRows[rowIndex] = newRows[targetIndex];
+      newRows[targetIndex] = temp;
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
   };
 
   // Inline & Cell Image Picker Modal State (supports any column: content, gv, hs and cursor line)
@@ -2461,9 +2550,55 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
               {/* III. TIẾN TRÌNH DẠY HỌC - BẢNG 4 CỘT CHUẨN MẪU */}
               <div className="space-y-2 mb-6">
-                <h4 className="font-bold uppercase text-xs border-b border-slate-300 pb-1 text-slate-800">
-                  III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU
-                </h4>
+                <div className="flex items-center justify-between border-b border-slate-300 pb-1">
+                  <h4 className="font-bold uppercase text-xs text-slate-800 flex items-center gap-1.5">
+                    <Layers className="w-4 h-4 text-blue-600" />
+                    <span>III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU</span>
+                  </h4>
+                  <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
+                    {plan.rows.length} hoạt động tương xứng 1:1
+                  </span>
+                </div>
+
+                {/* Banner Chuẩn hóa tương xứng 1:1 */}
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 p-2.5 rounded-xl border border-blue-200 no-print mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 bg-blue-600 text-white rounded-lg shadow-2xs">
+                      <Sparkles className="w-4 h-4 text-amber-300" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-blue-950 block">
+                        Cấu trúc tương xứng 1:1 theo chiều ngang giữa 4 Cột
+                      </span>
+                      <p className="text-[11px] text-slate-600">
+                        Mỗi hoạt động (Trò chơi, Luyện tập, Động tác mới...) là một hàng riêng biệt, tương ứng ngang trực tiếp giữa Cột 1 (Nội dung & Ảnh), Cột 3 (GV) và Cột 4 (HS & Sơ đồ).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleNormalizePlanRows1to1(plan.id)}
+                      className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition"
+                      title="Tự động phân tách toàn bộ các hoạt động gộp thành các dòng ngang riêng biệt tương xứng 1:1"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-amber-300" />
+                      <span>📐 Tách & Chuẩn hóa 1:1</span>
+                    </button>
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddActivityRow(plan.id)}
+                        className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition"
+                        title="Thêm 1 hoạt động mới vào cuối bảng"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5 text-white" />
+                        <span>+ Thêm hoạt động</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
 
                 <table className="w-full border-collapse border border-slate-400 text-xs mt-2">
                   <thead>
@@ -2505,12 +2640,50 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                           <td className="border border-slate-400 p-2 align-top font-medium leading-relaxed">
                             {isEditMode ? (
                               <div className="space-y-1.5">
-                                {/* Toolbar: Insert image at cursor */}
+                                {/* Toolbar: Row actions + Insert image & diagram at cursor */}
                                 <div className="flex items-center justify-between bg-blue-50/80 border border-b-0 border-blue-200 px-2 py-1 rounded-t text-[10.5px]">
-                                  <span className="font-bold text-blue-900 flex items-center gap-1">
-                                    <FileText className="w-3 h-3 text-blue-600" />
-                                    <span>Nội dung</span>
-                                  </span>
+                                  <div className="flex items-center gap-1">
+                                    <span className="px-1.5 py-0.5 bg-blue-700 text-white font-bold rounded text-[9px]">
+                                      Dòng {rowIdx + 1}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddActivityRow(plan.id, rowIdx)}
+                                      className="p-0.5 text-emerald-700 hover:bg-emerald-100 rounded transition"
+                                      title="Thêm 1 dòng mới bên dưới dòng này"
+                                    >
+                                      <PlusCircle className="w-3 h-3" />
+                                    </button>
+                                    {rowIdx > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveActivityRow(plan.id, rowIdx, 'up')}
+                                        className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                                        title="Chuyển dòng lên"
+                                      >
+                                        ▲
+                                      </button>
+                                    )}
+                                    {rowIdx < plan.rows.length - 1 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleMoveActivityRow(plan.id, rowIdx, 'down')}
+                                        className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                                        title="Chuyển dòng xuống"
+                                      >
+                                        ▼
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteActivityRow(plan.id, rowIdx)}
+                                      className="p-0.5 text-red-600 hover:bg-red-100 rounded transition"
+                                      title="Xóa dòng hoạt động này"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+
                                   <div className="flex items-center gap-1">
                                     <button
                                       type="button"
@@ -2520,7 +2693,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                         const end = textarea?.selectionEnd ?? start;
                                         handleOpenInlinePicker(plan.id, rowIdx, 'inline_content', start, end, movementName);
                                       }}
-                                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
                                       title="Chèn ảnh động tác / SGK vào vị trí con trỏ hoặc dòng chữ đang chọn"
                                     >
                                       <ImageIcon className="w-3 h-3 text-amber-300" />
@@ -2534,8 +2707,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                         const end = textarea?.selectionEnd ?? start;
                                         handleOpenInlineFormationPicker(plan.id, rowIdx, 'inline_content', start, end);
                                       }}
-                                      className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
-                                      title="Chèn sơ đồ đội hình (hàng ngang, so le, vòng tròn...) vào vị trí con trỏ"
+                                      className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn sơ đồ đội hình vào vị trí con trỏ"
                                     >
                                       <Compass className="w-3 h-3 text-amber-300" />
                                       <span>📐 Chèn sơ đồ</span>
