@@ -26,10 +26,18 @@ import {
   FileText,
   Trash2,
   RotateCcw,
-  HardDrive
+  HardDrive,
+  Activity,
+  Users
 } from 'lucide-react';
 import mammoth from 'mammoth';
 import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem } from '../types/gdtc';
+import {
+  RichTextWithImages,
+  insertImageAtCursor,
+  removeInlineImageFromText,
+  sanitizeInlineImageTagsInText
+} from '../utils/inlineImageHelper';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { masterPlansTuan9 } from '../data/masterTemplateTuan9';
 import { standardFormationDiagrams, FormationDiagram } from '../data/formationDiagrams';
@@ -809,7 +817,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const newPlans = plansByGrade.map((p) => {
       if (p.id !== planId) return p;
       const newRows = [...p.rows];
-      newRows[rowIndex] = { ...newRows[rowIndex], [field]: value };
+      const sanitizedVal = typeof value === 'string' ? sanitizeInlineImageTagsInText(value) : value;
+      newRows[rowIndex] = { ...newRows[rowIndex], [field]: sanitizedVal };
       return { ...p, rows: newRows };
     });
     recordHistory(newPlans);
@@ -913,12 +922,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     showToast('Đã xóa sơ đồ khỏi cột hoạt động!');
   };
 
-  // Inline Image Picker Modal State (for Column 1 Movement image)
+  // Inline & Cell Image Picker Modal State (supports any column: content, gv, hs and cursor line)
   const [pickerOpen, setPickerOpen] = useState<boolean>(false);
   const [pickerTarget, setPickerTarget] = useState<{
     planId: string;
     rowIndex: number;
-    col: 'content' | 'hs';
+    col: 'content' | 'gv' | 'hs' | 'inline_content' | 'inline_gv' | 'inline_hs';
+    cursorStart?: number;
+    cursorEnd?: number;
     searchQuery: string;
     grade?: number;
     lessonTitle?: string;
@@ -929,7 +940,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   const handleOpenPicker = (
     planId: string,
     rowIndex: number,
-    col: 'content' | 'hs',
+    col: 'content' | 'gv' | 'hs',
     query: string,
     forcedCategory?: ImageClassificationCategory
   ) => {
@@ -945,7 +956,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       autoCategory = 'dong_tac';
     } else if (rowIndex >= 2 && rowIndex <= 4) {
       rowName = '3. Luyện tập';
-      autoCategory = 'luyen_tap';
+      autoCategory = col === 'hs' ? 'luyen_tap' : 'dong_tac';
     } else if (rowIndex === 5) {
       rowName = '3.4 Trò chơi vận động';
       autoCategory = 'tro_choi_vd';
@@ -961,24 +972,120 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       searchQuery: query,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
-      rowName,
+      rowName: `${rowName} - ${col === 'content' ? 'Cột 1 (Nội dung)' : col === 'gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)'}`,
       category: forcedCategory || autoCategory
+    });
+    setPickerOpen(true);
+  };
+
+  const handleOpenInlinePicker = (
+    planId: string,
+    rowIndex: number,
+    col: 'inline_content' | 'inline_gv' | 'inline_hs',
+    cursorStart: number,
+    cursorEnd: number,
+    query: string
+  ) => {
+    const targetPlan = plansByGrade.find((p) => p.id === planId);
+    const colName = col === 'inline_content' ? 'Cột 1 (Nội dung)' : col === 'inline_gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)';
+    let autoCategory: ImageClassificationCategory = 'dong_tac';
+
+    if (rowIndex === 0) {
+      autoCategory = 'tro_choi_kd';
+    } else if (rowIndex === 1) {
+      autoCategory = 'dong_tac';
+    } else if (rowIndex >= 2 && rowIndex <= 4) {
+      autoCategory = col === 'inline_hs' ? 'luyen_tap' : 'dong_tac';
+    } else if (rowIndex === 5) {
+      autoCategory = 'tro_choi_vd';
+    } else if (rowIndex === 6) {
+      autoCategory = 'luyen_tap';
+    }
+
+    setPickerTarget({
+      planId,
+      rowIndex,
+      col,
+      cursorStart,
+      cursorEnd,
+      searchQuery: query,
+      grade: targetPlan?.grade,
+      lessonTitle: targetPlan?.title,
+      rowName: `Chèn ảnh vào dòng văn bản - ${colName} (Dòng ${rowIndex + 1})`,
+      category: autoCategory
     });
     setPickerOpen(true);
   };
 
   const handleAttachImage = (imgUrl: string, imgTitle: string) => {
     if (!pickerTarget) return;
-    const { planId, rowIndex, col } = pickerTarget;
+    const { planId, rowIndex, col, cursorStart, cursorEnd } = pickerTarget;
 
     const newPlans = plansByGrade.map((p) => {
       if (p.id !== planId) return p;
       const newRows = [...p.rows];
-      if (col === 'content') {
+
+      if (col === 'inline_content') {
+        const oldText = newRows[rowIndex].content || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
         newRows[rowIndex] = {
           ...newRows[rowIndex],
-          contentImgUrl: imgUrl,
-          contentImgTitle: imgTitle
+          content: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'inline_gv') {
+        const oldText = newRows[rowIndex].gv || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          gv: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'inline_hs') {
+        const oldText = newRows[rowIndex].hs || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          hs: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'content') {
+        const currentContentImages = newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0
+          ? [...newRows[rowIndex].contentImages!]
+          : newRows[rowIndex].contentImgUrl
+          ? [{ id: 'content_img_1', url: newRows[rowIndex].contentImgUrl!, title: newRows[rowIndex].contentImgTitle || 'Ảnh động tác' }]
+          : [];
+
+        currentContentImages.push({
+          id: `content_img_${Date.now()}`,
+          url: imgUrl,
+          title: imgTitle
+        });
+
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          contentImgUrl: currentContentImages[0]?.url,
+          contentImgTitle: currentContentImages[0]?.title,
+          contentImages: currentContentImages
+        };
+      } else if (col === 'gv') {
+        const currentGvImages = newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0
+          ? [...newRows[rowIndex].gvImages!]
+          : newRows[rowIndex].gvImgUrl
+          ? [{ id: 'gv_img_1', url: newRows[rowIndex].gvImgUrl!, title: newRows[rowIndex].gvImgTitle || 'Hình minh họa GV' }]
+          : [];
+
+        currentGvImages.push({
+          id: `gv_img_${Date.now()}`,
+          url: imgUrl,
+          title: imgTitle
+        });
+
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          gvImgUrl: currentGvImages[0]?.url,
+          gvImgTitle: currentGvImages[0]?.title,
+          gvImages: currentGvImages
         };
       } else {
         const currentDiagrams = newRows[rowIndex].hsImages && newRows[rowIndex].hsImages!.length > 0
@@ -1007,6 +1114,67 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setPickerOpen(false);
     setPickerTarget(null);
     showToast(`Đã chèn hình ảnh: "${imgTitle}" vào bảng giáo án!`);
+  };
+
+  const handleRemoveInlineImage = (planId: string, rowIndex: number, field: 'content' | 'gv' | 'hs', rawTag: string) => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      const newRows = [...p.rows];
+      const oldVal = newRows[rowIndex][field] || '';
+      newRows[rowIndex] = {
+        ...newRows[rowIndex],
+        [field]: removeInlineImageFromText(oldVal, rawTag)
+      };
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
+    showToast('Đã xóa hình ảnh khỏi dòng văn bản!');
+  };
+
+  const handleRemoveContentImage = (planId: string, rowIndex: number, imgIdx: number) => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      const newRows = [...p.rows];
+      const currentImages = (newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0)
+        ? [...newRows[rowIndex].contentImages!]
+        : newRows[rowIndex].contentImgUrl
+        ? [{ id: 'c_init', url: newRows[rowIndex].contentImgUrl!, title: newRows[rowIndex].contentImgTitle || 'Ảnh động tác' }]
+        : [];
+
+      currentImages.splice(imgIdx, 1);
+      newRows[rowIndex] = {
+        ...newRows[rowIndex],
+        contentImgUrl: currentImages[0]?.url || undefined,
+        contentImgTitle: currentImages[0]?.title || undefined,
+        contentImages: currentImages
+      };
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
+    showToast('Đã xóa hình ảnh khỏi Cột 1!');
+  };
+
+  const handleRemoveGvImage = (planId: string, rowIndex: number, imgIdx: number) => {
+    const newPlans = plansByGrade.map((p) => {
+      if (p.id !== planId) return p;
+      const newRows = [...p.rows];
+      const currentImages = (newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0)
+        ? [...newRows[rowIndex].gvImages!]
+        : newRows[rowIndex].gvImgUrl
+        ? [{ id: 'gv_init', url: newRows[rowIndex].gvImgUrl!, title: newRows[rowIndex].gvImgTitle || 'Hình minh họa GV' }]
+        : [];
+
+      currentImages.splice(imgIdx, 1);
+      newRows[rowIndex] = {
+        ...newRows[rowIndex],
+        gvImgUrl: currentImages[0]?.url || undefined,
+        gvImgTitle: currentImages[0]?.title || undefined,
+        gvImages: currentImages
+      };
+      return { ...p, rows: newRows };
+    });
+    recordHistory(newPlans);
+    showToast('Đã xóa hình ảnh khỏi Cột 3 (GV)!');
   };
 
   // Save current week plans to IndexedDB and update parent
@@ -2194,7 +2362,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   <tbody>
                     {plan.rows.map((row, rowIdx) => {
                       const movementName = extractRowMovementName(row);
-                      // Gather all diagrams for Column 4
+
+                      // Gather all diagrams/images for Column 1
+                      const displayedContentImages: DiagramAttachment[] = (row.contentImages && row.contentImages.length > 0)
+                        ? row.contentImages
+                        : row.contentImgUrl
+                        ? [{ id: 'c_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+                        : [];
+
+                      // Gather all diagrams/images for Column 3 (Hoạt động GV)
+                      const displayedGvDiagrams: DiagramAttachment[] = (row.gvImages && row.gvImages.length > 0)
+                        ? row.gvImages
+                        : row.gvImgUrl
+                        ? [{ id: 'gv_init', url: row.gvImgUrl, title: row.gvImgTitle || 'Hình minh họa GV' }]
+                        : [];
+
+                      // Gather all diagrams for Column 4 (Hoạt động HS / Sơ đồ)
                       const displayedDiagrams: DiagramAttachment[] = (row.hsImages && row.hsImages.length > 0)
                         ? row.hsImages
                         : row.hsImgUrl
@@ -2203,29 +2386,101 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
                       return (
                         <tr key={rowIdx} className="hover:bg-slate-50/50">
-                          {/* Cột 1: Nội Dung */}
+                          {/* Cột 1: Nội Dung / Kỹ Thuật Động Tác */}
                           <td className="border border-slate-400 p-2 align-top font-medium leading-relaxed">
                             {isEditMode ? (
-                              <>
+                              <div className="space-y-1.5">
+                                {/* Toolbar: Insert image at cursor */}
+                                <div className="flex items-center justify-between bg-blue-50/80 border border-b-0 border-blue-200 px-2 py-1 rounded-t text-[10.5px]">
+                                  <span className="font-bold text-blue-900 flex items-center gap-1">
+                                    <FileText className="w-3 h-3 text-blue-600" />
+                                    <span>Nội dung</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                      const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                                      const end = textarea?.selectionEnd ?? start;
+                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_content', start, end, movementName);
+                                    }}
+                                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn"
+                                  >
+                                    <ImageIcon className="w-3 h-3 text-amber-300" />
+                                    <span>📷 Chèn hình vào dòng này</span>
+                                  </button>
+                                </div>
+
                                 <textarea
-                                  value={row.content}
+                                  value={sanitizeInlineImageTagsInText(row.content)}
                                   onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'content', e.target.value)}
                                   rows={5}
-                                  className="w-full p-1.5 text-xs border border-blue-300 rounded font-sans focus:outline-none"
+                                  className="w-full p-1.5 text-xs border border-blue-300 rounded-b font-sans focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                  placeholder="Nhập nội dung hoạt động... (Có thể bấm 'Chèn hình vào dòng này' để chèn ảnh tại con trỏ)"
                                 />
-                                {row.contentImgUrl ? (
-                                  <div className="mt-2 p-1 bg-slate-50 rounded border border-slate-200 text-center relative group">
-                                    <img
-                                      src={row.contentImgUrl}
-                                      alt={row.contentImgTitle || 'Ảnh động tác'}
-                                      style={{ maxHeight: `${imageHeight}px` }}
-                                      className="w-auto mx-auto object-contain rounded"
+
+                                {/* Mini Live Preview of inline images if tags exist */}
+                                {row.content && (row.content.includes('[HÌNH:') || row.content.includes('[HINH:') || row.content.includes('{{img:')) && (
+                                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      👁️ Xem trước nội dung kèm hình ảnh:
+                                    </p>
+                                    <RichTextWithImages
+                                      text={row.content}
+                                      imageHeight={imageHeight}
+                                      showCaptions={showImageCaptions}
+                                      isEditMode={true}
+                                      onRemoveImage={(rawTag) => handleRemoveInlineImage(plan.id, rowIdx, 'content', rawTag)}
                                     />
-                                    {showImageCaptions && row.contentImgTitle && (
-                                      <p className="text-[10px] text-slate-600 italic mt-0.5">
-                                        {row.contentImgTitle}
-                                      </p>
-                                    )}
+                                  </div>
+                                )}
+
+                                {/* Attached Images Gallery for Column 1 */}
+                                {displayedContentImages.length > 0 && (
+                                  <div className="mt-2 space-y-1.5">
+                                    <div className={`grid ${displayedContentImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                                      {displayedContentImages.map((cImg, cIdx) => (
+                                        <div
+                                          key={`content_img_${cIdx}`}
+                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group"
+                                        >
+                                          <img
+                                            src={cImg.url}
+                                            alt={cImg.title || 'Ảnh động tác'}
+                                            style={{ maxHeight: `${imageHeight}px` }}
+                                            className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                          />
+                                          {showImageCaptions && cImg.title && (
+                                            <p className="text-[10px] text-slate-600 italic mt-0.5 truncate" title={cImg.title}>
+                                              {cImg.title}
+                                            </p>
+                                          )}
+                                          <div className="flex items-center justify-center gap-1.5 mt-1 no-print">
+                                            <button
+                                              onClick={() => handleOpenPicker(
+                                                plan.id,
+                                                rowIdx,
+                                                'content',
+                                                rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
+                                                rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
+                                              )}
+                                              className="text-[10px] text-blue-600 hover:text-blue-800 underline font-semibold"
+                                            >
+                                              Đổi ảnh
+                                            </button>
+                                            <span className="text-slate-300">•</span>
+                                            <button
+                                              onClick={() => handleRemoveContentImage(plan.id, rowIdx, cIdx)}
+                                              className="text-[10px] text-red-600 hover:text-red-800 underline font-semibold"
+                                            >
+                                              Xóa
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+
                                     <button
                                       onClick={() => handleOpenPicker(
                                         plan.id,
@@ -2234,14 +2489,15 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                         rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
                                         rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
                                       )}
-                                      className={`no-print mt-1 text-[10px] underline font-semibold block mx-auto ${
-                                        rowIdx === 0 ? 'text-amber-700 hover:text-amber-900' : rowIdx === 5 ? 'text-purple-700 hover:text-purple-900' : 'text-blue-600 hover:text-blue-800'
-                                      }`}
+                                      className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold flex items-center justify-center gap-1 no-print transition"
                                     >
-                                      {rowIdx === 0 ? 'Đổi ảnh trò chơi khởi động' : rowIdx === 5 ? 'Đổi ảnh trò chơi vận động' : 'Đổi ảnh động tác'}
+                                      <PlusCircle className="w-3 h-3 text-blue-600" />
+                                      <span>+ Thêm ảnh khác vào Cột 1</span>
                                     </button>
                                   </div>
-                                ) : (
+                                )}
+
+                                {displayedContentImages.length === 0 && (
                                   <button
                                     onClick={() => handleOpenPicker(
                                       plan.id,
@@ -2250,7 +2506,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
                                       rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
                                     )}
-                                    className={`w-full mt-2 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 no-print transition ${
+                                    className={`w-full mt-1.5 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 no-print transition ${
                                       rowIdx === 0
                                         ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
                                         : rowIdx === 5
@@ -2259,59 +2515,43 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     }`}
                                   >
                                     <FolderOpen className="w-3 h-3" />
-                                    {rowIdx === 0 ? 'Chèn ảnh trò chơi khởi động' : rowIdx === 5 ? 'Chèn ảnh trò chơi vận động' : 'Chèn ảnh động tác'}
+                                    {rowIdx === 0 ? '+ Gắn ảnh trò chơi khởi động' : rowIdx === 5 ? '+ Gắn ảnh trò chơi vận động' : '+ Gắn ảnh kỹ thuật vào Cột 1'}
                                   </button>
                                 )}
-                              </>
+                              </div>
                             ) : (
-                              (() => {
-                                const lines = row.content.split('\n');
-                                const ttcbIdx = lines.findIndex((l) => l.toLowerCase().includes('ttcb') || l.toLowerCase().includes('đứng nghiêm') || l.toLowerCase().includes('chuẩn bị'));
-                                const nhip1Idx = lines.findIndex((l) => l.toLowerCase().includes('nhịp 1'));
+                              /* VIEW / PRINT MODE FOR COLUMN 1 */
+                              <div className="space-y-2">
+                                <RichTextWithImages
+                                  text={row.content}
+                                  imageHeight={imageHeight}
+                                  showCaptions={showImageCaptions}
+                                  isEditMode={false}
+                                />
 
-                                const imgElement = row.contentImgUrl ? (
-                                  <div className="my-2 p-1 bg-slate-50 rounded border border-slate-200 text-center">
-                                    <img
-                                      src={row.contentImgUrl}
-                                      alt={row.contentImgTitle || 'Ảnh động tác'}
-                                      style={{ maxHeight: `${imageHeight}px` }}
-                                      className="w-auto mx-auto object-contain rounded"
-                                    />
-                                    {showImageCaptions && row.contentImgTitle && (
-                                      <p className="text-[10px] text-slate-600 italic mt-0.5">
-                                        {row.contentImgTitle}
-                                      </p>
-                                    )}
+                                {displayedContentImages.length > 0 && (
+                                  <div className="space-y-1.5">
+                                    {displayedContentImages.map((cImg, cIdx) => (
+                                      <div
+                                        key={`print_c_${cIdx}`}
+                                        className="my-1.5 p-1 bg-slate-50/80 rounded border border-slate-200 text-center"
+                                      >
+                                        <img
+                                          src={cImg.url}
+                                          alt={cImg.title || 'Ảnh động tác'}
+                                          style={{ maxHeight: `${imageHeight}px` }}
+                                          className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                        />
+                                        {showImageCaptions && cImg.title && (
+                                          <p className="text-[10px] text-slate-600 italic mt-0.5">
+                                            {cImg.title}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
                                   </div>
-                                ) : null;
-
-                                if (imgElement && ttcbIdx >= 0 && ttcbIdx < lines.length - 1) {
-                                  return (
-                                    <div>
-                                      <div className="whitespace-pre-line">{lines.slice(0, ttcbIdx + 1).join('\n')}</div>
-                                      {imgElement}
-                                      <div className="whitespace-pre-line">{lines.slice(ttcbIdx + 1).join('\n')}</div>
-                                    </div>
-                                  );
-                                }
-
-                                if (imgElement && nhip1Idx > 0) {
-                                  return (
-                                    <div>
-                                      <div className="whitespace-pre-line">{lines.slice(0, nhip1Idx).join('\n')}</div>
-                                      {imgElement}
-                                      <div className="whitespace-pre-line">{lines.slice(nhip1Idx).join('\n')}</div>
-                                    </div>
-                                  );
-                                }
-
-                                return (
-                                  <div>
-                                    <div className="whitespace-pre-line">{row.content}</div>
-                                    {imgElement}
-                                  </div>
-                                );
-                              })()
+                                )}
+                              </div>
                             )}
                           </td>
 
@@ -2325,98 +2565,282 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 className="w-full text-center p-1 text-xs border border-blue-300 rounded focus:outline-none"
                               />
                             ) : (
-                              <div className="whitespace-pre-line">{row.lvd}</div>
+                              <RichTextWithImages text={row.lvd} imageHeight={60} showCaptions={false} />
                             )}
                           </td>
 
-                          {/* Cột 3: Hoạt Động GV */}
+                          {/* Cột 3: Hoạt Động Giáo Viên */}
                           <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
                             {isEditMode ? (
-                              <textarea
-                                value={row.gv}
-                                onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'gv', e.target.value)}
-                                rows={5}
-                                className="w-full p-1.5 text-xs border border-blue-300 rounded font-sans focus:outline-none"
-                              />
-                            ) : (
-                              <div className="whitespace-pre-line">{row.gv}</div>
-                            )}
-                          </td>
-
-                          {/* Cột 4: Hoạt Động HS & NHIỀU SƠ ĐỒ ĐỘI HÌNH */}
-                          <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
-                            {isEditMode ? (
-                              <textarea
-                                value={row.hs}
-                                onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'hs', e.target.value)}
-                                rows={4}
-                                className="w-full p-1.5 text-xs border border-blue-300 rounded font-sans focus:outline-none"
-                              />
-                            ) : (
-                              <div className="whitespace-pre-line">{row.hs}</div>
-                            )}
-
-                            {/* Render Multi-Diagrams in Column 4 */}
-                            {displayedDiagrams.length > 0 && (
-                              <div className="mt-2 space-y-2">
-                                <div className={`grid ${displayedDiagrams.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
-                                  {displayedDiagrams.map((diag, diagIdx) => (
-                                    <div
-                                      key={`${diag.id || 'diag'}_${diagIdx}`}
-                                      className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group"
-                                    >
-                                      <img
-                                        src={diag.url}
-                                        alt={diag.title || 'Sơ đồ'}
-                                        style={{ maxHeight: `${imageHeight}px` }}
-                                        className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
-                                      />
-                                      {diag.title && (
-                                        <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5 truncate" title={diag.title}>
-                                          {diag.title}
-                                        </p>
-                                      )}
-                                      {isEditMode && (
-                                        <button
-                                          onClick={() => handleRemoveDiagram(plan.id, rowIdx, diagIdx)}
-                                          className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded text-[10px] shadow-xs no-print transition"
-                                          title="Xóa sơ đồ này"
-                                        >
-                                          <Trash2 className="w-3 h-3" />
-                                        </button>
-                                      )}
-                                    </div>
-                                  ))}
+                              <div className="space-y-1.5">
+                                {/* Toolbar: Insert image at cursor */}
+                                <div className="flex items-center justify-between bg-emerald-50/80 border border-b-0 border-emerald-200 px-2 py-1 rounded-t text-[10.5px]">
+                                  <span className="font-bold text-emerald-900 flex items-center gap-1">
+                                    <Users className="w-3 h-3 text-emerald-600" />
+                                    <span>Hoạt động GV</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                      const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                                      const end = textarea?.selectionEnd ?? start;
+                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_gv', start, end, movementName);
+                                    }}
+                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 3"
+                                  >
+                                    <ImageIcon className="w-3 h-3 text-amber-300" />
+                                    <span>📷 Chèn hình vào dòng này</span>
+                                  </button>
                                 </div>
 
-                                {isEditMode && (
+                                <textarea
+                                  value={sanitizeInlineImageTagsInText(row.gv)}
+                                  onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'gv', e.target.value)}
+                                  rows={5}
+                                  className="w-full p-1.5 text-xs border border-blue-300 rounded-b font-sans focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                  placeholder="Nhập kịch bản hoạt động của GV..."
+                                />
+
+                                {/* Mini Live Preview of inline images if tags exist */}
+                                {row.gv && (row.gv.includes('[HÌNH:') || row.gv.includes('[HINH:') || row.gv.includes('{{img:')) && (
+                                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      👁️ Xem trước nội dung kèm hình ảnh:
+                                    </p>
+                                    <RichTextWithImages
+                                      text={row.gv}
+                                      imageHeight={imageHeight}
+                                      showCaptions={showImageCaptions}
+                                      isEditMode={true}
+                                      onRemoveImage={(rawTag) => handleRemoveInlineImage(plan.id, rowIdx, 'gv', rawTag)}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Attached Images Gallery for Column 3 */}
+                                {displayedGvDiagrams.length > 0 && (
+                                  <div className="mt-2 space-y-1.5">
+                                    <div className={`grid ${displayedGvDiagrams.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                                      {displayedGvDiagrams.map((gvImg, gvIdx) => (
+                                        <div
+                                          key={`gv_diag_${gvIdx}`}
+                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group"
+                                        >
+                                          <img
+                                            src={gvImg.url}
+                                            alt={gvImg.title || 'Hình minh họa GV'}
+                                            style={{ maxHeight: `${imageHeight}px` }}
+                                            className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                          />
+                                          {gvImg.title && (
+                                            <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5 truncate" title={gvImg.title}>
+                                              {gvImg.title}
+                                            </p>
+                                          )}
+                                          <button
+                                            onClick={() => handleRemoveGvImage(plan.id, rowIdx, gvIdx)}
+                                            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded text-[10px] shadow-xs no-print transition"
+                                            title="Xóa hình ảnh này"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <button
+                                  onClick={() => handleOpenPicker(plan.id, rowIdx, 'gv', movementName, 'dong_tac')}
+                                  className="w-full mt-1 py-1 px-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold flex items-center justify-center gap-1 no-print transition"
+                                  title="Chèn thêm hình minh họa hoặc sơ đồ vị trí GV vào Cột 3"
+                                >
+                                  <PlusCircle className="w-3 h-3 text-emerald-600" />
+                                  <span>+ Chèn ảnh minh họa / vị trí GV (Cột 3)</span>
+                                </button>
+                              </div>
+                            ) : (
+                              /* VIEW / PRINT MODE FOR COLUMN 3 */
+                              <div className="space-y-2">
+                                <RichTextWithImages
+                                  text={row.gv}
+                                  imageHeight={imageHeight}
+                                  showCaptions={showImageCaptions}
+                                  isEditMode={false}
+                                />
+
+                                {displayedGvDiagrams.length > 0 && (
+                                  <div className="space-y-1.5">
+                                    {displayedGvDiagrams.map((gvImg, gvIdx) => (
+                                      <div
+                                        key={`print_gv_${gvIdx}`}
+                                        className="my-1.5 p-1 bg-slate-50/80 rounded border border-slate-200 text-center"
+                                      >
+                                        <img
+                                          src={gvImg.url}
+                                          alt={gvImg.title || 'Hình minh họa GV'}
+                                          style={{ maxHeight: `${imageHeight}px` }}
+                                          className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                        />
+                                        {gvImg.title && (
+                                          <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5 truncate">
+                                            {gvImg.title}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Cột 4: Hoạt Động HS & SƠ ĐỒ ĐỘI HÌNH */}
+                          <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
+                            {isEditMode ? (
+                              <div className="space-y-1.5">
+                                {/* Toolbar: Insert image at cursor */}
+                                <div className="flex items-center justify-between bg-purple-50/80 border border-b-0 border-purple-200 px-2 py-1 rounded-t text-[10.5px]">
+                                  <span className="font-bold text-purple-900 flex items-center gap-1">
+                                    <Activity className="w-3 h-3 text-purple-600" />
+                                    <span>Hoạt động HS & Sơ đồ</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                      const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                                      const end = textarea?.selectionEnd ?? start;
+                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_hs', start, end, movementName);
+                                    }}
+                                    className="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 4"
+                                  >
+                                    <ImageIcon className="w-3 h-3 text-amber-300" />
+                                    <span>📷 Chèn hình vào dòng này</span>
+                                  </button>
+                                </div>
+
+                                <textarea
+                                  value={sanitizeInlineImageTagsInText(row.hs)}
+                                  onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'hs', e.target.value)}
+                                  rows={4}
+                                  className="w-full p-1.5 text-xs border border-blue-300 rounded-b font-sans focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                  placeholder="Nhập hoạt động của học sinh..."
+                                />
+
+                                {/* Mini Live Preview of inline images if tags exist */}
+                                {row.hs && (row.hs.includes('[HÌNH:') || row.hs.includes('[HINH:') || row.hs.includes('{{img:')) && (
+                                  <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                      👁️ Xem trước nội dung kèm hình ảnh:
+                                    </p>
+                                    <RichTextWithImages
+                                      text={row.hs}
+                                      imageHeight={imageHeight}
+                                      showCaptions={showImageCaptions}
+                                      isEditMode={true}
+                                      onRemoveImage={(rawTag) => handleRemoveInlineImage(plan.id, rowIdx, 'hs', rawTag)}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Render Multi-Diagrams in Column 4 */}
+                                {displayedDiagrams.length > 0 && (
+                                  <div className="mt-2 space-y-1.5">
+                                    <div className={`grid ${displayedDiagrams.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                                      {displayedDiagrams.map((diag, diagIdx) => (
+                                        <div
+                                          key={`${diag.id || 'diag'}_${diagIdx}`}
+                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group"
+                                        >
+                                          <img
+                                            src={diag.url}
+                                            alt={diag.title || 'Sơ đồ'}
+                                            style={{ maxHeight: `${imageHeight}px` }}
+                                            className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                          />
+                                          {diag.title && (
+                                            <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5 truncate" title={diag.title}>
+                                              {diag.title}
+                                            </p>
+                                          )}
+                                          <button
+                                            onClick={() => handleRemoveDiagram(plan.id, rowIdx, diagIdx)}
+                                            className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded text-[10px] shadow-xs no-print transition"
+                                            title="Xóa sơ đồ này"
+                                          >
+                                            <Trash2 className="w-3 h-3" />
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <button
+                                      onClick={() => {
+                                        setFormationTarget({ planId: plan.id, rowIndex: rowIdx });
+                                        setIsFormationPickerOpen(true);
+                                      }}
+                                      className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 no-print transition"
+                                      title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
+                                    >
+                                      <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* When no diagram attached yet */}
+                                {displayedDiagrams.length === 0 && (
                                   <button
                                     onClick={() => {
                                       setFormationTarget({ planId: plan.id, rowIndex: rowIdx });
                                       setIsFormationPickerOpen(true);
                                     }}
-                                    className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 no-print transition"
-                                    title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
+                                    className="w-full mt-2 py-1 px-2 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 no-print transition"
                                   >
-                                    <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
-                                    <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
+                                    <Compass className="w-3.5 h-3.5 text-purple-600" />
+                                    <span>+ Chèn Sơ Đồ Đội Hình (Cột 4)</span>
                                   </button>
                                 )}
                               </div>
-                            )}
+                            ) : (
+                              /* VIEW / PRINT MODE FOR COLUMN 4 */
+                              <div className="space-y-2">
+                                <RichTextWithImages
+                                  text={row.hs}
+                                  imageHeight={imageHeight}
+                                  showCaptions={showImageCaptions}
+                                  isEditMode={false}
+                                />
 
-                            {/* When no diagram attached yet */}
-                            {displayedDiagrams.length === 0 && isEditMode && (
-                              <button
-                                onClick={() => {
-                                  setFormationTarget({ planId: plan.id, rowIndex: rowIdx });
-                                  setIsFormationPickerOpen(true);
-                                }}
-                                className="w-full mt-2 py-1 px-2 bg-purple-50 border border-purple-200 hover:bg-purple-100 text-purple-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 no-print transition"
-                              >
-                                <Compass className="w-3.5 h-3.5 text-purple-600" />
-                                <span>+ Chèn Sơ Đồ Đội Hình (Cột 4)</span>
-                              </button>
+                                {displayedDiagrams.length > 0 && (
+                                  <div className="mt-2 space-y-1.5">
+                                    <div className={`grid ${displayedDiagrams.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                                      {displayedDiagrams.map((diag, diagIdx) => (
+                                        <div
+                                          key={`${diag.id || 'diag'}_${diagIdx}`}
+                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center"
+                                        >
+                                          <img
+                                            src={diag.url}
+                                            alt={diag.title || 'Sơ đồ'}
+                                            style={{ maxHeight: `${imageHeight}px` }}
+                                            className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                          />
+                                          {diag.title && (
+                                            <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5 truncate">
+                                              {diag.title}
+                                            </p>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </td>
                         </tr>

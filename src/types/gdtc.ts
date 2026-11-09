@@ -11,9 +11,13 @@ export interface LessonRow {
   hs: string;  // Hoạt động của HS
   contentImgUrl?: string;
   contentImgTitle?: string;
+  contentImages?: DiagramAttachment[]; // Cho phép gắn nhiều hình ảnh trong Cột 1
+  gvImgUrl?: string;
+  gvImgTitle?: string;
+  gvImages?: DiagramAttachment[];      // Cho phép gắn nhiều hình ảnh / sơ đồ trong Cột 3 (Hoạt động GV)
   hsImgUrl?: string;
   hsImgTitle?: string;
-  hsImages?: DiagramAttachment[]; // Cho phép gắn nhiều sơ đồ trong cùng 1 dòng hoạt động (đồng loạt, tổ nhóm, cặp đôi, cá nhân...)
+  hsImages?: DiagramAttachment[];      // Cho phép gắn nhiều sơ đồ trong cùng 1 dòng hoạt động (đồng loạt, tổ nhóm, cặp đôi, cá nhân...)
 }
 
 export interface ExtractedLessonData {

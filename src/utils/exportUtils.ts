@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { SgkImageItem, WeeklyMasterScheduleRow, SchoolSettings } from '../types/gdtc';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { cleanTopicForDisplay, cleanLessonTitleForHeader } from './curriculumAuditSync';
+import { parseInlineTextSegments, extractAllInlineImages } from './inlineImageHelper';
 
 export function downloadZipOfImages(images: SgkImageItem[], filename = 'Thu_Vien_Hinh_Anh_SGK_GDTC.zip') {
   const zip = new JSZip();
@@ -219,7 +220,26 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
             contentImgInfo = await convertSvgOrImageToPngBase64(row.contentImgUrl, 98, Math.min(68, imageMaxHeightPt));
           }
 
-          // Gather diagrams from hsImages or hsImgUrl
+          // Gather content images (Column 1)
+          const rawContentImages = (row.contentImages && row.contentImages.length > 0)
+            ? row.contentImages
+            : row.contentImgUrl
+            ? [{ id: 'c_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+            : [];
+
+          const processedContentImages = await Promise.all(
+            rawContentImages.map(async (c) => {
+              const info = await convertSvgOrImageToPngBase64(c.url, 100, Math.min(68, imageMaxHeightPt));
+              return {
+                title: c.title,
+                pngBase64: info.pngBase64,
+                widthPt: info.widthPt || 98,
+                heightPt: info.heightPt || Math.min(65, imageMaxHeightPt)
+              };
+            })
+          );
+
+          // Gather diagrams from hsImages or hsImgUrl (Column 4)
           const rawDiagrams = row.hsImages && row.hsImages.length > 0
             ? row.hsImages
             : row.hsImgUrl
@@ -238,12 +258,48 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
             })
           );
 
+          // Gather teacher diagrams (Column 3)
+          const rawGvImages = (row.gvImages && row.gvImages.length > 0)
+            ? row.gvImages
+            : row.gvImgUrl
+            ? [{ id: 'gv_init', url: row.gvImgUrl, title: row.gvImgTitle || 'Hình minh họa GV' }]
+            : [];
+
+          const processedGvImages = await Promise.all(
+            rawGvImages.map(async (g) => {
+              const gvInfo = await convertSvgOrImageToPngBase64(g.url, 100, Math.min(68, imageMaxHeightPt));
+              return {
+                title: g.title,
+                pngBase64: gvInfo.pngBase64,
+                widthPt: gvInfo.widthPt || 98,
+                heightPt: gvInfo.heightPt || Math.min(65, imageMaxHeightPt)
+              };
+            })
+          );
+
+          // Gather all inline images in text from row.content, row.gv, row.hs
+          const allInlineInRow = [
+            ...extractAllInlineImages(row.content || ''),
+            ...extractAllInlineImages(row.gv || ''),
+            ...extractAllInlineImages(row.hs || '')
+          ];
+
+          const inlineRasterizedMap: Record<string, ProcessedWordImage> = {};
+          for (const item of allInlineInRow) {
+            if (!inlineRasterizedMap[item.url]) {
+              inlineRasterizedMap[item.url] = await convertSvgOrImageToPngBase64(item.url, 105, Math.min(68, imageMaxHeightPt));
+            }
+          }
+
           return {
             ...row,
             contentImgPng: contentImgInfo.pngBase64,
             contentImgWidth: contentImgInfo.widthPt || 98,
             contentImgHeight: contentImgInfo.heightPt || Math.min(65, imageMaxHeightPt),
-            diagrams: processedDiagrams
+            contentImagesProcessed: processedContentImages,
+            gvImagesProcessed: processedGvImages,
+            diagrams: processedDiagrams,
+            inlineRasterizedMap
           };
         })
       );
@@ -440,52 +496,73 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
             </tr>
           </thead>
           <tbody>
-            ${plan.processedRows.map((row) => {
-              const contentImgSrc = row.contentImgPng ? registerImage(row.contentImgPng) : '';
-
-              const diagramsWithSrc = row.diagrams.map((d) => ({
+            ${plan.processedRows.map((row: any) => {
+              const diagramsWithSrc = (row.diagrams || []).map((d: any) => ({
                 title: d.title,
                 src: registerImage(d.pngBase64),
                 widthPt: d.widthPt,
                 heightPt: d.heightPt
               }));
 
-              // Intelligent inline placement for Column 1 technical image (after TTCB line)
-              const contentLines = escapeHtml(row.content).split('\n');
-              let col1Html = '';
+              const renderWordTextWithInline = (rawText: string) => {
+                const segments = parseInlineTextSegments(rawText || '');
+                return segments.map((seg) => {
+                  if (seg.type === 'text') {
+                    return escapeHtml(seg.text).replace(/\n/g, '<br/>');
+                  }
+                  const raster = (row.inlineRasterizedMap || {})[seg.url];
+                  const src = raster?.pngBase64 ? registerImage(raster.pngBase64) : '';
+                  if (!src) return '';
+                  return `
+                    <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
+                      <img src="${src}" width="${raster?.widthPt || 100}" height="${raster?.heightPt || 65}" style="width: ${raster?.widthPt || 100}pt; height: ${raster?.heightPt || 65}pt; max-width: 105pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                      ${seg.title ? `<p style="font-size: 8pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(seg.title)}</p>` : ''}
+                    </div>
+                  `;
+                }).join('');
+              };
 
-              if (contentImgSrc) {
-                const ttcbIdx = contentLines.findIndex(
-                  (l) => l.toLowerCase().includes('ttcb') || l.toLowerCase().includes('đứng nghiêm') || l.toLowerCase().includes('chuẩn bị')
-                );
-                const nhip1Idx = contentLines.findIndex((l) => l.toLowerCase().includes('nhịp 1'));
+              // Column 1 Content
+              const col1TextHtml = renderWordTextWithInline(row.content);
+              const col1AttachedHtml = (row.contentImagesProcessed || []).map((c: any) => `
+                <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
+                  <img src="${registerImage(c.pngBase64)}" width="${c.widthPt || 98}" height="${c.heightPt || 65}" style="width: ${c.widthPt || 98}pt; height: ${c.heightPt || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                  ${c.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(c.title)}</p>` : ''}
+                </div>
+              `).join('');
 
-                const imgBlock = `
-                  <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
-                    <img src="${contentImgSrc}" width="${row.contentImgWidth || 98}" height="${row.contentImgHeight || 65}" style="width: ${row.contentImgWidth || 98}pt; height: ${row.contentImgHeight || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
-                  </div>
-                `;
+              // Column 3 GV
+              const col3TextHtml = renderWordTextWithInline(row.gv);
+              const col3AttachedHtml = (row.gvImagesProcessed || []).map((g: any) => `
+                <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
+                  <img src="${registerImage(g.pngBase64)}" width="${g.widthPt || 98}" height="${g.heightPt || 65}" style="width: ${g.widthPt || 98}pt; height: ${g.heightPt || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                  ${g.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(g.title)}</p>` : ''}
+                </div>
+              `).join('');
 
-                if (ttcbIdx >= 0 && ttcbIdx < contentLines.length - 1) {
-                  const before = contentLines.slice(0, ttcbIdx + 1).join('<br/>');
-                  const after = contentLines.slice(ttcbIdx + 1).join('<br/>');
-                  col1Html = `<div>${before}</div>${imgBlock}<div>${after}</div>`;
-                } else if (nhip1Idx > 0) {
-                  const before = contentLines.slice(0, nhip1Idx).join('<br/>');
-                  const after = contentLines.slice(nhip1Idx).join('<br/>');
-                  col1Html = `<div>${before}</div>${imgBlock}<div>${after}</div>`;
-                } else {
-                  col1Html = `<div>${contentLines.join('<br/>')}</div>${imgBlock}`;
-                }
-              } else {
-                col1Html = `<div>${contentLines.join('<br/>')}</div>`;
-              }
+              // Column 4 HS
+              const col4TextHtml = renderWordTextWithInline(row.hs);
+              const col4DiagramsHtml = diagramsWithSrc.length > 0 ? `
+                <div style="margin-top: 4pt;">
+                  ${diagramsWithSrc.map((d: any) => `
+                    <div style="text-align: center; margin-top: 3pt; page-break-inside: avoid;">
+                      <img src="${d.src}" width="${d.widthPt || 112}" height="${d.heightPt || 68}" style="width: ${d.widthPt || 112}pt; height: ${d.heightPt || 68}pt; max-width: 118pt; max-height: 72pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #d1d5db; border-radius: 4px;" />
+                      ${d.title ? `
+                        <p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; text-align: center; color: #374151;">
+                          ${escapeHtml(d.title)}
+                        </p>
+                      ` : ''}
+                    </div>
+                  `).join('')}
+                </div>
+              ` : '';
 
               return `
                 <tr style="font-size: 11pt; vertical-align: top;">
                   <!-- Cột 1: Nội dung & Ảnh kỹ thuật chèn đúng vị trí -->
                   <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
-                    ${col1Html}
+                    <div>${col1TextHtml}</div>
+                    ${col1AttachedHtml}
                   </td>
 
                   <!-- Cột 2: LVĐ -->
@@ -495,26 +572,14 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
 
                   <!-- Cột 3: HĐ của GV -->
                   <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
-                    ${escapeHtml(row.gv).replace(/\n/g, '<br/>')}
+                    <div>${col3TextHtml}</div>
+                    ${col3AttachedHtml}
                   </td>
 
                   <!-- Cột 4: HĐ của HS & SƠ ĐỒ ĐỘI HÌNH ĐÃ CHUẨN KÍCH THƯỚC -->
                   <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
-                    <div>${escapeHtml(row.hs).replace(/\n/g, '<br/>')}</div>
-                    ${diagramsWithSrc.length > 0 ? `
-                      <div style="margin-top: 4pt;">
-                        ${diagramsWithSrc.map((d) => `
-                          <div style="text-align: center; margin-top: 3pt; page-break-inside: avoid;">
-                            <img src="${d.src}" width="${d.widthPt || 112}" height="${d.heightPt || 68}" style="width: ${d.widthPt || 112}pt; height: ${d.heightPt || 68}pt; max-width: 118pt; max-height: 72pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #d1d5db; border-radius: 4px;" />
-                            ${d.title ? `
-                              <p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; text-align: center; color: #374151;">
-                                ${escapeHtml(d.title)}
-                              </p>
-                            ` : ''}
-                          </div>
-                        `).join('')}
-                      </div>
-                    ` : ''}
+                    <div>${col4TextHtml}</div>
+                    ${col4DiagramsHtml}
                   </td>
                 </tr>
               `;
