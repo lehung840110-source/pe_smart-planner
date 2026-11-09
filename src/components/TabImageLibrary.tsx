@@ -1330,11 +1330,11 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                           <button
                             type="button"
                             onClick={() => setImageToImageModalItem(img)}
-                            className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
-                            title="Tái tạo hình ảnh mới chuẩn SGK 2D bằng A.I hoặc kết nối ChatGPT"
+                            className="w-full bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-blue-600 hover:from-fuchsia-700 hover:to-blue-700 text-white text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
+                            title="Tái tạo hình ảnh mới chuẩn SGK 2D bằng Dola A.I, ChatGPT hoặc phục chế làm nét"
                           >
                             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>🎨 Tái Tạo Ảnh A.I</span>
+                            <span>🦄 Tái Tạo Ảnh A.I (Dola / GPT)</span>
                           </button>
                         </div>
 

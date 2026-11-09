@@ -73,6 +73,9 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
   const [openAiApiKey, setOpenAiApiKey] = useState<string>(() => localStorage.getItem('gdtc_openai_key') || '');
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('gdtc_gemini_key') || '');
   const [selectedApiProvider, setSelectedApiProvider] = useState<'openai' | 'gemini'>('openai');
+  const [selectedAiTool, setSelectedAiTool] = useState<'dola' | 'chatgpt' | 'gemini'>('dola');
+  const [dolaMode, setDolaMode] = useState<'image_to_image' | 'text_to_image'>('image_to_image');
+  const [isImageCopied, setIsImageCopied] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -235,6 +238,19 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
 
   const activeChatGptPrompt = generationType === 'formation' ? formationChatGptPrompt : movementChatGptPrompt;
 
+  // Dola Image-to-Image prompt (for analyzing the attached sample image without relying solely on text)
+  const dolaImageToImagePrompt = generationType === 'formation'
+    ? `Dựa vào hình ảnh sơ đồ mẫu đính kèm: Hãy phân tích bố cục và vẽ lại sơ đồ đội hình tập luyện thể dục tiểu học 2D vector phẳng (flat vector illustration) sắc nét chuẩn sách giáo khoa GDTC Việt Nam (Bộ Kết Nối Tri Thức).
+- Giữ nguyên 100% bố cục của ảnh mẫu: Vị trí Giáo viên ở trên, các hàng ngang học sinh đứng so le ở dưới, thước đo cự ly 1 sải tay.
+- Nền trắng tinh khiết (#ffffff) phục vụ in ấn giáo án.
+- TUYỆT ĐỐI KHÔNG VẼ ĐỘNG TÁC CÁ NHÂN VÌ ĐÂY LÀ SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN.`
+    : `Dựa vào hình ảnh mẫu SGK đính kèm: Hãy phân tích từng tư thế nhịp và vẽ lại bức tranh 2D vector phẳng (flat vector illustration) chuẩn sách giáo khoa môn Giáo dục Thể chất tiểu học Việt Nam (Bộ Kết Nối Tri Thức).
+- Tên động tác: "${movementName}" - Khối Lớp ${targetGrade}.
+- Giữ nguyên 100% tư thế tay chân, góc nghiêng thân người và thứ tự các nhịp giống hệt ảnh mẫu.
+- Học sinh tiểu học Việt Nam mặc đồng phục thể thao chuẩn: áo thun trắng có cổ viền xanh dương, quần thể thao dài màu xanh có sọc trắng bên hông, mang giày thể thao.
+- Bố cục nằm ngang tuần tự gồm các hình học sinh trên nền trắng sạch tinh (#ffffff) phục vụ in ấn giáo án.
+- TUYỆT ĐỐI KHÔNG TẠO HÌNH 3D ĐẤT NẶN HAY BÚP BÊ NHỰA.`;
+
   // 1. Phục Chế & Làm Nét Ảnh SGK Gốc (Khuyên dùng nhất)
   const handleRestoreAndSharpen = async () => {
     setIsRestoring(true);
@@ -330,11 +346,20 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
     }
   };
 
-  // Copy ChatGPT Prompt
+  // Copy AI Prompt (Dola AI, ChatGPT or Gemini)
   const handleCopyPrompt = () => {
-    navigator.clipboard.writeText(activeChatGptPrompt);
+    let textToCopy = '';
+    if (selectedAiTool === 'dola') {
+      textToCopy = dolaMode === 'image_to_image' ? dolaImageToImagePrompt : `/image ${activeChatGptPrompt}`;
+    } else {
+      textToCopy = activeChatGptPrompt;
+    }
+    navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
-    showToast('📋 Đã sao chép Prompt chuẩn cho ChatGPT vào Clipboard!');
+    const toolName = selectedAiTool === 'dola'
+      ? (dolaMode === 'image_to_image' ? 'Lệnh Phân Tích Ảnh Mẫu Dola' : 'Dola A.I (/image ...)')
+      : selectedAiTool === 'chatgpt' ? 'ChatGPT' : 'Gemini';
+    showToast(`📋 Đã sao chép câu lệnh cho ${toolName} vào Clipboard!`);
     setTimeout(() => setIsCopied(false), 2500);
   };
 
@@ -493,7 +518,47 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
     onClose();
   };
 
-  // Download reference image to send to ChatGPT
+  // Copy Reference Image directly to clipboard so user can press Ctrl+V directly into Dola
+  const handleCopyReferenceImageToClipboard = async () => {
+    if (!sourceImage?.imgUrl) return;
+    try {
+      showToast('Đang sao chép ảnh mẫu sang Clipboard...');
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      const loadPromise = new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      img.src = sourceImage.imgUrl;
+      await loadPromise;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Không thể tạo canvas');
+      ctx.drawImage(img, 0, 0);
+
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          showToast('Lỗi tạo dữ liệu ảnh');
+          return;
+        }
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        setIsImageCopied(true);
+        showToast('🖼️ ĐÃ SAO CHÉP ẢNH MẪU VÀO CLIPBOARD! Thầy qua Dola bấm Ctrl + V là dán ảnh được ngay!');
+        setTimeout(() => setIsImageCopied(false), 3000);
+      }, 'image/png');
+    } catch (err: any) {
+      console.warn('Clipboard image write notice:', err);
+      handleDownloadReference();
+      showToast('⚠️ Đã tự động tải ảnh mẫu về máy tính để gửi cho Dola!');
+    }
+  };
+
+  // Download reference image to send to Dola / ChatGPT
   const handleDownloadReference = () => {
     const a = document.createElement('a');
     a.href = sourceImage.imgUrl;
@@ -984,12 +1049,12 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
                 onClick={() => setActiveTab('chatgpt')}
                 className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-2 transition ${
                   activeTab === 'chatgpt'
-                    ? 'bg-white text-amber-700 shadow-xs'
+                    ? 'bg-white text-fuchsia-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Cách 3: ChatGPT / Gemini (Prompt chuẩn sư phạm)</span>
+                <Sparkles className="w-4 h-4 text-fuchsia-500" />
+                <span>Cách 3: Dola A.I / ChatGPT (Tạo ảnh 2D chuẩn)</span>
               </button>
 
               <button
@@ -1060,62 +1125,322 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
               </div>
             )}
 
-            {/* TAB 3: CHATGPT WITH PEDAGOGICAL CONSTRAINTS */}
+            {/* TAB 3: DOLA A.I / CHATGPT / GEMINI WITH PEDAGOGICAL CONSTRAINTS */}
             {activeTab === 'chatgpt' && (
               <div className="p-4 space-y-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-amber-50/80 p-3 rounded-xl border border-amber-200">
-                  <div>
-                    <h5 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
-                      <Sparkles className="w-4 h-4 text-amber-600" />
-                      Quy trình kết nối ChatGPT kèm câu lệnh chuyên sâu:
-                    </h5>
-                    <p className="text-[11px] text-amber-800 mt-0.5">
-                      {generationType === 'formation'
-                        ? 'Prompt đã được thiết kế riêng cho SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN (cấm ChatGPT vẽ phân thế động tác cá nhân).'
-                        : 'Prompt đã được liên kết trực tiếp với từng cử động nhịp Thầy nhập ở trên, bảo đảm ChatGPT không vẽ sai.'}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <a
-                      href="https://chatgpt.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" /> Mở ChatGPT
-                    </a>
-                    <a
-                      href="https://gemini.google.com"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" /> Mở Gemini
-                    </a>
-                  </div>
+                {/* AI Tool Selector Sub-tabs */}
+                <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-xl border border-slate-200">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase px-2">Chọn A.I tạo ảnh:</span>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAiTool('dola')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                      selectedAiTool === 'dola'
+                        ? 'bg-gradient-to-r from-fuchsia-600 to-pink-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>🦄 Dola A.I (dola.ai - Khuyên dùng)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAiTool('chatgpt')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                      selectedAiTool === 'chatgpt'
+                        ? 'bg-emerald-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>🤖 ChatGPT (OpenAI)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAiTool('gemini')}
+                    className={`flex-1 py-1.5 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                      selectedAiTool === 'gemini'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>✨ Google Gemini</span>
+                  </button>
                 </div>
 
-                {/* Prompt display box */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-bold text-slate-700">
-                      Nội dung Prompt đã khớp chuẩn xác với yêu cầu của Thầy:
-                    </label>
-                    <button
-                      onClick={handleCopyPrompt}
-                      className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition shadow-2xs"
-                    >
-                      {isCopied ? <Check className="w-3.5 h-3.5 text-amber-300" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{isCopied ? 'Đã Sao Chép!' : '📋 1-Click Sao Chép Prompt'}</span>
-                    </button>
+                {/* Dola AI Dedicated Action Banner & Controls */}
+                {selectedAiTool === 'dola' ? (
+                  <div className="space-y-3">
+                    {/* Mode Toggle: Image-to-Image vs Text-to-Image */}
+                    <div className="flex items-center justify-between p-2 bg-fuchsia-50 rounded-xl border border-fuchsia-200">
+                      <span className="text-[11px] font-bold text-fuchsia-950 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-fuchsia-600" />
+                        Chế độ tạo ảnh Dola A.I:
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setDolaMode('image_to_image')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                            dolaMode === 'image_to_image'
+                              ? 'bg-fuchsia-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>🖼️ Đọc Ảnh Mẫu (Image-to-Image - Khuyên dùng)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDolaMode('text_to_image')}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 ${
+                            dolaMode === 'text_to_image'
+                              ? 'bg-fuchsia-600 text-white shadow-xs'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                          }`}
+                        >
+                          <span>📝 Lệnh Văn Bản (/image ...)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {dolaMode === 'image_to_image' ? (
+                      /* IMAGE-TO-IMAGE DOLA WORKFLOW */
+                      <div className="bg-gradient-to-r from-fuchsia-50 via-pink-50 to-purple-50 p-3.5 rounded-xl border border-fuchsia-200 space-y-3">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                          <div>
+                            <h5 className="font-bold text-fuchsia-950 text-xs flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-fuchsia-600" />
+                              Quy trình Dola A.I phân tích trực tiếp từ ảnh mẫu SGK (Chuẩn xác 100%):
+                            </h5>
+                            <p className="text-[11px] text-fuchsia-900 mt-1 leading-relaxed">
+                              Khi gửi kèm ảnh mẫu, Dola sẽ <strong>nhìn vào các bạn học sinh trong ảnh</strong> để phân tích cử động tay chân thực tế, 
+                              loại bỏ 100% tình trạng AI đoán mò vẽ búp bê nhựa hay sai tư thế.
+                            </p>
+                          </div>
+                          
+                          {/* Fast Action Buttons */}
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={handleCopyReferenceImageToClipboard}
+                              className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs text-white ${
+                                isImageCopied
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-300'
+                                  : 'bg-gradient-to-r from-fuchsia-600 to-pink-600 hover:from-fuchsia-700 hover:to-pink-700'
+                              }`}
+                              title="Sao chép trực tiếp ảnh mẫu vào bộ nhớ tạm (Clipboard) để dán Ctrl + V vào Dola"
+                            >
+                              {isImageCopied ? <Check className="w-4 h-4 text-amber-300" /> : <Copy className="w-4 h-4" />}
+                              <span>{isImageCopied ? '✅ Đã Chép Ảnh Mẫu (Ctrl+V vào Dola)!' : '🖼️ 1-Click Copy Ảnh Mẫu (Dán sang Dola)'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={handleDownloadReference}
+                              className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl font-bold text-xs flex items-center gap-1 transition"
+                              title="Tải tệp ảnh mẫu về máy tính để gửi cho Dola"
+                            >
+                              <Download className="w-3.5 h-3.5 text-slate-600" /> Tải File Ảnh
+                            </button>
+
+                            <a
+                              href="https://t.me/Dola_AI_Bot"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition shadow-xs"
+                              title="Mở chat Telegram với Dola AI (@Dola_AI_Bot)"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Mở Telegram Bot
+                            </a>
+
+                            <a
+                              href="https://dola.ai"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl font-bold text-xs flex items-center gap-1 transition shadow-xs"
+                              title="Mở giao diện Web Dola AI (dola.ai)"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Mở Dola Web
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Step-by-step guidance cards */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                          <div className="p-2.5 bg-white/80 rounded-lg border border-fuchsia-200">
+                            <span className="font-bold text-fuchsia-900 block mb-0.5">Bước 1: Lấy ảnh mẫu</span>
+                            <p className="text-slate-600">
+                              Bấm nút <strong className="text-fuchsia-700">"1-Click Copy Ảnh Mẫu"</strong> ở trên (hoặc tải tệp về).
+                            </p>
+                          </div>
+                          <div className="p-2.5 bg-white/80 rounded-lg border border-fuchsia-200">
+                            <span className="font-bold text-fuchsia-900 block mb-0.5">Bước 2: Gửi Dola kèm lệnh</span>
+                            <p className="text-slate-600">
+                              Mở Dola (Telegram/Web), bấm <strong className="text-sky-700">Ctrl + V</strong> dán ảnh và gửi kèm câu lệnh bên dưới.
+                            </p>
+                          </div>
+                          <div className="p-2.5 bg-white/80 rounded-lg border border-fuchsia-200">
+                            <span className="font-bold text-fuchsia-900 block mb-0.5">Bước 3: Dán về ứng dụng</span>
+                            <p className="text-slate-600">
+                              Chuột phải vào ảnh Dola tạo, chọn <strong className="text-emerald-700">Copy Image</strong> rồi về đây bấm <kbd className="px-1 py-0.2 bg-slate-200 rounded font-mono font-bold">Ctrl + V</kbd>.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Prompt for Image-to-Image */}
+                        <div className="pt-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                              <span>Câu lệnh gửi kèm hình ảnh cho Dola A.I:</span>
+                              <span className="text-[10px] bg-fuchsia-100 text-fuchsia-800 px-1.5 py-0.5 rounded font-bold">
+                                Phân tích thị giác (Vision)
+                              </span>
+                            </label>
+                            <button
+                              onClick={handleCopyPrompt}
+                              className="text-xs px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition shadow-2xs text-white bg-fuchsia-600 hover:bg-fuchsia-700"
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-amber-300" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{isCopied ? 'Đã Sao Chép Lệnh!' : '📋 1-Click Sao Chép Câu Lệnh Này'}</span>
+                            </button>
+                          </div>
+                          <textarea
+                            rows={5}
+                            value={dolaImageToImagePrompt}
+                            readOnly
+                            className="w-full bg-white border border-fuchsia-200 rounded-lg p-2.5 text-[11px] text-slate-800 font-mono leading-relaxed focus:outline-none select-all"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      /* TEXT-TO-IMAGE DOLA WORKFLOW */
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-fuchsia-50 via-pink-50 to-purple-50 p-3.5 rounded-xl border border-fuchsia-200">
+                          <div>
+                            <h5 className="font-bold text-fuchsia-950 text-xs flex items-center gap-1.5">
+                              <Sparkles className="w-4 h-4 text-fuchsia-600" />
+                              Sinh ảnh Dola A.I bằng lệnh văn bản (/image):
+                            </h5>
+                            <p className="text-[11px] text-fuchsia-900 mt-1 leading-relaxed">
+                              Lệnh bên dưới đã tự động tích hợp cú pháp <strong>/image</strong> chuẩn của Dola A.I kèm thông số cử động từng nhịp.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <a
+                              href="https://dola.ai"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Mở Dola Web
+                            </a>
+                            <a
+                              href="https://t.me/Dola_AI_Bot"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" /> Mở Telegram Bot
+                            </a>
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                              <span>Câu lệnh (/image) tối ưu cho Dola A.I:</span>
+                              <span className="text-[10px] bg-fuchsia-100 text-fuchsia-800 px-1.5 py-0.5 rounded font-bold">
+                                Đã có tiền tố /image
+                              </span>
+                            </label>
+                            <button
+                              onClick={handleCopyPrompt}
+                              className="text-xs px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition shadow-2xs text-white bg-fuchsia-600 hover:bg-fuchsia-700"
+                            >
+                              {isCopied ? <Check className="w-3.5 h-3.5 text-amber-300" /> : <Copy className="w-3.5 h-3.5" />}
+                              <span>{isCopied ? 'Đã Sao Chép!' : '📋 1-Click Sao Chép Lệnh Dola'}</span>
+                            </button>
+                          </div>
+                          <textarea
+                            rows={6}
+                            value={`/image ${activeChatGptPrompt}`}
+                            readOnly
+                            className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-[11px] text-slate-800 font-mono leading-relaxed focus:outline-none select-all"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <textarea
-                    rows={7}
-                    value={activeChatGptPrompt}
-                    readOnly
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-[11px] text-slate-800 font-mono leading-relaxed focus:outline-none select-all"
-                  />
-                </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-amber-50/80 p-3 rounded-xl border border-amber-200">
+                      <div>
+                        <h5 className="font-bold text-amber-900 text-xs flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-amber-600" />
+                          Quy trình kết nối {selectedAiTool === 'chatgpt' ? 'ChatGPT' : 'Google Gemini'} kèm câu lệnh chuyên sâu:
+                        </h5>
+                        <p className="text-[11px] text-amber-800 mt-0.5">
+                          {generationType === 'formation'
+                            ? 'Prompt đã được thiết kế riêng cho SƠ ĐỒ ĐỘI HÌNH TẬP LUYỆN (cấm AI vẽ phân thế động tác cá nhân).'
+                            : 'Prompt đã được liên kết trực tiếp với từng cử động nhịp Thầy nhập ở trên, bảo đảm AI không vẽ sai.'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {selectedAiTool === 'chatgpt' ? (
+                          <a
+                            href="https://chatgpt.com"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Mở ChatGPT (chatgpt.com)
+                          </a>
+                        ) : (
+                          <a
+                            href="https://gemini.google.com"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition shadow-2xs"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Mở Google Gemini
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleDownloadReference}
+                          className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg font-bold text-xs flex items-center gap-1 transition"
+                        >
+                          <Download className="w-3.5 h-3.5 text-slate-600" /> Tải Ảnh Mẫu
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Prompt display box */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                          <span>Câu lệnh (Prompt) tối ưu cho {selectedAiTool === 'chatgpt' ? 'ChatGPT' : 'Gemini'}:</span>
+                        </label>
+                        <button
+                          onClick={handleCopyPrompt}
+                          className={`text-xs px-3 py-1 rounded-lg font-bold flex items-center gap-1 transition shadow-2xs text-white ${
+                            selectedAiTool === 'chatgpt'
+                              ? 'bg-emerald-600 hover:bg-emerald-700'
+                              : 'bg-blue-600 hover:bg-blue-700'
+                          }`}
+                        >
+                          {isCopied ? <Check className="w-3.5 h-3.5 text-amber-300" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{isCopied ? 'Đã Sao Chép!' : '📋 1-Click Sao Chép Prompt'}</span>
+                        </button>
+                      </div>
+                      <textarea
+                        rows={7}
+                        value={activeChatGptPrompt}
+                        readOnly
+                        className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-[11px] text-slate-800 font-mono leading-relaxed focus:outline-none select-all"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* Paste Area notice */}
                 <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
@@ -1128,7 +1453,7 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
                         Dán ảnh vừa tạo bằng phím tắt
                       </h6>
                       <p className="text-[11px] text-emerald-800">
-                        Chuột phải Copy Image trên ChatGPT rồi bấm <strong>Ctrl + V</strong> tại màn hình này!
+                        Sau khi <strong>{selectedAiTool === 'dola' ? 'Dola A.I' : selectedAiTool === 'chatgpt' ? 'ChatGPT' : 'Gemini'}</strong> tạo ảnh xong: Chuột phải chọn <strong>Copy Image</strong> rồi bấm <strong>Ctrl + V</strong> tại màn hình này!
                       </p>
                     </div>
                   </div>

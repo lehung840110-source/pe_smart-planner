@@ -16,7 +16,7 @@ import { FormationStudioModal } from './components/FormationStudioModal';
 import { SelectFormationModal } from './components/SelectFormationModal';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
-import { FormationDiagram, saveCustomFormationToStorage } from './data/formationDiagrams';
+import { FormationDiagram, saveCustomFormationToStorage, standardFormationDiagrams } from './data/formationDiagrams';
 import { ParsedLessonFileResult, parseLessonFile } from './utils/documentParser';
 import { exportWordDocument } from './utils/exportUtils';
 import {
@@ -117,8 +117,23 @@ export default function App() {
       try {
         const storedImages = await getAllImagesDB();
         if (storedImages && storedImages.length > 0) {
-          // Keep user's stored images intact without reverting SVGs or replaced images
+          // Auto-heal triangle game diagram if it had the mass formation image
+          const triangleRealDiagram = standardFormationDiagrams.find(f => f.id === 'f_tro_choi_tam_giac')?.svgDataUrl;
           const sanitized = storedImages.map((img: SgkImageItem) => {
+            if (
+              (img.id === 'img_sgk_k3_chay_tam_giac' || img.title?.toLowerCase().includes('tam giác')) &&
+              img.imgUrl?.includes('k3_tro_choi_tam_giac.jpg') &&
+              triangleRealDiagram
+            ) {
+              return {
+                ...img,
+                imgUrl: triangleRealDiagram,
+                title: 'Trò chơi: Chạy theo hình tam giác - SGK Lớp 3 (Trang 29)',
+                category: 'tro_choi' as ImageCategory,
+                folder: 'troChoi' as any,
+                caption: 'Trò chơi vận động Chạy theo hình tam giác: 3 cọc mốc A-B-C cự ly 8-10m, học sinh chạy tiếp sức vòng quanh tam giác theo chiều kim đồng hồ.'
+              };
+            }
             if (!img.imgUrl) {
               const defMatch = defaultSgkImages.find((d) => d.id === img.id);
               if (defMatch) return { ...img, imgUrl: defMatch.imgUrl };

@@ -615,8 +615,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 29,
     category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
-    caption: 'Trò chơi vận động Chạy theo hình tam giác: 3 cọc mốc A-B-C cự ly 8-10m, học sinh chạy tiếp sức vòng quanh tam giác.',
+    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_tam_giac')?.svgDataUrl || '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
+    caption: 'Trò chơi vận động Chạy theo hình tam giác: 3 cọc mốc A-B-C cự ly 8-10m, học sinh chạy tiếp sức vòng quanh tam giác theo chiều kim đồng hồ.',
     selected: false,
     createdAt: Date.now() - 2400000
   },
