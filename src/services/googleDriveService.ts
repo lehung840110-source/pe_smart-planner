@@ -34,7 +34,18 @@ export async function listDriveFiles(query = "trashed = false", pageSize = 30): 
 
   if (!res.ok) {
     const errorText = await res.text();
-    throw new Error(`Lỗi Google Drive API (${res.status}): ${errorText}`);
+    let readableError = errorText;
+    try {
+      const parsed = JSON.parse(errorText);
+      if (parsed?.error?.message?.includes('insufficient authentication scopes') || parsed?.error?.status === 'PERMISSION_DENIED') {
+        readableError = 'Tài khoản Google chưa cấp quyền đọc/ghi Google Drive (Request had insufficient authentication scopes). Vui lòng đăng xuất và đăng nhập lại để tích chọn cấp quyền.';
+      } else if (parsed?.error?.message) {
+        readableError = parsed.error.message;
+      }
+    } catch {
+      // Keep errorText
+    }
+    throw new Error(`Lỗi Google Drive API (${res.status}): ${readableError}`);
   }
 
   const data = await res.json();

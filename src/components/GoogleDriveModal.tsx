@@ -12,8 +12,11 @@ import {
   CheckCircle,
   AlertCircle,
   HardDrive,
-  FileCheck
+  FileCheck,
+  Copy,
+  Check
 } from 'lucide-react';
+import firebaseConfig from '../../firebase-applet-config.json';
 import { User } from 'firebase/auth';
 import {
   googleSignIn,
@@ -56,6 +59,9 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const [appFolderId, setAppFolderId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
+  const [scopeError, setScopeError] = useState<boolean>(false);
 
   // File to delete confirmation modal state (MANDATORY User Confirmation for destructive ops)
   const [fileToDelete, setFileToDelete] = useState<DriveFileItem | null>(null);
@@ -86,6 +92,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const loadFiles = async () => {
     setIsLoadingFiles(true);
     setStatusMessage(null);
+    setScopeError(false);
     try {
       const folderId = await getOrCreateAppFolder();
       setAppFolderId(folderId);
@@ -96,10 +103,24 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       setFiles(driveFiles);
     } catch (err: any) {
       console.error(err);
-      setStatusMessage({
-        type: 'error',
-        text: err?.message || 'Không thể tải danh sách tệp từ Google Drive'
-      });
+      const isScopeDenied =
+        err?.message?.includes('insufficient authentication scopes') ||
+        err?.message?.includes('insufficient') ||
+        err?.message?.includes('PERMISSION_DENIED') ||
+        (err?.message?.includes('403') && err?.message?.toLowerCase().includes('permission'));
+
+      if (isScopeDenied) {
+        setScopeError(true);
+        setStatusMessage({
+          type: 'error',
+          text: 'Tài khoản chưa cấp quyền Google Drive (Lỗi 403). Vui lòng bấm "Cấp lại quyền Google Drive" bên dưới.'
+        });
+      } else {
+        setStatusMessage({
+          type: 'error',
+          text: err?.message || 'Không thể tải danh sách tệp từ Google Drive'
+        });
+      }
     } finally {
       setIsLoadingFiles(false);
     }
@@ -108,6 +129,8 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const handleSignIn = async () => {
     setIsLoggingIn(true);
     setStatusMessage(null);
+    setUnauthorizedDomain(null);
+    setScopeError(false);
     try {
       const res = await googleSignIn();
       if (res) {
@@ -116,16 +139,65 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           type: 'success',
           text: `Đăng nhập thành công: ${res.user.displayName || res.user.email}`
         });
-        await loadFiles();
+        // Note: loadFiles() is triggered by useEffect([isOpen, user])
+      }
+    } catch (err: any) {
+      console.error(err);
+      const isUnauthorized =
+        err?.code === 'auth/unauthorized-domain' ||
+        (typeof err?.message === 'string' && err.message.toLowerCase().includes('unauthorized-domain'));
+
+      if (isUnauthorized) {
+        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app';
+        setUnauthorizedDomain(currentDomain);
+        setStatusMessage({
+          type: 'error',
+          text: `Firebase Error (auth/unauthorized-domain): Tên miền "${currentDomain}" chưa được thêm vào mục Authorized Domains của dự án Firebase.`
+        });
+      } else {
+        setStatusMessage({
+          type: 'error',
+          text: err?.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.'
+        });
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleReauth = async () => {
+    setScopeError(false);
+    setStatusMessage(null);
+    setIsLoggingIn(true);
+    try {
+      await logoutGoogle();
+      setUser(null);
+      setFiles([]);
+      const res = await googleSignIn();
+      if (res) {
+        setUser(res.user);
+        setStatusMessage({
+          type: 'success',
+          text: `Cấp quyền thành công: ${res.user.displayName || res.user.email}`
+        });
       }
     } catch (err: any) {
       console.error(err);
       setStatusMessage({
         type: 'error',
-        text: err?.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.'
+        text: err?.message || 'Cấp quyền Google Drive thất bại'
       });
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const handleCopyCurrentDomain = () => {
+    const domain = unauthorizedDomain || (typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(domain);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
     }
   };
 
@@ -346,6 +418,88 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                 )}
                 <span>{isLoggingIn ? 'Đang kết nối Google...' : 'Đăng nhập với Google'}</span>
               </button>
+
+              {/* Unauthorized Domain Diagnostic & Step-by-Step Guide Card */}
+              {unauthorizedDomain && (
+                <div className="mt-4 p-4 text-left bg-amber-50 border border-amber-300 rounded-xl shadow-xs space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-6 h-6 rounded-md bg-amber-200 text-amber-800 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold">
+                      !
+                    </div>
+                    <div>
+                      <h5 className="text-xs font-bold text-amber-900">
+                        Cần thêm tên miền vào Firebase Authentication
+                      </h5>
+                      <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                        Ứng dụng đang mở tại <span className="font-mono font-semibold bg-amber-100 px-1 py-0.5 rounded text-amber-950">{unauthorizedDomain}</span> nhưng miền này chưa được thêm vào mục <b>Authorized domains</b> của dự án Firebase <span className="font-mono font-semibold text-slate-800">{firebaseConfig.projectId}</span>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Copy Domain bar */}
+                  <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200">
+                    <div className="flex-1 font-mono text-xs text-slate-700 truncate px-1">
+                      {unauthorizedDomain}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCopyCurrentDomain}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-medium rounded-md transition"
+                    >
+                      {copiedDomain ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700 font-bold">Đã chép</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Sao chép miền</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* 30-Second Walkthrough */}
+                  <div className="text-[11px] text-amber-900 space-y-1.5 bg-amber-100/60 p-3 rounded-lg border border-amber-200/70">
+                    <p className="font-bold text-amber-950">Các bước xử lý nhanh (khoảng 30 giây):</p>
+                    <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
+                      <li>Bấm nút <b>"Mở Firebase Console"</b> bên dưới để đến trang cài đặt Authentication.</li>
+                      <li>Cuộn xuống mục <b>"Authorized domains"</b> (Miền được ủy quyền).</li>
+                      <li>Bấm <b>"Add domain"</b> rồi dán <code className="bg-white px-1 py-0.2 rounded font-mono font-semibold">{unauthorizedDomain}</code> (hoặc <code className="bg-white px-1 py-0.2 rounded font-mono font-semibold">vercel.app</code>) vào và nhấn lưu.</li>
+                      <li>Quay lại đây và bấm nút <b>"Đăng nhập với Google"</b> lại để đồng bộ.</li>
+                    </ol>
+                  </div>
+
+                  {/* Direct Link to Firebase Console */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <a
+                      href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
+                    >
+                      <span>Mở Cài đặt Firebase Console</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleSignIn}
+                      disabled={isLoggingIn}
+                      className="inline-flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoggingIn ? 'animate-spin text-blue-600' : ''}`} />
+                      <span>Thử đăng nhập lại</span>
+                    </button>
+                  </div>
+
+                  {/* Offline / Direct Word alternative */}
+                  <div className="text-[11px] text-slate-600 bg-white/80 p-2.5 rounded-lg border border-slate-200 leading-relaxed">
+                    💡 <b>Giải pháp sao lưu không cần mạng:</b> Thầy/Cô có thể bấm nút <b>"Sao Lưu / Khôi Phục"</b> (.json) hoặc <b>"Xuất file Word"</b> (.docx) ở góc trên thanh công cụ chính để tải giáo án về máy tính hoặc kéo thả trực tiếp lên Google Drive bất kỳ lúc nào mà không bắt buộc phải liên kết tài khoản ngay.
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-5">
@@ -389,6 +543,50 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Scope Error (403 Insufficient Permission) Diagnostic & 1-Click Fix */}
+              {scopeError && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-3 text-left shadow-xs">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <h5 className="text-xs font-bold text-red-900">
+                        Chưa cấp quyền truy cập Google Drive (Lỗi 403)
+                      </h5>
+                      <p className="text-[11px] text-red-800 leading-relaxed">
+                        Tài khoản <span className="font-semibold text-slate-800">{user.email}</span> đã đăng nhập nhưng chưa cấp quyền đọc/ghi Google Drive (Request had insufficient authentication scopes). Google yêu cầu Thầy/Cô tích chọn cho phép ứng dụng truy cập Drive để đọc và tạo thư mục giáo án.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/90 p-3 rounded-lg border border-red-200 text-[11px] text-slate-700 space-y-1.5">
+                    <p className="font-bold text-slate-900">👉 Hướng dẫn cấp quyền nhanh:</p>
+                    <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
+                      <li>Bấm nút <b>"Cấp lại quyền Google Drive"</b> màu đỏ bên dưới.</li>
+                      <li>Tại cửa sổ Google mở ra, hãy <b>tích chọn vào các ô vuông cấp quyền Google Drive</b> (Xem, chỉnh sửa, tạo tệp).</li>
+                      <li>Bấm <b>"Tiếp tục"</b> để hoàn tất.</li>
+                    </ol>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <button
+                      onClick={handleReauth}
+                      disabled={isLoggingIn}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition active:scale-98"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoggingIn ? 'animate-spin' : ''}`} />
+                      <span>{isLoggingIn ? 'Đang kết nối lại...' : 'Cấp lại quyền Google Drive'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleSignOut}
+                      className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition"
+                    >
+                      Đăng xuất tài khoản
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Action: Upload current plan to Drive */}
               {currentPlanData && (

@@ -29,6 +29,13 @@ GOOGLE_DRIVE_SCOPES.forEach((scope) => {
   googleDriveProvider.addScope(scope);
 });
 
+// CRITICAL: Force Google OAuth consent screen so user is prompted to grant Drive permissions
+googleDriveProvider.setCustomParameters({
+  prompt: 'consent',
+  access_type: 'offline',
+  include_granted_scopes: 'true'
+});
+
 // Flag to indicate ongoing sign-in
 let isSigningIn = false;
 // In-memory token cache (never stored in localStorage)
