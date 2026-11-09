@@ -35,8 +35,10 @@ import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, Diagr
 import {
   RichTextWithImages,
   insertImageAtCursor,
+  insertFormationDiagramAtCursor,
   removeInlineImageFromText,
-  sanitizeInlineImageTagsInText
+  sanitizeInlineImageTagsInText,
+  hasInlineMedia
 } from '../utils/inlineImageHelper';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { masterPlansTuan9 } from '../data/masterTemplateTuan9';
@@ -155,9 +157,45 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     return null;
   });
 
-  // Formation Diagram Picker State for multiple diagrams in Column 4
+  // Formation Diagram Picker State (supports inline at cursor and column attachments)
   const [isFormationPickerOpen, setIsFormationPickerOpen] = useState<boolean>(false);
-  const [formationTarget, setFormationTarget] = useState<{ planId: string; rowIndex: number } | null>(null);
+  const [formationTarget, setFormationTarget] = useState<{
+    planId: string;
+    rowIndex: number;
+    col?: 'content' | 'gv' | 'hs' | 'inline_content' | 'inline_gv' | 'inline_hs';
+    cursorStart?: number;
+    cursorEnd?: number;
+  } | null>(null);
+
+  const handleOpenInlineFormationPicker = (
+    planId: string,
+    rowIndex: number,
+    col: 'inline_content' | 'inline_gv' | 'inline_hs',
+    cursorStart: number,
+    cursorEnd: number
+  ) => {
+    setFormationTarget({
+      planId,
+      rowIndex,
+      col,
+      cursorStart,
+      cursorEnd
+    });
+    setIsFormationPickerOpen(true);
+  };
+
+  const handleOpenFormationPicker = (
+    planId: string,
+    rowIndex: number,
+    col?: 'content' | 'gv' | 'hs'
+  ) => {
+    setFormationTarget({
+      planId,
+      rowIndex,
+      col: col || 'hs'
+    });
+    setIsFormationPickerOpen(true);
+  };
 
   // Sync with prop when parent changes week (e.g. clicking 'TUẦN HIỆN HÀNH')
   useEffect(() => {
@@ -860,37 +898,114 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     );
   };
 
-  // Multi-diagram: Add diagram to a row
-  const handleAddDiagramToRow = (planId: string, rowIndex: number, diag: FormationDiagram) => {
+  // Multi-diagram: Add diagram to a row (supports inline at cursor or column attachment)
+  const handleAddDiagramToRow = (
+    planId: string,
+    rowIndex: number,
+    diag: FormationDiagram,
+    targetCol?: 'content' | 'gv' | 'hs' | 'inline_content' | 'inline_gv' | 'inline_hs',
+    cursorStart?: number,
+    cursorEnd?: number
+  ) => {
     const newPlans = plansByGrade.map((p) => {
       if (p.id !== planId) return p;
       const newRows = [...p.rows];
       const targetRow = newRows[rowIndex];
 
-      const currentDiagrams: DiagramAttachment[] = targetRow.hsImages && targetRow.hsImages.length > 0
-        ? [...targetRow.hsImages]
-        : targetRow.hsImgUrl
-        ? [{ id: 'diag_init', url: targetRow.hsImgUrl, title: targetRow.hsImgTitle || 'Sơ đồ đội hình' }]
-        : [];
+      if (targetCol === 'inline_content') {
+        const oldText = targetRow.content || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...targetRow,
+          content: insertFormationDiagramAtCursor(oldText, start, end, diag.name, diag.svgDataUrl)
+        };
+      } else if (targetCol === 'inline_gv') {
+        const oldText = targetRow.gv || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...targetRow,
+          gv: insertFormationDiagramAtCursor(oldText, start, end, diag.name, diag.svgDataUrl)
+        };
+      } else if (targetCol === 'inline_hs') {
+        const oldText = targetRow.hs || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...targetRow,
+          hs: insertFormationDiagramAtCursor(oldText, start, end, diag.name, diag.svgDataUrl)
+        };
+      } else if (targetCol === 'content') {
+        const currentContentImages: DiagramAttachment[] = targetRow.contentImages && targetRow.contentImages.length > 0
+          ? [...targetRow.contentImages]
+          : targetRow.contentImgUrl
+          ? [{ id: 'content_diag_init', url: targetRow.contentImgUrl, title: targetRow.contentImgTitle || 'Ảnh minh họa' }]
+          : [];
 
-      currentDiagrams.push({
-        id: `diag_${Date.now()}`,
-        url: diag.svgDataUrl,
-        title: diag.name
-      });
+        currentContentImages.push({
+          id: `diag_${Date.now()}`,
+          url: diag.svgDataUrl,
+          title: diag.name
+        });
 
-      newRows[rowIndex] = {
-        ...targetRow,
-        hsImgUrl: currentDiagrams[0]?.url,
-        hsImgTitle: currentDiagrams[0]?.title,
-        hsImages: currentDiagrams
-      };
+        newRows[rowIndex] = {
+          ...targetRow,
+          contentImgUrl: currentContentImages[0]?.url,
+          contentImgTitle: currentContentImages[0]?.title,
+          contentImages: currentContentImages
+        };
+      } else if (targetCol === 'gv') {
+        const currentGvImages: DiagramAttachment[] = targetRow.gvImages && targetRow.gvImages.length > 0
+          ? [...targetRow.gvImages]
+          : targetRow.gvImgUrl
+          ? [{ id: 'gv_diag_init', url: targetRow.gvImgUrl, title: targetRow.gvImgTitle || 'Hình minh họa GV' }]
+          : [];
+
+        currentGvImages.push({
+          id: `diag_${Date.now()}`,
+          url: diag.svgDataUrl,
+          title: diag.name
+        });
+
+        newRows[rowIndex] = {
+          ...targetRow,
+          gvImgUrl: currentGvImages[0]?.url,
+          gvImgTitle: currentGvImages[0]?.title,
+          gvImages: currentGvImages
+        };
+      } else {
+        // Default to Column 4 (hsImages)
+        const currentDiagrams: DiagramAttachment[] = targetRow.hsImages && targetRow.hsImages.length > 0
+          ? [...targetRow.hsImages]
+          : targetRow.hsImgUrl
+          ? [{ id: 'diag_init', url: targetRow.hsImgUrl, title: targetRow.hsImgTitle || 'Sơ đồ đội hình' }]
+          : [];
+
+        currentDiagrams.push({
+          id: `diag_${Date.now()}`,
+          url: diag.svgDataUrl,
+          title: diag.name
+        });
+
+        newRows[rowIndex] = {
+          ...targetRow,
+          hsImgUrl: currentDiagrams[0]?.url,
+          hsImgTitle: currentDiagrams[0]?.title,
+          hsImages: currentDiagrams
+        };
+      }
 
       return { ...p, rows: newRows };
     });
 
     recordHistory(newPlans);
-    showToast(`✨ Đã gắn sơ đồ "${diag.name}" vào Cột 4!`);
+    const colLabel = targetCol === 'inline_content' ? 'dòng Cột 1 (Nội dung)' :
+                     targetCol === 'inline_gv' ? 'dòng Cột 3 (GV)' :
+                     targetCol === 'inline_hs' ? 'dòng Cột 4 (HS)' :
+                     targetCol === 'content' ? 'Cột 1' :
+                     targetCol === 'gv' ? 'Cột 3' : 'Cột 4';
+    showToast(`✨ Đã chèn sơ đồ "${diag.name}" vào ${colLabel}!`);
   };
 
   // Multi-diagram: Remove a diagram from a row
@@ -2396,20 +2511,36 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     <FileText className="w-3 h-3 text-blue-600" />
                                     <span>Nội dung</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                                      const start = textarea?.selectionStart ?? (row.content?.length || 0);
-                                      const end = textarea?.selectionEnd ?? start;
-                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_content', start, end, movementName);
-                                    }}
-                                    className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
-                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn"
-                                  >
-                                    <ImageIcon className="w-3 h-3 text-amber-300" />
-                                    <span>📷 Chèn hình vào dòng này</span>
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlinePicker(plan.id, rowIdx, 'inline_content', start, end, movementName);
+                                      }}
+                                      className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn ảnh động tác / SGK vào vị trí con trỏ hoặc dòng chữ đang chọn"
+                                    >
+                                      <ImageIcon className="w-3 h-3 text-amber-300" />
+                                      <span>📷 Chèn ảnh</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlineFormationPicker(plan.id, rowIdx, 'inline_content', start, end);
+                                      }}
+                                      className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn sơ đồ đội hình (hàng ngang, so le, vòng tròn...) vào vị trí con trỏ"
+                                    >
+                                      <Compass className="w-3 h-3 text-amber-300" />
+                                      <span>📐 Chèn sơ đồ</span>
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <textarea
@@ -2421,7 +2552,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 />
 
                                 {/* Mini Live Preview of inline images if tags exist */}
-                                {row.content && (row.content.includes('[HÌNH:') || row.content.includes('[HINH:') || row.content.includes('{{img:')) && (
+                                {row.content && hasInlineMedia(row.content) && (
                                   <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
                                       👁️ Xem trước nội dung kèm hình ảnh:
@@ -2481,6 +2612,34 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       ))}
                                     </div>
 
+                                    <div className="flex gap-1 mt-1 no-print">
+                                      <button
+                                        onClick={() => handleOpenPicker(
+                                          plan.id,
+                                          rowIdx,
+                                          'content',
+                                          rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
+                                          rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
+                                        )}
+                                        className="flex-1 py-1 px-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition"
+                                      >
+                                        <PlusCircle className="w-3 h-3 text-blue-600" />
+                                        <span>+ Thêm ảnh khác</span>
+                                      </button>
+                                      <button
+                                        onClick={() => handleOpenFormationPicker(plan.id, rowIdx, 'content')}
+                                        className="flex-1 py-1 px-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition"
+                                        title="Chèn sơ đồ đội hình vào Cột 1"
+                                      >
+                                        <Compass className="w-3 h-3 text-indigo-600" />
+                                        <span>+ Thêm sơ đồ</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {displayedContentImages.length === 0 && (
+                                  <div className="flex gap-1 mt-1.5 no-print">
                                     <button
                                       onClick={() => handleOpenPicker(
                                         plan.id,
@@ -2489,34 +2648,26 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                         rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
                                         rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
                                       )}
-                                      className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold flex items-center justify-center gap-1 no-print transition"
+                                      className={`flex-1 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition ${
+                                        rowIdx === 0
+                                          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
+                                          : rowIdx === 5
+                                          ? 'bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-800'
+                                          : 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700'
+                                      }`}
                                     >
-                                      <PlusCircle className="w-3 h-3 text-blue-600" />
-                                      <span>+ Thêm ảnh khác vào Cột 1</span>
+                                      <FolderOpen className="w-3 h-3" />
+                                      <span>{rowIdx === 0 ? '+ Gắn ảnh khởi động' : rowIdx === 5 ? '+ Gắn ảnh trò chơi' : '+ Gắn ảnh Cột 1'}</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenFormationPicker(plan.id, rowIdx, 'content')}
+                                      className="px-2 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition"
+                                      title="Gắn sơ đồ vào Cột 1"
+                                    >
+                                      <Compass className="w-3 h-3 text-indigo-600" />
+                                      <span>+ Sơ đồ Cột 1</span>
                                     </button>
                                   </div>
-                                )}
-
-                                {displayedContentImages.length === 0 && (
-                                  <button
-                                    onClick={() => handleOpenPicker(
-                                      plan.id,
-                                      rowIdx,
-                                      'content',
-                                      rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
-                                      rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
-                                    )}
-                                    className={`w-full mt-1.5 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 no-print transition ${
-                                      rowIdx === 0
-                                        ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
-                                        : rowIdx === 5
-                                        ? 'bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-800'
-                                        : 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700'
-                                    }`}
-                                  >
-                                    <FolderOpen className="w-3 h-3" />
-                                    {rowIdx === 0 ? '+ Gắn ảnh trò chơi khởi động' : rowIdx === 5 ? '+ Gắn ảnh trò chơi vận động' : '+ Gắn ảnh kỹ thuật vào Cột 1'}
-                                  </button>
                                 )}
                               </div>
                             ) : (
@@ -2579,20 +2730,36 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     <Users className="w-3 h-3 text-emerald-600" />
                                     <span>Hoạt động GV</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                                      const start = textarea?.selectionStart ?? (row.gv?.length || 0);
-                                      const end = textarea?.selectionEnd ?? start;
-                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_gv', start, end, movementName);
-                                    }}
-                                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
-                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 3"
-                                  >
-                                    <ImageIcon className="w-3 h-3 text-amber-300" />
-                                    <span>📷 Chèn hình vào dòng này</span>
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlinePicker(plan.id, rowIdx, 'inline_gv', start, end, movementName);
+                                      }}
+                                      className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn ảnh vào vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 3"
+                                    >
+                                      <ImageIcon className="w-3 h-3 text-amber-300" />
+                                      <span>📷 Chèn ảnh</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlineFormationPicker(plan.id, rowIdx, 'inline_gv', start, end);
+                                      }}
+                                      className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn sơ đồ vị trí GV / hiệu lệnh vào dòng chữ này"
+                                    >
+                                      <Compass className="w-3 h-3 text-amber-300" />
+                                      <span>📐 Chèn sơ đồ</span>
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <textarea
@@ -2604,7 +2771,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 />
 
                                 {/* Mini Live Preview of inline images if tags exist */}
-                                {row.gv && (row.gv.includes('[HÌNH:') || row.gv.includes('[HINH:') || row.gv.includes('{{img:')) && (
+                                {row.gv && hasInlineMedia(row.gv) && (
                                   <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
                                       👁️ Xem trước nội dung kèm hình ảnh:
@@ -2652,14 +2819,24 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                   </div>
                                 )}
 
-                                <button
-                                  onClick={() => handleOpenPicker(plan.id, rowIdx, 'gv', movementName, 'dong_tac')}
-                                  className="w-full mt-1 py-1 px-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold flex items-center justify-center gap-1 no-print transition"
-                                  title="Chèn thêm hình minh họa hoặc sơ đồ vị trí GV vào Cột 3"
-                                >
-                                  <PlusCircle className="w-3 h-3 text-emerald-600" />
-                                  <span>+ Chèn ảnh minh họa / vị trí GV (Cột 3)</span>
-                                </button>
+                                 <div className="flex gap-1 mt-1 no-print">
+                                    <button
+                                      onClick={() => handleOpenPicker(plan.id, rowIdx, 'gv', movementName, 'dong_tac')}
+                                      className="flex-1 py-1 px-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition"
+                                      title="Chèn thêm hình minh họa hoặc vị trí GV vào Cột 3"
+                                    >
+                                      <PlusCircle className="w-3 h-3 text-emerald-600" />
+                                      <span>+ Ảnh Cột 3</span>
+                                    </button>
+                                    <button
+                                      onClick={() => handleOpenFormationPicker(plan.id, rowIdx, 'gv')}
+                                      className="flex-1 py-1 px-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition"
+                                      title="Chèn sơ đồ vị trí GV vào Cột 3"
+                                    >
+                                      <Compass className="w-3 h-3 text-indigo-600" />
+                                      <span>+ Sơ đồ Cột 3</span>
+                                    </button>
+                                  </div>
                               </div>
                             ) : (
                               /* VIEW / PRINT MODE FOR COLUMN 3 */
@@ -2701,26 +2878,42 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                           <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
                             {isEditMode ? (
                               <div className="space-y-1.5">
-                                {/* Toolbar: Insert image at cursor */}
+                                {/* Toolbar: Insert image and diagram at cursor */}
                                 <div className="flex items-center justify-between bg-purple-50/80 border border-b-0 border-purple-200 px-2 py-1 rounded-t text-[10.5px]">
                                   <span className="font-bold text-purple-900 flex items-center gap-1">
                                     <Activity className="w-3 h-3 text-purple-600" />
                                     <span>Hoạt động HS & Sơ đồ</span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                                      const start = textarea?.selectionStart ?? (row.hs?.length || 0);
-                                      const end = textarea?.selectionEnd ?? start;
-                                      handleOpenInlinePicker(plan.id, rowIdx, 'inline_hs', start, end, movementName);
-                                    }}
-                                    className="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
-                                    title="Chèn hình ảnh vào đúng vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 4"
-                                  >
-                                    <ImageIcon className="w-3 h-3 text-amber-300" />
-                                    <span>📷 Chèn hình vào dòng này</span>
-                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlinePicker(plan.id, rowIdx, 'inline_hs', start, end, movementName);
+                                      }}
+                                      className="px-2 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn ảnh SGK / hình động tác vào vị trí con trỏ hoặc dòng chữ đang chọn trong Cột 4"
+                                    >
+                                      <ImageIcon className="w-3 h-3 text-amber-300" />
+                                      <span>📷 Chèn ảnh</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                        const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                                        const end = textarea?.selectionEnd ?? start;
+                                        handleOpenInlineFormationPicker(plan.id, rowIdx, 'inline_hs', start, end);
+                                      }}
+                                      className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-1 transition shadow-2xs text-[10px]"
+                                      title="Chèn sơ đồ đội hình (hàng ngang, cặp đôi, vòng tròn...) vào vị trí con trỏ trong Cột 4"
+                                    >
+                                      <Compass className="w-3 h-3 text-amber-300" />
+                                      <span>📐 Chèn sơ đồ</span>
+                                    </button>
+                                  </div>
                                 </div>
 
                                 <textarea
@@ -2732,7 +2925,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 />
 
                                 {/* Mini Live Preview of inline images if tags exist */}
-                                {row.hs && (row.hs.includes('[HÌNH:') || row.hs.includes('[HINH:') || row.hs.includes('{{img:')) && (
+                                {row.hs && hasInlineMedia(row.hs) && (
                                   <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
                                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
                                       👁️ Xem trước nội dung kèm hình ảnh:
@@ -2941,7 +3134,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           }}
           targetRowIndex={formationTarget.rowIndex}
           onSelectFormation={(rowIdx, diag) => {
-            handleAddDiagramToRow(formationTarget.planId, formationTarget.rowIndex, diag);
+            handleAddDiagramToRow(
+              formationTarget.planId,
+              formationTarget.rowIndex,
+              diag,
+              formationTarget.col,
+              formationTarget.cursorStart,
+              formationTarget.cursorEnd
+            );
             setIsFormationPickerOpen(false);
             setFormationTarget(null);
           }}

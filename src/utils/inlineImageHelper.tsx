@@ -80,27 +80,38 @@ export function lookupInlineImage(titleOrKey: string): string | undefined {
 /**
  * Regex to detect inline tags:
  * 1. [HÌNH: Tiêu đề | url] or [HÌNH: Tiêu đề] (also HINH, ẢNH, ANH, IMAGE, IMG)
- * 2. ![Tiêu đề](url)
- * 3. {{img:url}} or {{img:title|url}}
+ * 2. [SƠ ĐỒ: Tên sơ đồ | url] or [SƠ ĐỒ: Tên sơ đồ] (also SO DO, SƠ_ĐỒ, DIAGRAM, FORMATION)
+ * 3. ![Tiêu đề](url)
+ * 4. {{img:url}} or {{img:title|url}}
  */
-const INLINE_IMG_REGEX = /\[(?:HÌNH|HINH|ẢNH|ANH|IMAGE|IMG):\s*(?:([^|\n\]]+)\s*\|\s*)?([^\n\]]+)\]|!\[([^\]]*)\]\(([^)]+)\)|\{\{img:(?:([^|\n}]+)\s*\|\s*)?([^\n}]+)\}\}/gi;
+const INLINE_IMG_REGEX = /\[(?:HÌNH|HINH|ẢNH|ANH|SƠ\s*ĐỒ|SO\s*DO|SƠ_ĐỒ|SO_DO|DIAGRAM|FORMATION|IMAGE|IMG):\s*(?:([^|\n\]]+)\s*\|\s*)?([^\n\]]+)\]|!\[([^\]]*)\]\(([^)]+)\)|\{\{(?:img|diagram|sodo):(?:([^|\n}]+)\s*\|\s*)?([^\n}]+)\}\}/gi;
 
 /**
- * Sanitizes text to remove ugly raw base64 data URLs from the text,
- * converting them into clean readable labels like [HÌNH: Luyện tập cặp đôi]!
+ * Quick check if text contains inline images or formation diagrams
+ */
+export function hasInlineMedia(text?: string): boolean {
+  if (!text) return false;
+  return /\[(?:HÌNH|HINH|ẢNH|ANH|SƠ\s*ĐỒ|SO\s*DO|SƠ_ĐỒ|SO_DO|DIAGRAM|FORMATION|IMAGE|IMG):|!\[|\{\{(?:img|diagram|sodo):/i.test(text);
+}
+
+/**
+ * Sanitizes text to remove ugly raw base64/SVG data URLs from the text,
+ * converting them into clean readable labels like [HÌNH: Tiêu đề] hoặc [SƠ ĐỒ: Tên sơ đồ]!
  */
 export function sanitizeInlineImageTagsInText(rawText: string): string {
   if (!rawText) return rawText;
 
-  // Replace [HÌNH: Tiêu đề | data:image/...;base64,...] or raw base64 with clean [HÌNH: Tiêu đề]
+  // Replace [HÌNH/SƠ ĐỒ: Tiêu đề | data:image/...;base64,...] or raw base64 with clean label
   return rawText.replace(
-    /\[(?:HÌNH|HINH|ẢNH|ANH|IMAGE|IMG):\s*(?:([^|\n\]]+)\s*\|\s*)?(data:image\/[^\n\]]+|[A-Za-z0-9+/=]{100,})\]/gi,
-    (_match, title, base64Url) => {
+    /\[((?:HÌNH|HINH|ẢNH|ANH|SƠ\s*ĐỒ|SO\s*DO|SƠ_ĐỒ|SO_DO|DIAGRAM|FORMATION|IMAGE|IMG)):\s*(?:([^|\n\]]+)\s*\|\s*)?(data:image\/[^\n\]]+|data:image\/svg\+xml[^\n\]]+|[A-Za-z0-9+/=]{100,})\]/gi,
+    (_match, prefix, title, base64Url) => {
       const cleanTitle = (title || 'Hình minh họa').trim();
-      if (base64Url && base64Url.startsWith('data:image')) {
+      if (base64Url && (base64Url.startsWith('data:image') || base64Url.startsWith('data:'))) {
         registerInlineImage(cleanTitle, base64Url.trim());
       }
-      return `[HÌNH: ${cleanTitle}]`;
+      const pUpper = (prefix || '').toUpperCase();
+      const p = pUpper.includes('SƠ') || pUpper.includes('SO') || pUpper.includes('DIAG') || pUpper.includes('FORM') ? 'SƠ ĐỒ' : 'HÌNH';
+      return `[${p}: ${cleanTitle}]`;
     }
   );
 }
@@ -240,6 +251,34 @@ export function insertImageAtCursor(
   const trimmedAfter = after.startsWith('\n') ? after.slice(1) : after;
 
   const result = `${trimmedBefore}[HÌNH: ${cleanTitle}]\n${trimmedAfter}`;
+  return sanitizeInlineImageTagsInText(result);
+}
+
+/**
+ * Inserts a clean formation diagram tag at cursor position:
+ * ALWAYS saves the diagram SVG in registry so only [SƠ ĐỒ: Tên sơ đồ] appears in the text!
+ */
+export function insertFormationDiagramAtCursor(
+  originalText: string,
+  cursorStart: number,
+  cursorEnd: number,
+  diagramName: string,
+  svgDataUrl: string
+): string {
+  const cleanTitle = (diagramName || 'Sơ đồ đội hình').replace(/[\[\]|\n]/g, '').trim();
+
+  // Register diagram SVG into registry
+  if (svgDataUrl) {
+    registerInlineImage(cleanTitle, svgDataUrl);
+  }
+
+  const before = originalText.slice(0, Math.max(0, cursorStart));
+  const after = originalText.slice(Math.max(0, cursorEnd));
+
+  const trimmedBefore = before.endsWith('\n') ? before : before ? `${before}\n` : '';
+  const trimmedAfter = after.startsWith('\n') ? after.slice(1) : after;
+
+  const result = `${trimmedBefore}[SƠ ĐỒ: ${cleanTitle}]\n${trimmedAfter}`;
   return sanitizeInlineImageTagsInText(result);
 }
 
