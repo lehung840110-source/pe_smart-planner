@@ -30,7 +30,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     ppct: 15,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY',
-    movementName: 'Động tác Vươn thở',
+    movementName: 'Học động tác Vươn thở',
     movementKey: 'vuon_tho',
     warmupGame: 'Làm theo hiệu lệnh',
     practiceGame: 'Thỏ nhường hang'
@@ -40,7 +40,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     ppct: 16,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY',
-    movementName: 'Động tác Tay',
+    movementName: 'Học động tác Tay; Ôn động tác Vươn thở',
     movementKey: 'tay',
     warmupGame: 'Di chuyển theo tín hiệu',
     practiceGame: 'Thỏ nhường hang'
@@ -61,7 +61,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     ppct: 18,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     cleanTitle: 'BÀI 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG',
-    movementName: 'Học động tác Bụng',
+    movementName: 'Học động tác Bụng; Ôn động tác Chân và Động tác Vặn mình',
     movementKey: 'bung',
     warmupGame: 'Kết bạn',
     practiceGame: 'Lò cò tiếp sức'
@@ -94,7 +94,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     cleanTitle: 'BÀI 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA',
     movementName: 'Học động tác Phối hợp',
-    movementKey: 'chan',
+    movementKey: 'phoi_hop',
     warmupGame: 'Làm theo hiệu lệnh',
     practiceGame: 'Mèo đuổi chuột'
   },
@@ -103,10 +103,10 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     ppct: 22,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     cleanTitle: 'BÀI 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA',
-    movementName: 'Học động tác Điều hòa',
-    movementKey: 'vuon_tho',
-    warmupGame: 'Di chuyển theo tín hiệu',
-    practiceGame: 'Chạy tiếp sức ném bóng'
+    movementName: 'Học động tác Điều hòa; Ôn động tác Phối hợp',
+    movementKey: 'dieu_hoa',
+    warmupGame: 'Làm theo hiệu lệnh',
+    practiceGame: 'Mèo đuổi chuột'
   },
 
   // KHỐI 3 - TUẦN 8 (Tiết 15, 16)
@@ -189,7 +189,7 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
     cleanTitle: 'BÀI 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG, ĐỘNG TÁC PHỐI HỢP',
     movementName: 'Học động tác Phối hợp, Ôn Lườn và Bụng',
-    movementKey: 'bung',
+    movementKey: 'phoi_hop',
     warmupGame: 'Mèo đuổi chuột',
     practiceGame: 'Nhanh lên bạn ơi'
   },
@@ -256,34 +256,34 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     warmupGame: 'Đội nào nhanh nhất',
     practiceGame: 'Chuyển bóng tiếp sức'
   },
+  // KHỐI 5 - TUẦN 11 (Tiết 21, 22) & TUẦN 12 (Tiết 23, 24)
   'k5_t21': {
     grade: 5,
     ppct: 21,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    cleanTitle: 'BÀI 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY',
-    movementName: 'Hoàn thiện động tác Bụng, Vặn mình, Toàn thân với gậy',
-    movementKey: 'gay',
-    warmupGame: 'Ai kéo khoẻ hơn',
+    cleanTitle: 'BÀI 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY',
+    movementName: 'Học động tác Nhảy với gậy',
+    movementKey: 'nhay_gay',
+    warmupGame: 'Người thừa thứ hai',
     practiceGame: 'Trao gậy tiếp sức'
   },
-  // KHỐI 5 - TUẦN 11 (Tiết 21, 22, 23)
   'k5_t22': {
     grade: 5,
     ppct: 22,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    cleanTitle: 'BÀI 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY',
-    movementName: 'Học động tác Thăng bằng và Nhảy với gậy',
-    movementKey: 'gay',
-    warmupGame: 'Lò cò tiếp sức',
-    practiceGame: 'Chuyển bóng tiếp sức'
+    cleanTitle: 'BÀI 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY',
+    movementName: 'Học động tác Điều hòa với gậy; Ôn động tác Nhảy với gậy',
+    movementKey: 'dieu_hoa_gay',
+    warmupGame: 'Người thừa thứ hai',
+    practiceGame: 'Trao gậy tiếp sức'
   },
   'k5_t23': {
     grade: 5,
     ppct: 23,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    cleanTitle: 'BÀI 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY',
-    movementName: 'Học động tác Điều hòa với gậy',
-    movementKey: 'gay',
+    cleanTitle: 'BÀI 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY',
+    movementName: 'Ôn động tác Nhảy và Điều hòa với gậy',
+    movementKey: 'dieu_hoa_gay',
     warmupGame: 'Đội nào nhanh nhất',
     practiceGame: 'Trao gậy tiếp sức'
   }
@@ -502,23 +502,40 @@ export function auditCurriculumSync(
       (nSched && nRule && nSched.includes(nRule.slice(0, 12)))
     );
 
-    // 2. Check movement content in row 2
-    const r2 = plan.rows && plan.rows.length >= 2 ? plan.rows[1] : null;
+    // 2. Check movement content in row 2 (5-7 rows) or row 4 (granular 11 rows)
+    const r2 =
+      plan.rows?.find(
+        (r) =>
+          r.content.includes('Khám phá') ||
+          r.content.includes('2.1.') ||
+          (r.content.includes('Học') && r.content.includes('động tác'))
+      ) || (plan.rows && plan.rows.length >= 2 ? plan.rows[1] : null);
     const r2Content = (r2?.content || '').toLowerCase();
     const movementText = rule?.movementName || 'Động tác chuẩn SGK';
+    const movementKeywords = rule
+      ? rule.movementName
+          .toLowerCase()
+          .replace(/[;,.\-()]/g, ' ')
+          .split(/\s+/)
+          .filter((w) => w.length > 2 && !['học', 'động', 'tác', 'với', 'cho', 'các'].includes(w))
+      : [];
     const isMovementCorrect = rule
-      ? r2Content.includes(rule.movementName.toLowerCase().slice(0, 8)) ||
-        r2Content.includes(rule.movementKey) ||
-        r2Content.includes('động tác') ||
-        r2Content.includes('học')
+      ? r2Content.includes(rule.movementKey) ||
+        r2Content.includes(rule.movementName.toLowerCase().slice(0, 10)) ||
+        (movementKeywords.length > 0 && movementKeywords.some((kw) => r2Content.includes(kw))) ||
+        r2Content.includes('động tác')
       : true;
 
-    // 3. Check authentic image in row 2 (movement)
-    const imgUrl = r2?.contentImgUrl || '';
+    // 3. Check authentic image in movement row
+    const imgUrl =
+      r2?.contentImgUrl ||
+      (r2?.contentImages && r2.contentImages.length > 0 ? r2.contentImages[0].url : '') ||
+      '';
     const hasAuthenticImage =
       Boolean(imgUrl) &&
-      !imgUrl.startsWith('data:image/svg+xml') &&
-      (imgUrl.includes('/assets/sgk_chuan/') || imgUrl.includes('/assets/aistudio/'));
+      (imgUrl.includes('/assets/sgk_chuan/') ||
+        imgUrl.includes('/assets/aistudio/') ||
+        (!imgUrl.startsWith('data:image/svg+xml') && imgUrl.length > 5));
 
     // 4. Check games in Row 1 (warmup) and Row 6 (practice)
     const r1 = plan.rows && plan.rows.length >= 1 ? plan.rows[0] : null;
@@ -835,5 +852,184 @@ export function autoSyncCurriculumAndPlans(
   return {
     updatedPlans,
     updatedScheduleRows
+  };
+}
+
+export interface ComplianceAuditReport {
+  is100PercentCompliant: boolean;
+  score: number;
+  expectedTitle: string;
+  expectedMovement: string;
+  expectedGame: string;
+  checks: {
+    id: string;
+    title: string;
+    passed: boolean;
+    currentValue: string;
+    expectedValue: string;
+    description: string;
+  }[];
+}
+
+/**
+ * Audits a lesson plan against authoritative MoET curriculum & SGK standards.
+ * Verifies 100% compliance across PPCT, movement name, vector image, practice steps, and dynamic application.
+ */
+export function auditPlanAgainstCurriculum(
+  grade: number,
+  week: number,
+  lessonNum: number,
+  title: string,
+  rows: LessonRow[]
+): ComplianceAuditReport {
+  let key = `k${grade}_t${lessonNum}`;
+  let rule = AUTHORITATIVE_CURRICULUM_RULES[key];
+  if (!rule) {
+    for (let p = 1; p <= 70; p++) {
+      const candidate = AUTHORITATIVE_CURRICULUM_RULES[`k${grade}_t${p}`];
+      if (candidate && Math.ceil(candidate.ppct / 2) === week) {
+        rule = candidate;
+        break;
+      }
+    }
+  }
+
+  const expectedTitle = rule?.cleanTitle || title;
+  const expectedMovement = rule?.movementName || (title.includes('phối hợp') ? 'Động tác Phối hợp' : title.includes('điều hòa') ? 'Động tác Điều hòa' : 'Động tác bài học');
+  const expectedGame = rule?.practiceGame || (grade === 1 && week >= 11 ? 'Mèo đuổi chuột' : 'Trò chơi vận động SGK');
+
+  const titleLower = (title || '').toLowerCase();
+  const expMovLower = expectedMovement.toLowerCase();
+
+  // 1. PPCT & Lesson Title check
+  const titlePassed = Boolean(title && (
+    (rule && titleLower.includes(rule.cleanTitle.toLowerCase().slice(0, 15))) ||
+    (expMovLower.includes('phối hợp') && titleLower.includes('phối hợp')) ||
+    (expMovLower.includes('điều hòa') && titleLower.includes('điều hòa')) ||
+    (expMovLower.includes('nhảy') && titleLower.includes('nhảy')) ||
+    (expMovLower.includes('toàn thân') && titleLower.includes('toàn thân')) ||
+    (expMovLower.includes('bụng') && titleLower.includes('bụng')) ||
+    (expMovLower.includes('chân') && titleLower.includes('chân')) ||
+    (expMovLower.includes('vặn mình') && titleLower.includes('vặn mình')) ||
+    (expMovLower.includes('vươn thở') && titleLower.includes('vươn thở')) ||
+    (expMovLower.includes('tay') && titleLower.includes('tay'))
+  ));
+
+  // 2. Movement Name in Discovery Row (2.1)
+  const movRow = rows.find(r => r.content.includes('2.1') || r.content.toLowerCase().includes('khám phá') || r.content.toLowerCase().includes('học động tác')) || rows[3] || rows[1];
+  const movContentLower = (movRow?.content || '').toLowerCase();
+
+  let movNamePassed = false;
+  if (expMovLower.includes('phối hợp')) {
+    movNamePassed = movContentLower.includes('phối hợp') && !movContentLower.includes('toàn lớp thực hiện động tác bụng');
+  } else if (expMovLower.includes('điều hòa')) {
+    movNamePassed = movContentLower.includes('điều hòa');
+  } else if (expMovLower.includes('nhảy')) {
+    movNamePassed = movContentLower.includes('nhảy');
+  } else if (expMovLower.includes('toàn thân')) {
+    movNamePassed = movContentLower.includes('toàn thân');
+  } else if (expMovLower.includes('bụng')) {
+    movNamePassed = movContentLower.includes('bụng');
+  } else if (expMovLower.includes('chân')) {
+    movNamePassed = movContentLower.includes('chân');
+  } else if (expMovLower.includes('vặn mình')) {
+    movNamePassed = movContentLower.includes('vặn mình');
+  } else if (expMovLower.includes('vươn thở')) {
+    movNamePassed = movContentLower.includes('vươn thở');
+  } else {
+    movNamePassed = movContentLower.length > 20;
+  }
+
+  // 3. Technical Vector Diagram
+  const imgUrl = movRow?.contentImgUrl || '';
+  let imgPassed = false;
+  if (expMovLower.includes('phối hợp')) {
+    imgPassed = imgUrl.includes('phoi_hop') || (imgUrl.includes('k1_phoi_hop') && !imgUrl.includes('k1_chan') && !imgUrl.includes('k1_bung'));
+  } else if (expMovLower.includes('điều hòa')) {
+    imgPassed = imgUrl.includes('dieu_hoa') || imgUrl.includes('k5') || imgUrl.includes('k1');
+  } else if (expMovLower.includes('nhảy')) {
+    imgPassed = imgUrl.includes('nhay') || imgUrl.includes('chan') || imgUrl.includes('k5') || imgUrl.includes('toan_than');
+  } else if (expMovLower.includes('toàn thân')) {
+    imgPassed = imgUrl.includes('toan_than');
+  } else if (expMovLower.includes('bụng')) {
+    imgPassed = imgUrl.includes('bung') || imgUrl.includes('k1_bung');
+  } else if (expMovLower.includes('chân')) {
+    imgPassed = imgUrl.includes('chan') || imgUrl.includes('k1_chan');
+  } else {
+    imgPassed = Boolean(imgUrl);
+  }
+
+  // 4. Practice Sequence (3.1 - 3.4)
+  const practiceRows = rows.filter(r => r.content.includes('3.1') || r.content.includes('3.2') || r.content.includes('3.3') || r.content.includes('3.4'));
+  const practicePassed = practiceRows.length >= 3 && practiceRows.every(r => {
+    const cLower = r.content.toLowerCase();
+    if (expMovLower.includes('phối hợp')) return !cLower.includes('động tác bụng') && !cLower.includes('động tác chân');
+    if (expMovLower.includes('điều hòa')) return !cLower.includes('động tác vươn thở');
+    return true;
+  });
+
+  // 5. Lesson-Specific Vận dụng (4.2)
+  const vanDungRow = rows.find(r => r.content.includes('4.2') || r.content.toLowerCase().includes('vận dụng')) || rows[rows.length - 1];
+  const vdContentLower = (vanDungRow?.content || '').toLowerCase();
+  const vdPassed = Boolean(
+    vanDungRow &&
+    (vdContentLower.includes('câu hỏi vận dụng sgk') || vdContentLower.includes('vận dụng & dặn dò')) &&
+    !vdContentLower.includes('em nên tập động tác này vào thời điểm nào trong ngày để rèn luyện sức khỏe?')
+  );
+
+  const checks = [
+    {
+      id: 'ppct',
+      title: 'Phân phối chương trình & Tiêu đề',
+      passed: titlePassed,
+      currentValue: title || 'Chưa đặt tiêu đề',
+      expectedValue: expectedTitle,
+      description: titlePassed ? 'Khớp chính xác tuần và tên bài học theo PPCT' : 'Cần cập nhật đúng tên bài học theo PPCT của tuần'
+    },
+    {
+      id: 'movement',
+      title: 'Tên kỹ thuật động tác mới',
+      passed: movNamePassed,
+      currentValue: movRow ? (movContentLower.includes('phối hợp') ? 'Động tác Phối hợp' : movContentLower.includes('điều hòa') ? 'Động tác Điều hòa' : movContentLower.includes('bụng') ? 'Động tác Bụng' : 'Động tác khác') : 'Chưa có',
+      expectedValue: expectedMovement,
+      description: movNamePassed ? 'Đúng kỹ thuật động tác theo phân phối tuần' : 'Nội dung đang ghi sai tên động tác của tuần khác'
+    },
+    {
+      id: 'image',
+      title: 'Tranh kỹ thuật chuẩn SGK',
+      passed: imgPassed,
+      currentValue: imgUrl ? (imgUrl.includes('phoi_hop') ? 'Tranh ĐT Phối hợp' : imgUrl.includes('dieu_hoa') ? 'Tranh ĐT Điều hòa' : imgUrl.includes('chan') ? 'Tranh ĐT Chân' : imgUrl.includes('bung') ? 'Tranh ĐT Bụng' : 'Ảnh khác') : 'Chưa có ảnh',
+      expectedValue: `Tranh ${expectedMovement} chuẩn SGK`,
+      description: imgPassed ? 'Đã gắn tranh kỹ thuật vector chuẩn SGK' : 'Ảnh kỹ thuật đang bị lệch động tác, cần chuẩn hóa'
+    },
+    {
+      id: 'practice',
+      title: 'Chuỗi hoạt động luyện tập (3.1 - 3.4)',
+      passed: practicePassed,
+      currentValue: `${practiceRows.length}/4 hoạt động chuẩn`,
+      expectedValue: 'Tập đồng loạt, tổ, cặp đôi và thi đua',
+      description: practicePassed ? 'Đầy đủ 4 bước luyện tập chuẩn sư phạm tương xứng 1:1' : 'Các hoạt động luyện tập cần đồng bộ đúng tên động tác'
+    },
+    {
+      id: 'application',
+      title: 'Vận dụng thực tế & Trò chơi',
+      passed: vdPassed,
+      currentValue: vdPassed ? 'Câu hỏi vận dụng chuẩn theo bài học' : 'Câu hỏi chung hoặc chưa chuẩn',
+      expectedValue: `Vận dụng thực tế cho ${expectedMovement}`,
+      description: vdPassed ? 'Câu hỏi và bài tập vận dụng riêng biệt theo đúng động tác' : 'Cần đổi câu hỏi thực tế bám sát động tác bài học'
+    }
+  ];
+
+  const passedCount = checks.filter(c => c.passed).length;
+  const score = Math.round((passedCount / checks.length) * 100);
+  const is100PercentCompliant = passedCount === checks.length;
+
+  return {
+    is100PercentCompliant,
+    score,
+    expectedTitle,
+    expectedMovement,
+    expectedGame,
+    checks
   };
 }

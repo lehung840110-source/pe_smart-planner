@@ -560,6 +560,19 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     hsTask: '- Tự giác quan sát và sửa tư thế cùng bạn.'
   },
   {
+    id: 'mv_k1_phoi_hop',
+    name: 'Động tác Phối hợp',
+    grade: 1,
+    keywords: ['phối hợp', 'phoi hop', 'động tác phối hợp', 'bài 3'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái chếch trước, khuỵu gối chân trước, chân sau thẳng', 'Hai tay vươn chếch cao chữ V', 'Cúi gập thân sâu hai tay chạm mũi chân', 'Đứng thẳng hai tay dang ngang'],
+    commonErrors: ['Chân sau bị chùng gối', 'Cúi gập người bị co gối'],
+    svgDataUrl: '/assets/sgk_chuan/k1_phoi_hop.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- Làm mẫu kết hợp phân tích nhịp: nhịp 1 bước khuỵu gối, nhịp 2 gập sâu giữ chân thẳng, nhịp 3 mở rộng lồng ngực.',
+    hsTask: '- Tập mô phỏng theo nhịp hô chậm, giữ thăng bằng chân trước chân sau.'
+  },
+  {
     id: 'mv_k1_toan_than',
     name: 'Động tác Toàn thân',
     grade: 1,
@@ -567,7 +580,7 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     category: 'dong_tac_moi',
     cues: ['Bước chân trái chếch trước, khuỵu gối', 'Chân sau thẳng, hai tay vươn chếch cao', 'Đầu ngửa, trọng tâm dồn chân trước'],
     commonErrors: ['Chân sau không thẳng', 'Trọng tâm không vững'],
-    svgDataUrl: '/assets/sgk_chuan/k1_chan.jpg',
+    svgDataUrl: '/assets/sgk_chuan/k1_phoi_hop.svg',
     defaultLvd: "5 - 7'",
     gvExplanation: '- Phân tích cách dồn trọng tâm vào chân trước và kéo căng cơ toàn thân.',
     hsTask: '- Thực hiện theo cặp đôi quan sát hỗ trợ nhau.'
@@ -576,14 +589,14 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     id: 'mv_k1_dieu_hoa',
     name: 'Động tác Điều hòa',
     grade: 1,
-    keywords: ['điều hòa', 'dieu hoa', 'thả lỏng'],
+    keywords: ['điều hòa', 'dieu hoa', 'thả lỏng', 'lắc cổ tay'],
     category: 'dong_tac_moi',
-    cues: ['Bước chân nhẹ nhàng, nâng đùi vuông góc', 'Hai tay dang ngang lắc cổ tay thả lỏng', 'Hít thở sâu, thư giãn toàn thân'],
+    cues: ['Bước chân nhẹ nhàng, chạm bằng mũi chân', 'Hai tay đưa trước/sang ngang lắc cổ tay nhẹ nhàng', 'Hít thở sâu, thả lỏng toàn thân'],
     commonErrors: ['Gồng cứng cơ bắp', 'Không điều hòa nhịp thở'],
-    svgDataUrl: '/assets/sgk_chuan/k1_vuon_tho.jpg',
+    svgDataUrl: '/assets/sgk_chuan/k1_dieu_hoa.svg',
     defaultLvd: "5 - 7'",
-    gvExplanation: '- Hướng dẫn HS cách thả lỏng các khớp và hít thở nhịp nhàng.',
-    hsTask: '- Lắng nghe nhạc hoặc nhịp hô chậm để điều hòa hô hấp.'
+    gvExplanation: '- Hướng dẫn HS cách thả lỏng các khớp và hít thở nhịp nhàng sâu êm.',
+    hsTask: '- Lắng nghe nhạc hoặc nhịp hô chậm để điều hòa hô hấp và phục hồi sức khỏe.'
   },
   {
     id: 'mv_k1_nhay',
@@ -705,6 +718,32 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     defaultLvd: "8 - 10'",
     gvExplanation: '- Phân tích từng nhịp liên hoàn khuỵu gối, gập thân và vươn người kiễng gót.\n- Uốn nắn tư thế dồn trọng tâm thăng bằng cho học sinh.',
     hsTask: '- Phối hợp nhịp nhàng giữa tay, chân và thân mình theo nhịp đếm 2x8 nhịp.'
+  },
+  {
+    id: 'mv_k5_nhay_gay',
+    name: 'Động tác Nhảy với gậy (Khối 5)',
+    grade: 5,
+    keywords: ['nhảy với gậy', 'gậy nhảy', 'động tác nhảy với gậy', 'nhay voi gay', 'bật nhảy với gậy'],
+    category: 'dong_tac_moi',
+    cues: ['Bật nhảy tách chân sang ngang nâng gậy lên cao qua đầu', 'Bật nhảy khép chân hạ gậy về trước đùi', 'Tiếp đất êm bằng nửa trước bàn chân'],
+    commonErrors: ['Tiếp đất mạnh bằng cả bàn chân', 'Gậy bị vung lệch không kiểm soát'],
+    svgDataUrl: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- Phân tích kỹ thuật bật nhảy hoãn xung tiếp đất nhẹ nhàng bằng mũi chân.\n- Nhắc nhở cầm chắc gậy khi nhảy để đảm bảo an toàn tuyệt đối.',
+    hsTask: '- Cầm chắc gậy, bật nhảy nhịp nhàng tách - khép chân theo khẩu lệnh của giáo viên.'
+  },
+  {
+    id: 'mv_k5_dieu_hoa_gay',
+    name: 'Động tác Điều hòa với gậy (Khối 5)',
+    grade: 5,
+    keywords: ['điều hòa với gậy', 'gậy điều hòa', 'động tác điều hòa với gậy', 'dieu hoa voi gay', 'thả lỏng với gậy'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân sang ngang nâng gậy lên cao hít sâu bằng mũi', 'Hạ gậy xuống trước đùi thở ra chậm rãi bằng miệng', 'Thả lỏng toàn bộ các khớp'],
+    commonErrors: ['Thực hiện vội vàng', 'Không kết hợp hít sâu thở chậm'],
+    svgDataUrl: '/assets/sgk_chuan/k5_vuon_tho_tay_gay.jpg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- Hướng dẫn học sinh hít sâu khi nâng gậy và thở ra từ từ khi hạ gậy.\n- Giúp cơ thể phục hồi sau các bài tập vận động.',
+    hsTask: '- Nâng hạ gậy nhịp nhàng theo hơi thở sâu, thả lỏng toàn thân.'
   },
 
   // Bổ sung các chuyển động chuẩn khớp hoàn toàn chương trình SGK cả 3 khối:

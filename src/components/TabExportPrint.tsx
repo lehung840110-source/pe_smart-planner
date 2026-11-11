@@ -94,6 +94,7 @@ interface TabExportPrintProps {
   onUpdateMasterPlan?: (updated: MasterPlanItem) => void;
   onNavigateToLibrary?: () => void;
   onOpenGoogleDrive?: () => void;
+  onNavigateToGenerator?: () => void;
 }
 
 export const TabExportPrint: React.FC<TabExportPrintProps> = ({
@@ -112,7 +113,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   showToast,
   onUpdateMasterPlan,
   onNavigateToLibrary,
-  onOpenGoogleDrive
+  onOpenGoogleDrive,
+  onNavigateToGenerator
 }) => {
   // 1. Dynamic Week Selection (Weeks 1 to 35)
   const [selectedWeek, setSelectedWeek] = useState<number>(() => {
@@ -135,7 +137,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       const saved = localStorage.getItem(`gdtc_schedule_w${w}`);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const sanitized = parsed.map((r: WeeklyMasterScheduleRow) => {
+            if (r.grade === 5 && r.lessonTitle?.toLowerCase().includes('thăng bằng')) {
+              return {
+                ...r,
+                lessonTitle: r.lessonTitle.replace(/động tác thăng bằng,\s*/gi, '').replace(/thăng bằng,\s*/gi, '')
+              };
+            }
+            return r;
+          });
+          return sanitized;
+        }
       }
     } catch (e) {
       console.error(e);
@@ -238,7 +251,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       if (savedSchedule) {
         const parsed = JSON.parse(savedSchedule);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setWeeklyScheduleRows(parsed);
+          const sanitized = parsed.map((r: WeeklyMasterScheduleRow) => {
+            if (r.grade === 5 && r.lessonTitle?.toLowerCase().includes('thăng bằng')) {
+              return {
+                ...r,
+                lessonTitle: r.lessonTitle.replace(/động tác thăng bằng,\s*/gi, '').replace(/thăng bằng,\s*/gi, '')
+              };
+            }
+            return r;
+          });
+          setWeeklyScheduleRows(sanitized);
         } else {
           setWeeklyScheduleRows(selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek));
         }
@@ -818,7 +840,6 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       resolvePlan(3, ppctG3.periods[1], 'k3_t16'),
       resolvePlan(5, ppctG5.periods[0], 'k5_t15'),
       resolvePlan(5, ppctG5.periods[1], 'k5_t16'),
-      resolvePlan(5, ppctG5.periods[2], 'k5_t17'),
     ];
 
     // Check if saved plans exist in localStorage for this week
@@ -1576,6 +1597,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <span>⚡ Tách 3.1, 3.2, 3.3 & Cân Bằng Các Ô (100-120 Từ)</span>
             </button>
 
+            {onNavigateToGenerator && (
+              <button
+                onClick={onNavigateToGenerator}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+                title="Chuyển sang Tab 5 (Sinh Giáo Án Tuần Mới) để tùy chỉnh sâu nội dung, thêm/xóa ảnh và kiểm tra rà soát 100% SGK"
+              >
+                <Edit3 className="w-4 h-4 text-amber-300" />
+                <span>Chỉnh Sửa Tại Tab 5</span>
+              </button>
+            )}
 
             <button
               onClick={handleSaveWeekPlans}
@@ -1583,7 +1614,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               title="Lưu toàn bộ chỉnh sửa của 3 khối vào cơ sở dữ liệu vĩnh viễn"
             >
               <Save className="w-4 h-4" />
-              <span>Lưu Bộ 3 Giáo Án Tuần {selectedWeek}</span>
+              <span>Lưu Bộ 3 Khối (6 Tiết) Tuần {selectedWeek}</span>
             </button>
 
             <button
@@ -2577,6 +2608,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {onNavigateToGenerator && (
+                      <button
+                        type="button"
+                        onClick={onNavigateToGenerator}
+                        className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-2xs flex items-center gap-1.5 transition"
+                        title="Chuyển sang Tab 5 (Sinh Giáo Án Tuần Mới) để chỉnh sửa toàn diện nội dung, thêm/xóa dòng và chèn hình ảnh"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 text-white" />
+                        <span>Chỉnh sửa tại Tab 5</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => handleNormalizePlanRows1to1(plan.id)}

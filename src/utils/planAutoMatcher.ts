@@ -17,11 +17,21 @@ export interface AutoMatchResult {
  * -> ["Động tác Chân", "Động tác Lườn (Bụng)"]
  */
 export function extractMovementNamesFromTitle(title: string): string[] {
-  const results: string[] = [];
   const cleanTitle = title.replace(/^bài\s*\d+\s*[:\-]?\s*/i, '').trim();
 
-  // Common movement patterns in GDPT 2018
+  // Common movement patterns in GDPT 2018 (ordered by specificity)
   const knownMovements = [
+    'Động tác Vươn thở với gậy',
+    'Động tác Tay với gậy',
+    'Động tác Chân với gậy',
+    'Động tác Vặn mình với gậy',
+    'Động tác Bụng với gậy',
+    'Động tác Toàn thân với gậy',
+    'Động tác Phối hợp với gậy',
+    'Động tác Thăng bằng với gậy',
+    'Động tác Nhảy với gậy',
+    'Động tác Điều hòa với gậy',
+    'Động tác với gậy',
     'Động tác Vươn thở',
     'Động tác Tay',
     'Động tác Chân',
@@ -29,35 +39,168 @@ export function extractMovementNamesFromTitle(title: string): string[] {
     'Động tác Bụng',
     'Động tác Vặn mình',
     'Động tác Toàn thân',
+    'Động tác Phối hợp',
+    'Động tác Thăng bằng',
     'Động tác Nhảy',
     'Động tác Điều hòa',
-    'Động tác Đi đều, Đứng lại',
-    'Đi đều vòng phải',
-    'Đi đều vòng trái',
     'Đổi chân khi đi đều sai nhịp',
-    'Động tác với gậy',
-    'Động tác Vươn thở với gậy',
-    'Động tác Tay với gậy',
-    'Động tác Chân với gậy',
-    'Động tác Vặn mình với gậy',
-    'Động tác Bụng với gậy',
-    'Động tác Phối hợp với gậy'
+    'Động tác Đi đều, Đứng lại',
+    'Đi đều, Đứng lại',
+    'Đi đều vòng phải',
+    'Đi đều vòng trái'
   ];
 
+  const matches: Array<{ name: string; index: number }> = [];
   for (const km of knownMovements) {
     const reg = new RegExp(km.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    if (reg.test(cleanTitle)) {
-      results.push(km);
+    const match = reg.exec(cleanTitle);
+    if (match) {
+      const isSubMatch = matches.some((m) => Math.abs(m.index - match.index) < 6 && m.name.length > km.length);
+      if (!isSubMatch) {
+        matches.push({ name: km, index: match.index });
+      }
     }
   }
 
-  // Fallback: split by comma if none matched
-  if (results.length === 0) {
-    const parts = cleanTitle.split(/[,;\-]+/).map((s) => s.trim()).filter((s) => s.length > 3);
-    return parts.length > 0 ? parts : [cleanTitle];
+  // Sort by occurrence in title to preserve exact pedagogical sequence
+  matches.sort((a, b) => a.index - b.index);
+
+  if (matches.length > 0) {
+    return matches.map((m) => m.name);
   }
 
-  return results;
+  // Fallback: split by comma if none matched
+  const parts = cleanTitle
+    .replace(/\s*\([^)]*\)/g, '')
+    .split(/[,;\-]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 3 && !s.toLowerCase().startsWith('tiết'));
+  return parts.length > 0 ? parts : [cleanTitle];
+}
+
+export interface MovementPartitionResult {
+  allMovements: string[];
+  newMovements: string[];
+  reviewMovements: string[];
+  isPeriod2: boolean;
+  displayMovementName: string;
+  summaryExplanation: string;
+}
+
+/**
+ * Authoritative Pedagogical Rule (GDPT 2018):
+ * - N = 2:
+ *   + Tiết 1: Học động tác 1.
+ *   + Tiết 2: Học động tác 2 + Ôn động tác 1.
+ * - N = 3:
+ *   + Tiết 1: Học 2 động tác đầu (m1, m2).
+ *   + Tiết 2: Học động tác thứ 3 (m3) + Ôn 2 động tác của Tiết 1 (m1, m2).
+ * - N = 4:
+ *   + Tiết 1: Học 2 động tác đầu (m1, m2).
+ *   + Tiết 2: Học 2 động tác sau (m3, m4) + Ôn 2 động tác của Tiết 1 (m1, m2).
+ * - N = 5:
+ *   + Tiết 1: Học 3 động tác đầu (m1, m2, m3).
+ *   + Tiết 2: Học 2 động tác sau (m4, m5) + Ôn 3 động tác của Tiết 1 (m1, m2, m3).
+ * - N > 5:
+ *   + Tiết 1: Học ceil(N/2) động tác đầu.
+ *   + Tiết 2: Học phần còn lại + Ôn toàn bộ các động tác của Tiết 1.
+ */
+export function partitionLessonMovements(
+  movements: string[],
+  isPeriod2: boolean
+): MovementPartitionResult {
+  const count = movements.length;
+
+  if (count <= 1) {
+    const single = movements[0] || 'động tác thể dục';
+    return {
+      allMovements: movements,
+      newMovements: isPeriod2 ? [] : movements,
+      reviewMovements: isPeriod2 ? movements : [],
+      isPeriod2,
+      displayMovementName: isPeriod2 ? `Ôn tập ${single}` : `Học ${single}`,
+      summaryExplanation: isPeriod2
+        ? `Tiết 2: Ôn tập và hoàn thiện kỹ thuật ${single}`
+        : `Tiết 1: Học kỹ thuật mới ${single}`
+    };
+  }
+
+  let newMovements: string[] = [];
+  let reviewMovements: string[] = [];
+
+  if (count === 2) {
+    // 2 động tác: Tiết 1 học m1; Tiết 2 học m2 + ôn m1
+    if (!isPeriod2) {
+      newMovements = [movements[0]];
+      reviewMovements = [];
+    } else {
+      newMovements = [movements[1]];
+      reviewMovements = [movements[0]];
+    }
+  } else if (count === 3) {
+    // 3 động tác: Tiết 1 học m1, m2; Tiết 2 học m3 + ôn m1, m2
+    if (!isPeriod2) {
+      newMovements = [movements[0], movements[1]];
+      reviewMovements = [];
+    } else {
+      newMovements = [movements[2]];
+      reviewMovements = [movements[0], movements[1]];
+    }
+  } else if (count === 4) {
+    // 4 động tác: mỗi tiết 2 động tác (Tiết 1: m1, m2; Tiết 2: m3, m4 + ôn m1, m2)
+    if (!isPeriod2) {
+      newMovements = [movements[0], movements[1]];
+      reviewMovements = [];
+    } else {
+      newMovements = [movements[2], movements[3]];
+      reviewMovements = [movements[0], movements[1]];
+    }
+  } else if (count === 5) {
+    // 5 động tác: chia 3, 2 (Tiết 1: m1, m2, m3; Tiết 2: m4, m5 + ôn m1, m2, m3)
+    if (!isPeriod2) {
+      newMovements = [movements[0], movements[1], movements[2]];
+      reviewMovements = [];
+    } else {
+      newMovements = [movements[3], movements[4]];
+      reviewMovements = [movements[0], movements[1], movements[2]];
+    }
+  } else {
+    // > 5 động tác
+    const splitIdx = Math.ceil(count / 2);
+    if (!isPeriod2) {
+      newMovements = movements.slice(0, splitIdx);
+      reviewMovements = [];
+    } else {
+      newMovements = movements.slice(splitIdx);
+      reviewMovements = movements.slice(0, splitIdx);
+    }
+  }
+
+  let displayMovementName = '';
+  if (!isPeriod2) {
+    displayMovementName = `Học ${newMovements.join(' và ')}`;
+  } else {
+    if (newMovements.length > 0 && reviewMovements.length > 0) {
+      displayMovementName = `Học ${newMovements.join(' và ')}; Ôn ${reviewMovements.join(' và ')}`;
+    } else if (newMovements.length > 0) {
+      displayMovementName = `Học ${newMovements.join(' và ')}`;
+    } else {
+      displayMovementName = `Ôn ${reviewMovements.join(' và ')}`;
+    }
+  }
+
+  const summaryExplanation = !isPeriod2
+    ? `Tiết 1: Học mới ${newMovements.join(', ')}`
+    : `Tiết 2: Học mới ${newMovements.join(', ')} kết hợp ôn tập ${reviewMovements.join(', ')} từ Tiết 1`;
+
+  return {
+    allMovements: movements,
+    newMovements,
+    reviewMovements,
+    isPeriod2,
+    displayMovementName,
+    summaryExplanation
+  };
 }
 
 /**
@@ -100,6 +243,9 @@ export interface AccurateMovementDetails {
   gvExplanation: string;
   hsTask: string;
   practiceFocus: string;
+  newMovements?: string[];
+  reviewMovements?: string[];
+  allImages?: Array<{ id: string; url: string; title: string }>;
 }
 
 export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string }> = {
@@ -122,6 +268,14 @@ export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string
   bung: {
     url: '/assets/sgk_chuan/k1_bung.jpg',
     title: 'Động tác Bụng - SGK Lớp 1 (Trang 49)'
+  },
+  phoi_hop: {
+    url: '/assets/sgk_chuan/k1_phoi_hop.svg',
+    title: 'Động tác Phối hợp - SGK GDTC Lớp 1 (Trang 50)'
+  },
+  dieu_hoa: {
+    url: '/assets/sgk_chuan/k1_dieu_hoa.svg',
+    title: 'Động tác Điều hòa - SGK GDTC Lớp 1 (Trang 51)'
   },
   di_deu: {
     url: '/assets/sgk_chuan/k3_di_deu_dung_lai.jpg',
@@ -167,6 +321,18 @@ export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string
     url: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
     title: 'Động tác Toàn thân với gậy - SGK GDTC Lớp 5 (Trang 31)'
   },
+  nhay_gay: {
+    url: '/assets/sgk_chuan/k5_toan_than_voi_gay.jpg',
+    title: 'Động tác Nhảy với gậy - SGK GDTC Lớp 5 (Trang 34)'
+  },
+  dieu_hoa_gay: {
+    url: '/assets/sgk_chuan/k5_vuon_tho_tay_gay.jpg',
+    title: 'Động tác Điều hòa với gậy - SGK GDTC Lớp 5 (Trang 35)'
+  },
+  nhay: {
+    url: '/assets/sgk_chuan/k1_chan.jpg',
+    title: 'Động tác Nhảy - SGK GDTC'
+  },
   thang_bang: {
     url: '/assets/aistudio/0e0e03fc-7060-481d-85f2-da82dde1f3c3_eccfceae.jfif',
     title: 'Động tác Thăng bằng - SGK Lớp 1'
@@ -174,15 +340,271 @@ export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string
 };
 
 /**
+ * Profile containing all technical and pedagogical details for a movement.
+ */
+export interface MovementProfile {
+  key: string;
+  name: string;
+  imgUrl: string;
+  imgTitle: string;
+  steps: string;
+  gv: string;
+  hs: string;
+  practiceFocus: string;
+}
+
+/**
+ * Retrieves single movement technical profile, authentic photo, and pedagogical text.
+ */
+export function getSingleMovementProfile(
+  rawName: string = '',
+  grade: number = 1,
+  userImages: SgkImageItem[] = []
+): MovementProfile {
+  const lower = rawName.toLowerCase();
+  let key = 'vuon_tho';
+  let cleanName = rawName.trim();
+
+  if (lower.includes('phối hợp') || lower.includes('phoi hop')) {
+    key = grade === 5 ? 'toan_than_gay' : 'phoi_hop';
+    cleanName = grade === 5 ? 'Động tác Toàn thân với gậy' : 'Động tác Phối hợp';
+  } else if (lower.includes('điều hòa') || lower.includes('dieu hoa')) {
+    key = grade === 5 ? 'dieu_hoa_gay' : 'dieu_hoa';
+    cleanName = grade === 5 ? 'Động tác Điều hòa với gậy' : 'Động tác Điều hòa';
+  } else if (lower.includes('vươn thở') || lower.includes('vuon tho')) {
+    key = grade === 5 ? 'vuon_tho_tay_gay' : 'vuon_tho';
+    cleanName = grade === 5 ? 'Động tác Vươn thở với gậy' : 'Động tác Vươn thở';
+  } else if (lower.includes('tay')) {
+    key = grade === 5 ? 'vuon_tho_tay_gay' : 'tay';
+    cleanName = grade === 5 ? 'Động tác Tay với gậy' : 'Động tác Tay';
+  } else if (lower.includes('chân') || lower.includes('chan')) {
+    key = grade === 5 ? 'chan_gay' : 'chan';
+    cleanName = grade === 5 ? 'Động tác Chân với gậy' : 'Động tác Chân';
+  } else if (lower.includes('lườn') || lower.includes('luon')) {
+    key = 'luon';
+    cleanName = 'Động tác Lườn';
+  } else if (lower.includes('bụng') || lower.includes('bung')) {
+    key = grade === 5 ? 'bung_gay' : 'bung';
+    cleanName = grade === 5 ? 'Động tác Bụng với gậy' : 'Động tác Bụng';
+  } else if (lower.includes('vặn mình') || lower.includes('van minh')) {
+    key = grade === 5 ? 'van_minh_gay' : 'van_minh';
+    cleanName = grade === 5 ? 'Động tác Vặn mình với gậy' : 'Động tác Vặn mình';
+  } else if (lower.includes('toàn thân') || lower.includes('toan than')) {
+    key = grade === 5 ? 'toan_than_gay' : 'toan_than';
+    cleanName = grade === 5 ? 'Động tác Toàn thân với gậy' : 'Động tác Toàn thân';
+  } else if (lower.includes('nhảy') || lower.includes('nhay')) {
+    key = grade === 5 ? 'nhay_gay' : 'nhay';
+    cleanName = grade === 5 ? 'Động tác Nhảy với gậy' : 'Động tác Nhảy';
+  } else if (lower.includes('thăng bằng') || lower.includes('thang bang')) {
+    // If erroneously present, automatically sanitize to Nhảy với gậy for Grade 5 (GDTC 5 has no thăng bằng)
+    key = grade === 5 ? 'nhay_gay' : 'phoi_hop';
+    cleanName = grade === 5 ? 'Động tác Nhảy với gậy' : 'Động tác Phối hợp';
+  } else if (lower.includes('đi đều') || lower.includes('đứng lại')) {
+    key = lower.includes('ôn') || lower.includes('đổi chân') || lower.includes('sai nhịp') ? 'on_di_deu' : 'di_deu';
+    cleanName = key === 'on_di_deu' ? 'Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp' : 'Động tác Đi đều, Đứng lại';
+  } else if (lower.includes('gậy')) {
+    key = 'gay';
+    cleanName = 'Bài tập thể dục với gậy';
+  }
+
+  // Find authentic textbook image
+  const technicalOnlyImages = userImages.filter((img) => !isGameImage(img));
+  const matchedUserImg = technicalOnlyImages.find((img) => {
+    const t = img.title.toLowerCase();
+    const c = (img.caption || '').toLowerCase();
+    if (t.includes('trò chơi') || t.includes('tro choi')) return false;
+
+    if (key === 'vuon_tho') return t.includes('vươn thở') || c.includes('vươn thở');
+    if (key === 'tay') return (t.includes('động tác tay') || c.includes('động tác tay') || t.includes('tay')) && !t.includes('cổ tay');
+    if (key === 'chan') return (t.includes('động tác chân') || t.includes('chân')) && !t.includes('cổ chân') && !t.includes('vươn thở');
+    if (key === 'luon') return t.includes('lườn') || c.includes('lườn');
+    if (key === 'bung') return (t.includes('bụng') || c.includes('bụng')) && !t.includes('gậy');
+    if (key === 'van_minh') return (t.includes('vặn mình') || c.includes('vặn mình')) && !t.includes('gậy');
+    if (key === 'toan_than') return (t.includes('toàn thân') || c.includes('toàn thân')) && !t.includes('gậy');
+    if (key === 'phoi_hop') return t.includes('phối hợp') || c.includes('phối hợp') || t.includes('k1_phoi_hop');
+    if (key === 'dieu_hoa') return t.includes('điều hòa') || c.includes('điều hòa') || t.includes('k1_dieu_hoa');
+    if (key === 'chan_gay') return (t.includes('chân') || c.includes('chân')) && (t.includes('gậy') || c.includes('gậy'));
+    if (key === 'bung_gay') return (t.includes('bụng') || c.includes('bụng')) && (t.includes('gậy') || c.includes('gậy'));
+    if (key === 'van_minh_gay') return (t.includes('vặn mình') || c.includes('vặn mình')) && (t.includes('gậy') || c.includes('gậy'));
+    if (key === 'toan_than_gay') return (t.includes('toàn thân') || c.includes('toàn thân')) && (t.includes('gậy') || c.includes('gậy'));
+    if (key === 'vuon_tho_tay_gay') return (t.includes('vươn thở') || t.includes('tay')) && (t.includes('gậy') || c.includes('gậy'));
+    if (key === 'on_di_deu') return t.includes('ôn đi đều') || t.includes('đổi chân') || t.includes('sai nhịp');
+    if (key === 'di_deu') return t.includes('đi đều') || c.includes('đi đều');
+    return false;
+  });
+
+  let resolvedImgUrl = '';
+  let resolvedImgTitle = '';
+
+  if (matchedUserImg && !matchedUserImg.imgUrl.startsWith('data:image/svg+xml')) {
+    resolvedImgUrl = matchedUserImg.imgUrl;
+    resolvedImgTitle = matchedUserImg.title;
+  } else if (AUTHENTIC_TEXTBOOK_MAP[key]) {
+    resolvedImgUrl = AUTHENTIC_TEXTBOOK_MAP[key].url;
+    resolvedImgTitle = AUTHENTIC_TEXTBOOK_MAP[key].title;
+  } else if (matchedUserImg) {
+    resolvedImgUrl = matchedUserImg.imgUrl;
+    resolvedImgTitle = matchedUserImg.title;
+  } else {
+    resolvedImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
+    resolvedImgTitle = `Kỹ thuật SGK: ${cleanName}`;
+  }
+
+  let steps = '';
+  let gv = '';
+  let hs = '';
+  let practiceFocus = '';
+
+  switch (key) {
+    case 'phoi_hop':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Bước chân trái ra trước chếch sang trái một bước, khuỵu gối chân trước, chân sau thẳng, đồng thời hai tay đưa ra trước chếch lên cao chữ V, lòng bàn tay hướng vào nhau, ngửa đầu, mắt nhìn theo tay (hít vào).\n- Nhịp 2: Rút chân trái về, đồng thời cúi gập thân sâu, hai tay chạm hai mũi bàn chân, hai chân giữ thẳng, đầu cúi (thở ra).\n- Nhịp 3: Đứng thẳng lên, hai tay dang ngang bằng vai, lòng bàn tay ngửa, ngực căng (hít vào).\n- Nhịp 4: Về TTCB (thở ra).\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 bước chân phải chếch sang phải.`;
+      gv = `- GV giới thiệu Động tác Phối hợp (Bài 3 SGK GDTC Lớp 1), phân tích tác dụng phát triển sức mạnh của cơ đùi, độ dẻo dai của cột sống và khả năng phối hợp nhịp nhàng giữa tay, chân và thân mình.\n- Làm mẫu kỹ thuật 2 - 3 lần theo phương pháp chiều gương kết hợp phân tích nhịp: nhịp 1 bước khuỵu gối vươn tay, nhịp 2 gập sâu giữ chân thẳng, nhịp 3 mở rộng lồng ngực.\n- Cho học sinh quan sát tranh kỹ thuật SGK, nhấn mạnh việc giữ thăng bằng khi dồn trọng tâm vào chân trước.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn kịp thời cho những em chân sau bị chùng hoặc chưa giữ thẳng chân khi cúi gập.\n- Biểu dương tinh thần tập luyện nghiêm túc và động tác chuẩn xác của học sinh.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay an toàn.\n- Chăm chú quan sát động tác thị phạm bước khuỵu gối và vươn tay của thầy cô.\n- Tập mô phỏng theo nhịp hô chậm: chú ý nhịp 1 chân sau thẳng, nhịp 2 hai chân giữ thẳng khi cúi gập tay chạm mũi chân.\n- Tích cực sửa sai tư thế theo góp ý của giáo viên.`;
+      practiceFocus = 'bước khuỵu gối chân trước chân sau thẳng và cúi gập thân phối hợp nhịp nhàng';
+      break;
+
+    case 'tay':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Hai tay đưa ra trước vỗ vào nhau ngang ngực, tiếng vỗ dứt khoát.\n- Nhịp 3: Như nhịp 1 (hai tay dang ngang, lòng bàn tay ngửa).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải bước sang ngang.`;
+      gv = `- GV giới thiệu tên Động tác Tay, nêu rõ tác dụng phát triển sức mạnh khớp vai, cơ cánh tay và tạo tư thế thân trên thẳng đẹp.\n- Thị phạm làm mẫu chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích rõ điểm mấu chốt: nhịp 1 hai tay dang thẳng ngang vai lòng bàn tay ngửa, nhịp 2 vỗ tay trước ngực dứt khoát.\n- Hướng dẫn học sinh đối chiếu với hình ảnh kỹ thuật SGK, lưu ý không để cánh tay chúc xuống dưới hoặc giơ quá cao qua vai.\n- Hô nhịp chậm cho học sinh làm thử; trực tiếp sửa lỗi chùng khuỷu tay và gù lưng cho từng em; nhắc nhở học sinh giữ ngực căng.\n- Động viên, khích lệ cả lớp thực hiện đều và chuẩn xác biên độ.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le giãn cách 1 sải tay để không va chạm tay nhau.\n- Quan sát tỉ mỉ động tác mẫu của GV và hình ảnh kỹ thuật SGK, ghi nhớ độ cao của cánh tay ngang vai.\n- Thực hiện mô phỏng từng nhịp theo nhịp hô chậm của giáo viên; giữ lưng thẳng, ngực căng.\n- Tự giác nhận biết và sửa lỗi sai tư thế theo hướng dẫn của thầy cô.`;
+      practiceFocus = 'hai tay dang thẳng ngang vai và nhịp vỗ tay trước ngực dứt khoát';
+      break;
+
+    case 'chan':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Kiễng gót hai chân, hai tay chống hông (thân thẳng, mắt nhìn thẳng).\n- Nhịp 2: Hạ gót, khuỵu gối sâu, hai tay đưa ra trước song song ngang vai, lòng bàn tay sấp, lưng giữ thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (kiễng gót hai chân, hai tay chống hông).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Chân, phân tích tác dụng tăng cường sức mạnh cơ đùi, khớp gối, cổ chân và rèn luyện khả năng giữ thăng bằng cơ thể.\n- Làm mẫu chuẩn 2 - 3 lần theo phương pháp chiều gương; nhấn mạnh nhịp 1 kiễng cao gót giữ thăng bằng trên nửa trước bàn chân, nhịp 2 khuỵu gối sâu nhưng thân người luôn giữ thẳng, không chúi đầu ra trước.\n- Cho học sinh quan sát tranh kỹ thuật SGK, chỉ rõ vị trí đặt hai tay chống hông và hai tay song song ngang vai.\n- Hô nhịp chậm hướng dẫn lớp tập từng nhịp; phát hiện các lỗi sai (mất thăng bằng ngả nghiêng, cong gập lưng khi khuỵu gối) và trực tiếp uốn nắn sửa sai.\n- Biểu dương tinh thần tập luyện nghiêm túc của học sinh.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay an toàn.\n- Chăm chú quan sát tư thế kiễng gót thăng bằng và cách khuỵu gối lưng thẳng của giáo viên.\n- Mô phỏng động tác theo nhịp đếm chậm; cố gắng giữ thăng bằng không để người chao đảo.\n- Lắng nghe góp ý của thầy cô để hoàn thiện độ sâu của gối và độ thẳng của lưng.`;
+      practiceFocus = 'kiễng gót thăng bằng và khuỵu gối sâu giữ lưng thẳng';
+      break;
+
+    case 'luon':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Nghiêng lườn sâu sang trái, tay trái chống hông, tay phải vươn cao ép sát tai, trọng tâm dồn chân phải.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay dang ngang, lòng bàn tay ngửa).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân bước sang phải và nghiêng lườn sang phải.`;
+      gv = `- GV giới thiệu Động tác Lườn, giải thích tác dụng làm giãn mềm cột sống, phát triển các nhóm cơ liên sườn và rèn luyện độ dẻo dai cơ thể.\n- Làm mẫu chuẩn xác 2 - 3 lần; nhấn mạnh điểm kỹ thuật quan trọng: khi nghiêng người phải giữ thân trên trên một mặt phẳng trán, không gập người ra trước hoặc ngửa ra sau, hai chân giữ thẳng.\n- Cho học sinh xem tranh kỹ thuật SGK, chỉ rõ độ cong của tay vươn trên đầu và tư thế tay chống hông.\n- Hô nhịp chậm cho học sinh tập thử; kịp thời phát hiện và sửa các lỗi sai xoay vặn thân mình thay vì nghiêng lườn.\n- Khen ngợi những em thực hiện độ uốn lườn sâu và đúng kỹ thuật.`;
+      hs = `- Đội hình 4 hàng ngang so le giãn cách 1 sải tay.\n- Quan sát hướng uốn của thân người trên mặt phẳng trán, ghi nhớ nhịp thở đều đặn.\n- Thực hiện từng nhịp chậm rãi, tự cảm nhận độ căng của cơ lườn khi uốn nghiêng.\n- Tích cực sửa sai tư thế tay áp sát tai theo hướng dẫn của giáo viên.`;
+      practiceFocus = 'độ uốn lườn sâu trên mặt phẳng trán và tay vươn sát tai';
+      break;
+
+    case 'bung':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa thẳng lên cao song song, lòng bàn tay hướng vào nhau, đầu ngửa nhẹ.\n- Nhịp 2: Cúi gập thân sâu ra trước, cúi đầu, hai tay hướng xuống chạm hai mu bàn chân, hai chân giữ thẳng.\n- Nhịp 3: Đứng thẳng lên, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải.`;
+      gv = `- GV giới thiệu Động tác Bụng, phân tích tác dụng tăng cường độ dẻo dai của gân kheo cơ đùi sau và săn chắc các nhóm cơ bụng.\n- Làm mẫu trực quan 2 - 3 lần kết hợp phân tích nhịp: nhịp 1 vươn căng hai tay lên cao, nhịp 2 gập sâu thân người thở ra hết, hai chân giữ thẳng không được co gập gối.\n- Cho học sinh quan sát tranh vẽ kỹ thuật SGK, lưu ý tư thế đầu cúi tự nhiên theo thân người.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn cho những em chân còn bị co gập hoặc cúi gập quá vội vàng.\n- Tuyên dương các em giữ được chân thẳng và chạm tay tới mu bàn chân.`;
+      hs = `- Đội hình 4 hàng ngang giãn cách cự ly 1 sải tay.\n- Chăm chú theo dõi tư thế cúi gập thân và giữ thẳng đầu gối của thầy cô.\n- Tập mô phỏng chậm rãi, thở ra hết khi gập thân và hít sâu khi vươn người đứng thẳng.\n- Tự giác điều chỉnh không co gối khi tay với xuống chạm mu bàn chân.`;
+      practiceFocus = 'hai chân giữ thẳng và cúi gập thân sâu thở ra nhịp nhàng';
+      break;
+
+    case 'van_minh':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Vặn mình sang trái 90 độ, hai bàn chân giữ nguyên cố định bám sàn, hai tay giữ ngang vai.\n- Nhịp 3: Như nhịp 1 (về tư thế hai tay dang ngang).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng bước chân phải và vặn mình sang phải.`;
+      gv = `- GV giới thiệu Động tác Vặn mình, nêu rõ tác dụng tăng độ linh hoạt của khớp háng, cột sống và rèn luyện sự khéo léo phối hợp vận động.\n- Làm mẫu kỹ thuật 2 - 3 lần; nhấn mạnh yêu cầu: hai bàn chân phải bám chắc trên mặt sân, chỉ xoay vặn phần thân trên 90 độ, không xoay nhấc gót chân.\n- Hướng dẫn học sinh quan sát hình ảnh SGK, nhắc nhở giữ hai tay ngang bằng vai trong suốt quá trình vặn mình.\n- Hô nhịp chậm hướng dẫn lớp tập luyện; quan sát phát hiện lỗi xoay cả chân hoặc hạ tay xuống thấp để kịp thời nhắc nhở sửa chữa.\n- Biểu dương sự cố gắng và chuyển động dứt khoát của học sinh.`;
+      hs = `- Đội hình 4 hàng ngang so le 1 sải tay.\n- Quan sát góc xoay 90 độ của thân trên và vị trí cố định của hai bàn chân.\n- Thực hiện động tác vặn mình dứt khoát, giữ hai cánh tay thẳng ngang vai.\n- Chỉnh sửa tư thế bàn chân bám chắc mặt sân theo nhắc nhở của thầy cô.`;
+      practiceFocus = 'bàn chân cố định bám sàn và vặn thân trên 90 độ dứt khoát';
+      break;
+
+    case 'toan_than':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Bước chân trái chếch trước, khuỵu gối sâu, chân sau thẳng, hai tay vươn chếch cao chữ V, ngửa đầu.\n- Nhịp 2: Rút chân trái về, cúi gập thân hai tay chạm mũi chân, chân thẳng.\n- Nhịp 3: Đứng thẳng hai tay dang ngang bằng vai, ngực căng.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng bước chân phải chếch trước.`;
+      gv = `- GV giới thiệu Động tác Toàn thân, phân tích tác dụng kéo giãn liên hoàn các nhóm cơ đùi, lưng và cánh tay, nâng cao khả năng phối hợp vận động toàn diện.\n- Thị phạm chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích kỹ thuật dồn trọng tâm lên chân trước khi khuỵu gối và độ căng cơ lưng khi cúi gập.\n- Cho học sinh quan sát tranh ảnh kỹ thuật đính kèm trong SGK, chỉ rõ độ mở của hai chân.\n- Hô nhịp chậm cho học sinh tập mô phỏng; kịp thời uốn nắn tư thế khuỵu gối vững chãi và thẳng chân sau.\n- Khen ngợi những em thực hiện nhịp nhàng, vững vàng thăng bằng.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, khoảng cách 1 sải tay.\n- Quan sát kỹ thuật bước chân chếch trước và khuỵu gối của GV.\n- Tập mô phỏng từng nhịp theo nhịp hô chậm, chú ý giữ thăng bằng chân trước chân sau.\n- Tiếp thu chỉ dẫn để hoàn thiện độ vươn cao của hai tay và độ dẻo thân người.`;
+      practiceFocus = 'dồn trọng tâm chân trước khuỵu gối và phối hợp toàn thân nhịp nhàng';
+      break;
+
+    case 'nhay':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Bật nhảy tách hai chân sang ngang rộng bằng vai, đồng thời hai tay dang ngang bằng vai, lòng bàn tay sấp.\n- Nhịp 2: Bật nhảy khép hai chân về, đồng thời hai tay vỗ vào nhau trên đỉnh đầu.\n- Nhịp 3: Như nhịp 1 (bật nhảy tách chân, hai tay dang ngang).\n- Nhịp 4: Bật nhảy khép chân về TTCB (hạ hai tay xuôi theo thân).\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Nhảy, giải thích tác dụng phát triển sức bật của đôi chân, độ linh hoạt toàn thân và sự hào hứng phấn chấn.\n- Thị phạm mẫu chuẩn 2 - 3 lần; lưu ý điểm an toàn quan trọng: khi bật nhảy phải tiếp đất nhẹ nhàng bằng nửa trước bàn chân để hoãn xung, tránh dộng gót gây đau khớp gối.\n- Cho học sinh quan sát tranh ảnh SGK, chỉ rõ nhịp vỗ tay trên đỉnh đầu dứt khoát kết hợp bật nhảy nhịp nhàng.\n- Hô nhịp đếm chậm cho học sinh tập thử từng nhịp; trực tiếp sửa sai cách tiếp đất cho các em; nhắc nhở học sinh giữ nhịp thở đều.\n- Tuyên dương tinh thần tập luyện sôi nổi, động tác đều đẹp của cả lớp.`;
+      hs = `- Đội hình 4 hàng ngang giãn cách 1 sải tay an toàn.\n- Chú ý quan sát động tác tiếp đất êm bằng mũi bàn chân và nhịp vỗ tay trên đầu của GV.\n- Bật nhảy nhịp nhàng theo nhịp đếm, giữ lưng thẳng, tiếp đất nhẹ nhàng không gây tiếng ồn lớn.\n- Tự điều chỉnh biên độ nhảy vừa sức và giữ nhịp thở ổn định.`;
+      practiceFocus = 'bật nhảy nhịp nhàng và tiếp đất nhẹ nhàng bằng nửa trước bàn chân';
+      break;
+
+    case 'dieu_hoa':
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang chạm bằng mũi chân, hai tay đưa ra trước lắc cổ tay nhẹ nhàng, hít sâu bằng mũi.\n- Nhịp 2: Về TTCB, thở ra từ từ bằng miệng.\n- Nhịp 3: Chân phải đưa sang ngang chạm bằng mũi chân, hai tay dang ngang lắc cổ tay nhẹ nhàng, hít sâu.\n- Nhịp 4: Về TTCB, thở ra.\n- Nhịp 5, 6, 7, 8: Thực hiện như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Điều hòa, nhấn mạnh đây là động tác cuối cùng của bài thể dục giúp cơ thể thả lỏng, nhịp tim và hô hấp hồi phục về trạng thái cân bằng.\n- Làm mẫu 2 - 3 lần kết hợp hướng dẫn nhịp thở sâu, êm; phân tích kỹ thuật lắc cổ tay nhẹ nhàng, thả lỏng toàn bộ các cơ bắp.\n- Cho học sinh đối chiếu với tranh ảnh SGK, hướng dẫn các em tập trung cảm nhận sự thư thái khi thực hiện động tác.\n- Hô nhịp chậm, giọng điệu nhẹ nhàng truyền cảm giúp học sinh thả lỏng tối đa; nhắc nhở các em không gồng cứng cơ bắp.\n- Nhận xét và đánh giá cao sự tiến bộ của toàn lớp trong việc hoàn thiện bài tập thể dục.`;
+      hs = `- Đội hình 4 hàng ngang đứng giãn cách thoải mái.\n- Lắng nghe nhịp hô chậm rãi, êm dịu của giáo viên, thả lỏng hoàn toàn các khớp cổ tay và chân.\n- Thực hiện đưa chân chạm mũi nhẹ nhàng, kết hợp hít vào sâu bằng mũi và thở ra chậm rãi bằng miệng.\n- Đưa cơ thể về trạng thái hồi phục khoan khoái sau giờ học.`;
+      practiceFocus = 'lắc cổ tay thả lỏng nhẹ nhàng và điều hòa nhịp thở sâu êm';
+      break;
+
+    case 'di_deu':
+      steps = `- TTCB: Đứng nghiêm.\n- Khẩu lệnh: "Đi đều... BƯỚC!".\n- Động tác: Bước chân trái ra trước nhịp 1, đồng thời tay phải gập vuông góc trước ngực, tay trái đánh thẳng ra sau; nhịp 2 bước chân phải, đổi tay; bước chân theo nhịp 1-2, 1-2 dứt khoát.\n- Khẩu lệnh: "Đứng lại... ĐỨNG!" (dự lệnh và động lệnh đều rơi vào chân phải).\n- Động tác: Sau động lệnh "ĐỨNG!", bước tiếp chân trái một bước rồi khép chân phải về TTCB đứng nghiêm.`;
+      gv = `- GV giới thiệu động tác Đi đều, Đứng lại, phân tích ý nghĩa rèn luyện tính kỷ luật, tác phong đội ngũ nhanh nhẹn, thống nhất và đẹp mắt.\n- Làm mẫu chuẩn xác 2 - 3 lần theo phương pháp vừa làm vừa phân tích; nhấn mạnh quy tắc: "Chân nọ tay kia", chân trái bước vào nhịp 1, chân phải bước vào nhịp 2, tay đánh vuông góc trước ngực.\n- Cho học sinh xem tranh kỹ thuật SGK lớp 3 trang 27, hướng dẫn cách nghe khẩu lệnh dự lệnh và động lệnh.\n- Hô nhịp tại chỗ cho học sinh tập dậm chân trước, sau đó cho đi đều từng bước ngắn; quan sát phát hiện lỗi đi cùng chân cùng tay để sửa ngay.\n- Khen ngợi các em bước chân đúng nhịp hô dứt khoát.`;
+      hs = `- Đội hình hàng dọc hoặc hàng ngang theo cự ly chuẩn bị đi đều.\n- Lắng nghe dự lệnh và động lệnh của GV, ghi nhớ quy tắc bước chân trái ở nhịp 1 và chân phải ở nhịp 2.\n- Đi đều dứt khoát, tay đánh tự nhiên vuông góc trước ngực, mắt nhìn thẳng phía trước.\n- Chỉnh đốn cự ly hàng ngũ thẳng đều theo các bạn xung quanh.`;
+      practiceFocus = 'bước chân đúng nhịp 1 - 2 chân nọ tay kia và đứng lại chuẩn khẩu lệnh';
+      break;
+
+    case 'bung_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa gậy ra trước - lên cao, mắt nhìn theo gậy.\n- Nhịp 2: Cúi người, gập thân, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay đưa gậy lên cao, mắt nhìn theo gậy).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.`;
+      gv = `- GV giới thiệu Động tác Bụng với gậy (SGK Lớp 5 Trang 30), phân tích tác dụng tăng cường độ dẻo của cột sống, phát triển cơ bụng và cơ đùi sau.\n- Làm mẫu trực quan 2 - 3 lần kết hợp phân tích kỹ thuật: nhịp 1 nâng gậy lên cao thân thẳng, nhịp 2 cúi gập thân sâu thở ra hết, hai chân giữ thẳng không được co gập gối, gậy chạm mũi bàn chân.\n- Cho học sinh quan sát hình ảnh kỹ thuật SGK lớp 5 trang 30, lưu ý cách cầm hai đầu gậy chắc chắn.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn cho những em chân còn bị co gập hoặc cúi gập vội vàng.\n- Tuyên dương các em giữ được chân thẳng và hạ gậy chạm mũi chân chuẩn xác.`;
+      hs = `- Đội hình 4 hàng ngang giãn cách cự ly 1.5m đảm bảo không chạm gậy vào bạn bên cạnh.\n- Chăm chú theo dõi tư thế cúi gập thân và giữ thẳng đầu gối của thầy cô.\n- Cầm chắc gậy, tập mô phỏng chậm rãi, thở ra hết khi gập thân và hít sâu khi vươn người đứng thẳng.\n- Tự giác điều chỉnh không co gối khi gậy hạ xuống chạm mu bàn chân.`;
+      practiceFocus = 'hai chân giữ thẳng, cúi gập thân sâu và hạ gậy chạm mũi bàn chân';
+      break;
+
+    case 'van_minh_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Giữ nguyên chân, vặn mình sang trái, hai tay cầm gậy đưa ngang sang trái - ra sau, mắt nhìn theo gậy.\n- Nhịp 3: Về nhịp 1 (gậy đưa thẳng ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân, nhịp 6 đổi hướng vặn mình sang phải.`;
+      gv = `- GV giới thiệu Động tác Vặn mình với gậy (SGK Lớp 5 Trang 30), nêu rõ tác dụng tăng độ linh hoạt khớp háng, cơ lườn và cột sống.\n- Làm mẫu kỹ thuật 2 - 3 lần; nhấn mạnh yêu cầu cốt lõi: hai bàn chân phải bám chắc trên mặt sân, chỉ xoay vặn phần thân trên, hai tay cầm gậy đưa ngang ra sau dứt khoát.\n- Hướng dẫn học sinh quan sát hình ảnh SGK trang 30, nhắc nhở giữ gậy thăng bằng ngang vai trong suốt quá trình vặn mình.\n- Hô nhịp chậm hướng dẫn lớp tập luyện; quan sát phát hiện lỗi xoay cả chân hoặc hạ gậy xuống thấp để kịp thời nhắc nhở sửa chữa.\n- Biểu dương sự cố gắng và chuyển động dứt khoát của học sinh.`;
+      hs = `- Đội hình 4 hàng ngang so le 1.5m cự ly an toàn.\n- Quan sát góc xoay thân trên và vị trí cố định của hai bàn chân khi thực hiện động tác với gậy.\n- Cầm chắc gậy, thực hiện động tác vặn mình dứt khoát, giữ gậy ngang vai.\n- Chỉnh sửa tư thế bàn chân bám chắc mặt sân theo nhắc nhở của thầy cô.`;
+      practiceFocus = 'hai bàn chân bám chắc sàn, vặn thân mình và giữ gậy ngang vai';
+      break;
+
+    case 'toan_than_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Khuỵu gối chân trái, chân phải thẳng, hai tay đưa gậy ra trước ngang vai.\n- Nhịp 2: Duỗi gối, cúi người gập thân sâu, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng, chân trái đưa ra sau kiễng gót tì mũi chân, trọng tâm dồn chân phải, hai tay đưa gậy lên cao chếch chữ V, ngửa đầu.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 dồn chân phải, nhịp 7 đổi chân.`;
+      gv = `- GV giới thiệu Động tác Toàn thân với gậy (SGK Lớp 5 Trang 31), phân tích tác dụng phối hợp toàn diện các khớp chân, cơ lưng, bụng và cánh tay.\n- Thị phạm chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích kỹ thuật: nhịp 1 khuỵu gối giữ lưng thẳng, nhịp 2 cúi gập thân thẳng chân gậy chạm chân, nhịp 3 nâng gậy lên cao chân sau kiễng gót dồn trọng tâm chân trước.\n- Cho học sinh quan sát tranh ảnh kỹ thuật SGK trang 31; hô nhịp chậm cho học sinh tập mô phỏng động tác Toàn thân; sau đó cho cả lớp ghép liên hoàn.\n- Khen ngợi những em thực hiện nhịp nhàng, vững vàng thăng bằng.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, khoảng cách 1.5m.\n- Quan sát kỹ thuật khuỵu gối, gập thân và vươn gậy kiễng gót của giáo viên ở động tác Toàn thân.\n- Tập mô phỏng từng nhịp theo nhịp hô chậm; ghép liên hoàn các động tác với gậy đẹp mắt.`;
+      practiceFocus = 'khuỵu gối lưng thẳng, cúi gập thân chạm gậy và nâng gậy kiễng gót thăng bằng';
+      break;
+
+    case 'chan_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Kiễng gót hai chân, hai tay đưa gậy ra trước ngang vai (lưng thẳng, mắt nhìn theo gậy).\n- Nhịp 2: Hạ gót, khuỵu gối sâu, hai tay đưa gậy lên cao qua đầu, lưng giữ thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (kiễng gót, gậy ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Chân với gậy (SGK GDTC Lớp 5 Trang 25), phân tích tác dụng tăng cường sức mạnh cơ chân, khớp gối và khả năng giữ thăng bằng.\n- Làm mẫu chuẩn xác 2-3 lần; nhấn mạnh nhịp 1 kiễng cao gót giữ thăng bằng trên nửa trước bàn chân, nhịp 2 khuỵu gối sâu nhưng thân người luôn giữ thẳng, hai tay nâng gậy lên cao qua đầu.\n- Cho học sinh quan sát tranh ảnh kỹ thuật SGK trang 25; hô nhịp chậm cho học sinh tập mô phỏng.\n- Kịp thời sửa sai các lỗi mất thăng bằng hoặc gù lưng; tuyên dương học sinh thực hiện tốt.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, cự ly 1.5m.\n- Chăm chú quan sát tư thế kiễng gót và khuỵu gối lưng thẳng của giáo viên ở động tác Chân.\n- Tập mô phỏng động tác Chân theo nhịp đếm chậm; sau đó ghép liên hoàn các động tác với gậy.`;
+      practiceFocus = 'kiễng gót thăng bằng, khuỵu gối lưng thẳng và nâng gậy qua đầu';
+      break;
+
+    case 'nhay_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Bật nhảy tách hai chân sang ngang rộng bằng vai, đồng thời hai tay nâng gậy lên cao qua đầu, mắt nhìn thẳng.\n- Nhịp 2: Bật nhảy khép hai chân về, hạ gậy về trước đùi như TTCB.\n- Nhịp 3: Như nhịp 1 (bật nhảy tách chân, hai tay nâng gậy qua đầu).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Nhảy với gậy (SGK GDTC Lớp 5 Trang 34), phân tích tác dụng phát triển sức bật của đôi chân, độ khéo léo và sức mạnh cánh tay khi cầm gậy.\n- Thị phạm làm mẫu chuẩn 2 - 3 lần theo phương pháp chiều gương; lưu ý điểm an toàn: tiếp đất nhẹ nhàng bằng nửa trước bàn chân để hoãn xung, hai tay cầm gậy chắc chắn không để tuột gậy.\n- Cho học sinh quan sát hình ảnh kỹ thuật SGK lớp 5 trang 34, nhấn mạnh việc giữ gậy thẳng trên cao ở nhịp 1 và 3.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển uốn nắn cách tiếp đất êm cho từng học sinh.\n- Tuyên dương tinh thần hào hứng, động tác dứt khoát của cả lớp.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, cự ly 1.5m đảm bảo tuyệt đối an toàn khi vung gậy.\n- Quan sát động tác tiếp đất êm và nhịp nâng gậy qua đầu của giáo viên.\n- Cầm chắc hai đầu gậy, bật nhảy nhịp nhàng theo nhịp đếm, tiếp đất nhẹ nhàng bằng mũi bàn chân.\n- Tự giác điều chỉnh tư thế lưng thẳng và không để chạm gậy vào bạn.`;
+      practiceFocus = 'bật nhảy nhịp nhàng, nâng gậy qua đầu và tiếp đất nhẹ nhàng bằng nửa trước bàn chân';
+      break;
+
+    case 'dieu_hoa_gay':
+      steps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang, hai tay nâng gậy lên cao chếch chữ V, ngửa đầu, hít sâu bằng mũi.\n- Nhịp 2: Cúi nhẹ đầu, hạ hai tay đưa gậy xuống ngang ngực rồi hạ về trước đùi, thở ra từ từ bằng miệng.\n- Nhịp 3: Chân phải bước sang ngang, hai tay nâng gậy lên cao chếch chữ V, ngửa đầu hít sâu.\n- Nhịp 4: Về TTCB, thở ra.\n- Nhịp 5, 6, 7, 8: Thực hiện như nhịp 1, 2, 3, 4.`;
+      gv = `- GV giới thiệu Động tác Điều hòa với gậy (SGK GDTC Lớp 5 Trang 35), nhấn mạnh đây là động tác thả lỏng toàn thân, giúp nhịp thở và cơ bắp hồi phục sau các bài tập vận động mạnh với gậy.\n- Làm mẫu 2 - 3 lần kết hợp hướng dẫn hít sâu, thở êm và nâng hạ gậy nhịp nhàng theo hơi thở.\n- Cho học sinh quan sát tranh kỹ thuật SGK lớp 5 trang 35, hướng dẫn các em tập trung cảm nhận sự thư giãn.\n- Hô nhịp chậm rãi, truyền cảm giúp học sinh thả lỏng tối đa.\n- Nhận xét và đánh giá cao sự tiến bộ, tinh thần rèn luyện nghiêm túc của học sinh.`;
+      hs = `- Đội hình 4 hàng ngang đứng giãn cách thoải mái.\n- Lắng nghe nhịp hô chậm rãi của giáo viên, nâng hạ gậy uyển chuyển, thả lỏng toàn bộ các khớp.\n- Phối hợp nhịp thở sâu bằng mũi khi nâng gậy và thở ra từ từ bằng miệng khi hạ gậy.\n- Đưa cơ thể về trạng thái hồi phục khoan khoái sau giờ học.`;
+      practiceFocus = 'nâng hạ gậy nhịp nhàng theo hơi thở sâu và thả lỏng toàn thân';
+      break;
+
+    default:
+      // Mặc định Vươn thở
+      steps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa lên cao chếch chữ V, lòng bàn tay hướng vào nhau, đầu ngửa nhẹ, hít sâu bằng mũi.\n- Nhịp 2: Hai tay đưa xuống bắt chéo trước bụng, cúi nhẹ đầu, thở ra từ từ bằng miệng.\n- Nhịp 3: Như nhịp 1 (hít sâu).\n- Nhịp 4: Về TTCB (thở ra).\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải.`;
+      gv = `- GV giới thiệu tên ${cleanName}, nêu rõ tác dụng giúp phát triển các nhóm cơ và rèn luyện tư thế chuẩn xác.\n- Thị phạm làm mẫu chuẩn xác 2 - 3 lần theo phương pháp chiều gương kết hợp phân tích chậm từng nhịp; nhấn mạnh nhịp hít sâu bằng mũi, vươn căng các cơ, và nhịp thở ra hết bằng miệng.\n- Cho học sinh quan sát tranh ảnh kỹ thuật đính kèm trong SGK, chỉ rõ hướng của các chi và góc ngửa của đầu thân người.\n- Hô nhịp chậm hướng dẫn toàn lớp tập thử từng nhịp; quan sát uốn nắn sửa sai tại chỗ cho học sinh.\n- Khen ngợi những em thực hiện đúng biên độ.`;
+      hs = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay để không va chạm.\n- Chăm chú quan sát động tác làm mẫu của GV và hình ảnh kỹ thuật SGK, ghi nhớ khẩu lệnh và thứ tự từng nhịp.\n- Bắt chước thực hiện mô phỏng từng nhịp theo nhịp hô chậm của giáo viên; phối hợp nhịp nhàng giữa nhịp thở và cử động tay chân.\n- Tự giác nhận biết và sửa lỗi sai tư thế theo hướng dẫn của thầy cô.`;
+      practiceFocus = 'vươn căng hai tay chếch chữ V và phối hợp nhịp thở sâu';
+      break;
+  }
+
+  return {
+    key,
+    name: cleanName,
+    imgUrl: resolvedImgUrl,
+    imgTitle: resolvedImgTitle,
+    steps,
+    gv,
+    hs,
+    practiceFocus
+  };
+}
+
+/**
  * Resolves accurate movement name, technical image, and pedagogical steps from text/title.
  * Strictly guarantees that games (Trò chơi) are NEVER attached to technical movements (Học động tác).
  * Strictly enforces GDPT 2018 pedagogical rule:
+ * - If a lesson has 2 new movements:
+ *   + Tiết 1: Học động tác 1.
+ *   + Tiết 2: Học động tác 2 + Ôn động tác 1.
  * - If a lesson has 3 new movements across 2 periods:
- *   + Period 1 (Tiết 1): Teaches the first 2 new movements.
- *   + Period 2 (Tiết 2): Reviews the first 2 movements + Teaches the 3rd new movement.
- * - If a lesson has 2 new movements (Grade 1):
- *   + Period 1: Teaches Movement 1.
- *   + Period 2: Reviews Movement 1 + Teaches Movement 2.
+ *   + Period 1 (Tiết 1): Học 2 động tác đầu (m1, m2).
+ *   + Period 2 (Tiết 2): Học động tác thứ 3 (m3) + Ôn 2 động tác của Tiết 1 (m1, m2).
+ * - If a lesson has 4 new movements:
+ *   + Period 1: Học 2 động tác đầu (m1, m2).
+ *   + Period 2: Học 2 động tác sau (m3, m4) + Ôn 2 động tác của Tiết 1 (m1, m2).
+ * - If a lesson has 5 new movements:
+ *   + Period 1: Học 3 động tác đầu (m1, m2, m3).
+ *   + Period 2: Học 2 động tác sau (m4, m5) + Ôn 3 động tác của Tiết 1 (m1, m2, m3).
  */
 export function resolveAccurateMovement(
   content: string = '',
@@ -193,407 +615,192 @@ export function resolveAccurateMovement(
   const contentLower = (content || '').toLowerCase();
   const titleLower = (title || '').toLowerCase();
   const combined = `${content} ${title}`.toLowerCase();
-  const isPeriod2 = titleLower.includes('tiết 2') || titleLower.includes('tiet 2') || titleLower.includes('tiết 16') || titleLower.includes('tiết 18') || titleLower.includes('tiết 20');
-  const isPeriod1 = titleLower.includes('tiết 1') || titleLower.includes('tiet 1') || titleLower.includes('tiết 15') || titleLower.includes('tiết 17') || titleLower.includes('tiết 19') || !isPeriod2;
 
-  let targetKey = 'vuon_tho';
+  // 0. Detect Exact Period Number (Tiết) without substring conflicts
+  const isPeriod22 = titleLower.includes('tiết 22') || titleLower.includes('tiet 22') || contentLower.includes('tiết 22');
+  const isPeriod21 = titleLower.includes('tiết 21') || titleLower.includes('tiet 21') || contentLower.includes('tiết 21');
+  const isPeriod20 = titleLower.includes('tiết 20') || titleLower.includes('tiet 20') || contentLower.includes('tiết 20');
+  const isPeriod19 = titleLower.includes('tiết 19') || titleLower.includes('tiet 19') || contentLower.includes('tiết 19');
+  const isPeriod18 = titleLower.includes('tiết 18') || titleLower.includes('tiet 18') || contentLower.includes('tiết 18');
+  const isPeriod17 = titleLower.includes('tiết 17') || titleLower.includes('tiet 17') || contentLower.includes('tiết 17');
+  const isPeriod16 = titleLower.includes('tiết 16') || titleLower.includes('tiet 16') || contentLower.includes('tiết 16');
+  const isPeriod15 = titleLower.includes('tiết 15') || titleLower.includes('tiet 15') || contentLower.includes('tiết 15');
+
+  // Generic Tiết 2 vs Tiết 1
+  const isPeriod2 =
+    (titleLower.includes('tiết 2') ||
+      titleLower.includes('tiet 2') ||
+      titleLower.includes('(tiết 2)') ||
+      titleLower.includes('- tiết 2') ||
+      isPeriod16 ||
+      isPeriod18 ||
+      isPeriod20 ||
+      isPeriod22) &&
+    !isPeriod21 &&
+    !isPeriod19 &&
+    !isPeriod17 &&
+    !isPeriod15 &&
+    !titleLower.includes('tiết 21') &&
+    !titleLower.includes('tiết 23');
+
+  // 1. Check if multiple movements are specified in the title
+  const extracted = extractMovementNamesFromTitle(title);
+
+  if (extracted.length >= 2) {
+    const partition = partitionLessonMovements(extracted, isPeriod2);
+    const { newMovements, reviewMovements } = partition;
+
+    // CASE A: Tiết 2 with Review of Period 1 movements
+    if (isPeriod2 && reviewMovements.length > 0) {
+      const newProfiles = newMovements.map((m) => getSingleMovementProfile(m, grade, userImages));
+      const revProfiles = reviewMovements.map((m) => getSingleMovementProfile(m, grade, userImages));
+
+      const newNamesStr = newMovements.join(' và ');
+      const revNamesStr = reviewMovements.join(' và ');
+
+      // Structured steps: explicit review of period 1 + new movement(s) of period 2 + continuous chaining
+      let steps = `* Ôn tập các động tác đã học ở Tiết 1 (${revNamesStr}):\n`;
+      for (const r of revProfiles) {
+        steps += `- Ôn ${r.name}: Toàn lớp thực hiện 2 lần x 8 nhịp theo nhịp đếm dứt khoát của cán sự lớp; chú ý ${r.practiceFocus}.\n`;
+      }
+      steps += `- Ghép liên hoàn các động tác tiết 1: ${revProfiles.map((r) => r.name).join(' -> ')}.\n\n`;
+
+      if (newProfiles.length > 0) {
+        for (const n of newProfiles) {
+          steps += `* Học ${n.name} (Động tác mới - SGK GDTC Lớp ${grade}):\n${n.steps}\n\n`;
+        }
+        steps += `* Phối hợp liên hoàn toàn bài:\n- Thực hiện liên tục: ${[...revProfiles.map((r) => r.name), ...newProfiles.map((n) => n.name)].join(' -> ')} (2 - 3 lần, mỗi lần 2x8 nhịp).`;
+      } else {
+        steps += `* Hoàn thiện và thi đua liên hoàn các động tác đã học.`;
+      }
+
+      // Teacher instructions (~100-120 words)
+      const gv = `- GV tổ chức cho cả lớp ôn tập nhanh các động tác đã học ở Tiết 1 (${revNamesStr}) 1 - 2 lần để củng cố kỹ năng và kích hoạt cơ thể trước khi vào nội dung mới.\n` +
+        (newProfiles.length > 0
+          ? `- GV giới thiệu động tác mới của Tiết 2: ${newNamesStr} (SGK GDTC Lớp ${grade}), nêu rõ tác dụng phát triển thể lực và rèn luyện tư thế chuẩn xác.\n- Thị phạm làm mẫu chuẩn xác động tác mới 2 - 3 lần theo phương pháp chiều gương; phân tích chi tiết từng nhịp kết hợp chỉ dẫn học sinh đối chiếu hình ảnh kỹ thuật SGK.\n- Hô nhịp chậm điều khiển lớp tập thử động tác mới; trực tiếp di chuyển uốn nắn sửa sai tư thế cho từng học sinh; nhắc nhở giữ nhịp thở sâu và cự ly thẳng hàng.\n- Hướng dẫn toàn lớp ghép liên hoàn chuỗi các động tác: ${[...revProfiles.map((r) => r.name), ...newProfiles.map((n) => n.name)].join(' -> ')}; biểu dương tinh thần tập luyện tích cực của cả lớp.`
+          : `- GV điều khiển lớp hoàn thiện kỹ thuật và thi đua giữa các tổ; uốn nắn độ thẳng đẹp của từng động tác.`);
+
+      // Student tasks
+      const hs = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay an toàn.\n` +
+        `- Toàn lớp thực hiện ôn tập các động tác Tiết 1 (${revNamesStr}) nhịp nhàng theo nhịp đếm của cán sự lớp.\n` +
+        (newProfiles.length > 0
+          ? `- Chăm chú quan sát động tác thị phạm của GV ở động tác mới (${newNamesStr}), ghi nhớ các điểm kỹ thuật then chốt và nhịp hô.\n- Luyện tập mô phỏng động tác mới theo nhịp hô chậm của GV, sau đó phối hợp ghép liên hoàn cả bài: ${[...revProfiles.map((r) => r.name), ...newProfiles.map((n) => n.name)].join(' -> ')}.`
+          : `- Tích cực luyện tập hoàn thiện bài thể dục và tham gia nhận xét tổ bạn.`);
+
+      const practiceFocus = newProfiles.length > 0
+        ? `${newProfiles.map((n) => n.practiceFocus).join('; ')} kết hợp ôn luyện liên hoàn với ${revNamesStr}`
+        : `ôn luyện liên hoàn dứt khoát các động tác ${revNamesStr}`;
+
+      const primaryImg = newProfiles[0] || revProfiles[0];
+      const allImages = [
+        ...newProfiles.map((n, i) => ({ id: `img_new_${i}`, url: n.imgUrl, title: n.imgTitle })),
+        ...revProfiles.map((r, i) => ({ id: `img_rev_${i}`, url: r.imgUrl, title: `Ôn tập: ${r.imgTitle}` }))
+      ];
+
+      return {
+        movementName: partition.displayMovementName,
+        imgUrl: primaryImg.imgUrl,
+        imgTitle: primaryImg.imgTitle,
+        movementSteps: steps,
+        gvExplanation: gv,
+        hsTask: hs,
+        practiceFocus,
+        newMovements,
+        reviewMovements,
+        allImages
+      };
+    }
+
+    // CASE B: Tiết 1 with multiple new movements (e.g. 2 movements in N=3, 2 movements in N=4, 3 movements in N=5)
+    if (!isPeriod2 && newMovements.length > 1) {
+      const newProfiles = newMovements.map((m) => getSingleMovementProfile(m, grade, userImages));
+      const newNamesStr = newMovements.join(' và ');
+
+      let steps = '';
+      for (const n of newProfiles) {
+        steps += `* Học ${n.name} (SGK GDTC Lớp ${grade}):\n${n.steps}\n\n`;
+      }
+      steps += `* Phối hợp liên hoàn:\n- Thực hiện liên tục: ${newProfiles.map((n) => n.name).join(' -> ')} (2 - 3 lần, mỗi lần 2x8 nhịp).`;
+
+      const gv = `- GV giới thiệu các động tác mới trong Tiết 1: ${newNamesStr} (SGK GDTC Lớp ${grade}); phân tích tác dụng nâng cao thể lực và rèn luyện tư thế chuẩn mực.\n` +
+        `- Thị phạm làm mẫu chuẩn xác từng động tác 2 - 3 lần theo phương pháp chiều gương: phân tích kỹ các điểm mấu chốt kỹ thuật và nhịp hô dứt khoát.\n` +
+        `- Hướng dẫn học sinh đối chiếu tranh ảnh kỹ thuật SGK; hô nhịp chậm cho học sinh tập mô phỏng lần lượt từng động tác rồi phối hợp liên hoàn cả 2 động tác.\n` +
+        `- Trực tiếp di chuyển giữa các hàng ngang uốn nắn sửa sai tư thế cho từng học sinh; nhắc nhở học sinh giữ cự ly an toàn.\n` +
+        `- Động viên, khích lệ cả lớp thực hiện đều, đẹp và đúng biên độ.`;
+
+      const hs = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay an toàn.\n` +
+        `- Chăm chú quan sát động tác làm mẫu của GV và hình ảnh kỹ thuật SGK; ghi nhớ khẩu lệnh và thứ tự từng nhịp.\n` +
+        `- Lần lượt tập mô phỏng từng nhịp các động tác mới theo khẩu lệnh của giáo viên; phối hợp nhịp nhàng giữa hơi thở và động tác.\n` +
+        `- Tích cực thực hiện liên hoàn chuỗi các động tác theo nhịp đếm dứt khoát.`;
+
+      const practiceFocus = newProfiles.map((n) => n.practiceFocus).join(' và ');
+      const primaryImg = newProfiles[0];
+      const allImages = newProfiles.map((n, i) => ({ id: `img_new_${i}`, url: n.imgUrl, title: n.imgTitle }));
+
+      return {
+        movementName: partition.displayMovementName,
+        imgUrl: primaryImg.imgUrl,
+        imgTitle: primaryImg.imgTitle,
+        movementSteps: steps,
+        gvExplanation: gv,
+        hsTask: hs,
+        practiceFocus,
+        newMovements,
+        reviewMovements: [],
+        allImages
+      };
+    }
+
+    // CASE C: Exactly 1 new movement in Tiết 1 (e.g. N=2)
+    if (newMovements.length === 1) {
+      const single = getSingleMovementProfile(newMovements[0], grade, userImages);
+      return {
+        movementName: partition.displayMovementName,
+        imgUrl: single.imgUrl,
+        imgTitle: single.imgTitle,
+        movementSteps: single.steps,
+        gvExplanation: single.gv,
+        hsTask: single.hs,
+        practiceFocus: single.practiceFocus,
+        newMovements,
+        reviewMovements: [],
+        allImages: [{ id: 'img_single', url: single.imgUrl, title: single.imgTitle }]
+      };
+    }
+  }
+
+  // 2. Fallback: single movement detection
   let targetName = 'Động tác Vươn thở';
-
-  // 1. Prioritize specific movement mentioned in row content (highest priority!)
-  if (contentLower.includes('động tác bụng') || contentLower.includes('học động tác bụng') || (contentLower.includes('bụng') && !contentLower.includes('vươn thở'))) {
-    if (grade === 5 || contentLower.includes('gậy')) {
-      if (isPeriod1 && (titleLower.includes('vặn mình') || contentLower.includes('vặn mình'))) {
-        targetKey = 'bung_van_minh_gay';
-        targetName = 'Động tác Bụng, Động tác Vặn mình với gậy';
-      } else {
-        targetKey = 'bung_gay';
-        targetName = 'Động tác Bụng với gậy';
-      }
-    } else {
-      targetKey = 'bung';
-      targetName = 'Động tác Bụng';
-    }
-  } else if (contentLower.includes('động tác lườn') || contentLower.includes('học động tác lườn') || (contentLower.includes('lườn') && !contentLower.includes('chân'))) {
-    targetKey = 'luon';
+  if (titleLower.includes('phối hợp') || (titleLower.includes('bài 3') && grade === 1 && !isPeriod22 && !titleLower.includes('điều hòa'))) {
+    targetName = 'Động tác Phối hợp';
+  } else if (titleLower.includes('điều hòa') || isPeriod22) {
+    targetName = 'Động tác Điều hòa';
+  } else if (titleLower.includes('chân')) {
+    targetName = grade === 5 ? 'Động tác Chân với gậy' : 'Động tác Chân';
+  } else if (titleLower.includes('lườn')) {
     targetName = 'Động tác Lườn';
-  } else if (contentLower.includes('động tác vặn mình') || contentLower.includes('vặn mình')) {
-    if (grade === 5 || contentLower.includes('gậy')) {
-      targetKey = 'van_minh_gay';
-      targetName = 'Động tác Vặn mình với gậy';
-    } else {
-      targetKey = 'van_minh';
-      targetName = 'Động tác Vặn mình';
-    }
-  } else if (contentLower.includes('động tác toàn thân') || contentLower.includes('toàn thân') || contentLower.includes('phối hợp')) {
-    if (grade === 5 || contentLower.includes('gậy')) {
-      targetKey = 'toan_than_gay';
-      targetName = 'Động tác Toàn thân với gậy';
-    } else {
-      targetKey = 'toan_than';
-      targetName = 'Động tác Toàn thân';
-    }
-  } else if (contentLower.includes('động tác chân') || contentLower.includes('học động tác chân') || (contentLower.includes('chân') && !contentLower.includes('cổ chân') && !contentLower.includes('mũi chân') && !contentLower.includes('đổi chân') && !contentLower.includes('bụng'))) {
-    if (grade === 5 || contentLower.includes('gậy')) {
-      targetKey = 'chan_gay';
-      targetName = 'Động tác Chân với gậy';
-    } else {
-      targetKey = 'chan';
-      targetName = 'Động tác Chân';
-    }
-  } else if (contentLower.includes('động tác tay') || contentLower.includes('học động tác tay') || (contentLower.includes('tay') && !contentLower.includes('cổ tay') && !contentLower.includes('vỗ tay') && !contentLower.includes('vươn thở'))) {
-    targetKey = 'tay';
-    targetName = 'Động tác Tay';
-  } else if (contentLower.includes('vươn thở') || contentLower.includes('vuon tho')) {
-    if (grade === 5 || contentLower.includes('gậy')) {
-      targetKey = isPeriod1 ? 'vuon_tho_tay_gay' : 'gay';
-      targetName = isPeriod1 ? 'Động tác Vươn thở, Động tác Tay với gậy' : 'Động tác Vươn thở, Tay với gậy';
-    } else {
-      targetKey = 'vuon_tho';
-      targetName = 'Động tác Vươn thở';
-    }
-  } else if (contentLower.includes('đi đều') || contentLower.includes('đứng lại')) {
-    targetKey = (contentLower.includes('ôn') || contentLower.includes('đổi chân')) ? 'on_di_deu' : 'di_deu';
-    targetName = targetKey === 'on_di_deu' ? 'Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp' : 'Động tác Đi đều, Đứng lại';
-  } else if (grade === 5) {
-    // 2. Grade 5 Pedagogical Distribution: 3 movements across 2 periods
-    // Lesson 2: Bụng, Vặn mình, Toàn thân với gậy
-    if (combined.includes('bài 2') || (combined.includes('bụng') && combined.includes('vặn mình')) || combined.includes('toàn thân')) {
-      if (isPeriod2 || combined.includes('toàn thân')) {
-        // Tiết 2 (Tiết còn lại): Ôn Bụng, Vặn mình + Học 1 động tác mới: Động tác Toàn thân với gậy
-        targetKey = 'toan_than_gay';
-        targetName = 'Động tác Toàn thân với gậy';
-      } else {
-        // Tiết 1 (Tiết đầu tiên): Học 2 động tác mới: Động tác Bụng và Động tác Vặn mình với gậy
-        targetKey = 'bung_van_minh_gay';
-        targetName = 'Động tác Bụng, Động tác Vặn mình với gậy';
-      }
-    }
-    // Lesson 1: Vươn thở, Tay, Chân với gậy
-    else if (combined.includes('bài 1') || (combined.includes('vươn thở') && combined.includes('tay')) || combined.includes('chân')) {
-      if (isPeriod2 || (combined.includes('chân') && !combined.includes('vươn thở'))) {
-        // Tiết 2 (Tiết còn lại): Ôn Vươn thở, Tay + Học 1 động tác mới: Động tác Chân với gậy
-        targetKey = 'chan_gay';
-        targetName = 'Động tác Chân với gậy';
-      } else {
-        // Tiết 1 (Tiết đầu tiên): Học 2 động tác mới: Động tác Vươn thở và Động tác Tay với gậy
-        targetKey = 'vuon_tho_tay_gay';
-        targetName = 'Động tác Vươn thở, Động tác Tay với gậy';
-      }
-    }
-    // Fallback for Grade 5
-    else if (combined.includes('bụng') || combined.includes('bung')) {
-      targetKey = 'bung_gay';
-      targetName = 'Động tác Bụng với gậy';
-    } else if (combined.includes('vặn mình') || combined.includes('van minh')) {
-      targetKey = 'van_minh_gay';
-      targetName = 'Động tác Vặn mình với gậy';
-    } else if (combined.includes('toàn thân') || combined.includes('toan than')) {
-      targetKey = 'toan_than_gay';
-      targetName = 'Động tác Toàn thân với gậy';
-    } else {
-      targetKey = 'gay';
-      targetName = 'Bài tập thể dục với gậy';
-    }
-  } else {
-    // 3. Fallback based on lesson title & Tiết for Grade 1 / Grade 3
-    if (titleLower.includes('tiết 2')) {
-      if (titleLower.includes('bài 1') || titleLower.includes('vươn thở') || titleLower.includes('tay')) {
-        targetKey = 'tay';
-        targetName = 'Động tác Tay';
-      } else if (titleLower.includes('bài 2') || titleLower.includes('chân') || titleLower.includes('lườn')) {
-        targetKey = 'luon';
-        targetName = 'Động tác Lườn';
-      } else if (titleLower.includes('bài 3') || titleLower.includes('bụng') || titleLower.includes('phối hợp')) {
-        targetKey = 'toan_than';
-        targetName = 'Động tác Toàn thân';
-      }
-    } else if (titleLower.includes('tiết 1')) {
-      if (titleLower.includes('bài 1')) {
-        targetKey = 'vuon_tho';
-        targetName = 'Động tác Vươn thở';
-      } else if (titleLower.includes('bài 2')) {
-        targetKey = 'chan';
-        targetName = 'Động tác Chân';
-      } else if (titleLower.includes('bài 3')) {
-        targetKey = 'bung';
-        targetName = 'Động tác Bụng';
-      }
-    } else if (combined.includes('bụng') || combined.includes('bung')) {
-      targetKey = 'bung';
-      targetName = 'Động tác Bụng';
-    } else if (combined.includes('lườn') || combined.includes('luon')) {
-      targetKey = 'luon';
-      targetName = 'Động tác Lườn';
-    } else if (combined.includes('động tác tay')) {
-      targetKey = 'tay';
-      targetName = 'Động tác Tay';
-    } else if (combined.includes('động tác chân')) {
-      targetKey = 'chan';
-      targetName = 'Động tác Chân';
-    } else if (combined.includes('điều hòa') || combined.includes('dieu hoa')) {
-      targetKey = 'dieu_hoa';
-      targetName = 'Động tác Điều hòa';
-    } else if (combined.includes('nhảy')) {
-      targetKey = 'nhay';
-      targetName = 'Động tác Nhảy';
-    } else if (combined.includes('vươn thở')) {
-      targetKey = 'vuon_tho';
-      targetName = 'Động tác Vươn thở';
-    } else if (combined.includes('đi đều')) {
-      targetKey = 'di_deu';
-      targetName = 'Động tác Đi đều, Đứng lại';
-    }
+  } else if (titleLower.includes('bụng')) {
+    targetName = grade === 5 ? 'Động tác Bụng với gậy' : 'Động tác Bụng';
+  } else if (titleLower.includes('vặn mình')) {
+    targetName = grade === 5 ? 'Động tác Vặn mình với gậy' : 'Động tác Vặn mình';
+  } else if (titleLower.includes('tay')) {
+    targetName = grade === 5 ? 'Động tác Tay với gậy' : 'Động tác Tay';
+  } else if (titleLower.includes('đi đều')) {
+    targetName = isPeriod2 ? 'Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp' : 'Động tác Đi đều, Đứng lại';
   }
 
-  // Check if this is an review (Ôn tập) or change-step lesson for Grade 3
-  if (targetKey === 'di_deu' && (combined.includes('ôn') || combined.includes('đổi chân') || combined.includes('sai nhịp') || combined.includes('tiết 4') || combined.includes('tiết 16'))) {
-    targetKey = 'on_di_deu';
-    targetName = 'Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp';
-  }
-
-  // 1. Search in user library with STRICT filtering (must exclude all games and prioritize authentic photos over SVG vectors)
-  const technicalOnlyImages = userImages.filter((img) => !isGameImage(img));
-  const sortedCandidates = [
-    // Prioritize non-SVG authentic images first for the requested grade
-    ...technicalOnlyImages.filter((img) => String(img.grade) === String(grade) && !img.imgUrl.startsWith('data:image/svg+xml')),
-    ...technicalOnlyImages.filter((img) => String(img.grade) !== String(grade) && !img.imgUrl.startsWith('data:image/svg+xml')),
-    ...technicalOnlyImages.filter((img) => String(img.grade) === String(grade)),
-    ...technicalOnlyImages.filter((img) => String(img.grade) !== String(grade))
-  ];
-
-  let resolvedImgUrl = '';
-  let resolvedImgTitle = '';
-
-  const matchedUserImg = sortedCandidates.find((img) => {
-    const t = img.title.toLowerCase();
-    const c = (img.caption || '').toLowerCase();
-    if (t.includes('trò chơi') || t.includes('tro choi')) return false;
-
-    if (targetKey === 'vuon_tho') return t.includes('vươn thở') || c.includes('vươn thở');
-    if (targetKey === 'tay') return t.includes('động tác tay') || c.includes('động tác tay') || (t.includes('tay') && !t.includes('cổ tay'));
-    if (targetKey === 'chan') return (t.includes('động tác chân') || t.includes('kỹ thuật chân') || (t.includes('chân') && !t.includes('cổ chân'))) && !t.includes('vươn thở');
-    if (targetKey === 'luon') return t.includes('lườn') || c.includes('lườn') || t.includes('nghiêng người');
-    if (targetKey === 'bung_gay') return (t.includes('bụng') || c.includes('bụng')) && (t.includes('gậy') || c.includes('gậy'));
-    if (targetKey === 'van_minh_gay') return (t.includes('vặn mình') || c.includes('vặn mình')) && (t.includes('gậy') || c.includes('gậy'));
-    if (targetKey === 'toan_than_gay') return (t.includes('toàn thân') || c.includes('toàn thân')) && (t.includes('gậy') || c.includes('gậy'));
-    if (targetKey === 'chan_gay') return (t.includes('chân') || c.includes('chân')) && (t.includes('gậy') || c.includes('gậy'));
-    if (targetKey === 'bung') return t.includes('bụng') || c.includes('bụng') || t.includes('gập thân');
-    if (targetKey === 'van_minh') return t.includes('vặn mình') || c.includes('vặn mình');
-    if (targetKey === 'toan_than') return t.includes('toàn thân') || c.includes('toàn thân');
-    if (targetKey === 'nhay') return (t.includes('động tác nhảy') || c.includes('động tác nhảy')) && !t.includes('lò cò') && !t.includes('tiếp sức');
-    if (targetKey === 'dieu_hoa') return t.includes('điều hòa') || c.includes('điều hòa');
-    if (targetKey === 'on_di_deu') return (t.includes('ôn đi đều') || t.includes('đổi chân') || t.includes('sai nhịp')) || (t.includes('đi đều') && !t.includes('trò chơi'));
-    if (targetKey === 'di_deu') return t.includes('đi đều') || c.includes('đi đều');
-    if (targetKey === 'gay') return t.includes('gậy') || c.includes('gậy');
-    if (targetKey === 'dung_nghiem') return t.includes('nghiêm') || t.includes('nghỉ') || t.includes('hàng dọc');
-    if (targetKey === 'vuot_cnv') return t.includes('chướng ngại vật') || t.includes('vật cản');
-    if (targetKey === 'tung_bong') return t.includes('tung') || t.includes('bắt bóng');
-    if (targetKey === 'dan_bong') return t.includes('bóng rổ') || t.includes('dẫn bóng');
-    if (targetKey === 'boi') return t.includes('bơi') || t.includes('trườn sấp') || t.includes('nước');
-    if (targetKey === 'lan_lon') return t.includes('lăn') || t.includes('lộn') || t.includes('đệm');
-    return false;
-  });
-
-  // Prefer authentic textbook images - never use synthetic recreated SVG graphics when authentic image exists!
-  if (matchedUserImg && !matchedUserImg.imgUrl.startsWith('data:image/svg+xml')) {
-    resolvedImgUrl = matchedUserImg.imgUrl;
-    resolvedImgTitle = matchedUserImg.title;
-  } else if (AUTHENTIC_TEXTBOOK_MAP[targetKey]) {
-    resolvedImgUrl = AUTHENTIC_TEXTBOOK_MAP[targetKey].url;
-    resolvedImgTitle = AUTHENTIC_TEXTBOOK_MAP[targetKey].title;
-  } else if (matchedUserImg) {
-    resolvedImgUrl = matchedUserImg.imgUrl;
-    resolvedImgTitle = matchedUserImg.title;
-  } else {
-    const std = findMatchingMovement(targetName, grade);
-    if (std) {
-      resolvedImgUrl = std.svgDataUrl;
-      resolvedImgTitle = `Kỹ thuật SGK: ${std.name}`;
-      targetName = std.name;
-    } else {
-      resolvedImgUrl = '/assets/sgk_chuan/k1_vuon_tho.jpg';
-      resolvedImgTitle = `Kỹ thuật SGK: ${targetName}`;
-    }
-  }
-
-  // 2. Generate authentic technical descriptions & 100-120 word teacher instructions
-  let movementSteps = '';
-  let gvExplanation = '';
-  let hsTask = '';
-  let practiceFocus = '';
-
-  switch (targetKey) {
-    case 'tay':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Hai tay đưa ra trước vỗ vào nhau ngang ngực, tiếng vỗ dứt khoát.\n- Nhịp 3: Như nhịp 1 (hai tay dang ngang, lòng bàn tay ngửa).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải bước sang ngang.`;
-      gvExplanation = `- GV giới thiệu tên Động tác Tay, nêu rõ tác dụng phát triển sức mạnh khớp vai, cơ cánh tay và tạo tư thế thân trên thẳng đẹp.\n- Thị phạm làm mẫu chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích rõ điểm mấu chốt: nhịp 1 hai tay dang thẳng ngang vai lòng bàn tay ngửa, nhịp 2 vỗ tay trước ngực dứt khoát.\n- Hướng dẫn học sinh đối chiếu với hình ảnh kỹ thuật SGK, lưu ý không để cánh tay chúc xuống dưới hoặc giơ quá cao qua vai.\n- Hô nhịp chậm cho học sinh làm thử; trực tiếp sửa lỗi chùng khuỷu tay và gù lưng cho từng em; nhắc nhở học sinh giữ ngực căng.\n- Động viên, khích lệ cả lớp thực hiện đều và chuẩn xác biên độ.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le giãn cách 1 sải tay để không va chạm tay nhau.\n- Quan sát tỉ mỉ động tác mẫu của GV và hình ảnh kỹ thuật SGK, ghi nhớ độ cao của cánh tay ngang vai.\n- Thực hiện mô phỏng từng nhịp theo nhịp hô chậm của giáo viên; giữ lưng thẳng, ngực căng.\n- Tự giác nhận biết và sửa lỗi sai tư thế theo hướng dẫn của thầy cô.`;
-      practiceFocus = 'hai tay dang thẳng ngang vai và nhịp vỗ tay trước ngực dứt khoát';
-      break;
-
-    case 'chan':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Kiễng gót hai chân, hai tay chống hông (thân thẳng, mắt nhìn thẳng).\n- Nhịp 2: Hạ gót, khuỵu gối sâu, hai tay đưa ra trước song song ngang vai, lòng bàn tay sấp, lưng giữ thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (kiễng gót hai chân, hai tay chống hông).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
-      gvExplanation = `- GV giới thiệu Động tác Chân, phân tích tác dụng tăng cường sức mạnh cơ đùi, khớp gối, cổ chân và rèn luyện khả năng giữ thăng bằng cơ thể.\n- Làm mẫu chuẩn 2 - 3 lần theo phương pháp chiều gương; nhấn mạnh nhịp 1 kiễng cao gót giữ thăng bằng trên nửa trước bàn chân, nhịp 2 khuỵu gối sâu nhưng thân người luôn giữ thẳng, không chúi đầu ra trước.\n- Cho học sinh quan sát tranh kỹ thuật SGK, chỉ rõ vị trí đặt hai tay chống hông và hai tay song song ngang vai.\n- Hô nhịp chậm hướng dẫn lớp tập từng nhịp; phát hiện các lỗi sai (mất thăng bằng ngả nghiêng, cong gập lưng khi khuỵu gối) và trực tiếp uốn nắn sửa sai.\n- Biểu dương tinh thần tập luyện nghiêm túc của học sinh.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay an toàn.\n- Chăm chú quan sát tư thế kiễng gót thăng bằng và cách khuỵu gối lưng thẳng của giáo viên.\n- Mô phỏng động tác theo nhịp đếm chậm; cố gắng giữ thăng bằng không để người chao đảo.\n- Lắng nghe góp ý của thầy cô để hoàn thiện độ sâu của gối và độ thẳng của lưng.`;
-      practiceFocus = 'kiễng gót thăng bằng và khuỵu gối sâu giữ lưng thẳng';
-      break;
-
-    case 'luon':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Nghiêng lườn sâu sang trái, tay trái chống hông, tay phải vươn cao ép sát tai, trọng tâm dồn chân phải.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay dang ngang, lòng bàn tay ngửa).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân bước sang phải và nghiêng lườn sang phải.`;
-      gvExplanation = `- GV giới thiệu Động tác Lườn, giải thích tác dụng làm giãn mềm cột sống, phát triển các nhóm cơ liên sườn và rèn luyện độ dẻo dai cơ thể.\n- Làm mẫu chuẩn xác 2 - 3 lần; nhấn mạnh điểm kỹ thuật quan trọng: khi nghiêng người phải giữ thân trên trên một mặt phẳng trán, không gập người ra trước hoặc ngửa ra sau, hai chân giữ thẳng.\n- Cho học sinh xem tranh kỹ thuật SGK, chỉ rõ độ cong của tay vươn trên đầu và tư thế tay chống hông.\n- Hô nhịp chậm cho học sinh tập thử; kịp thời phát hiện và sửa các lỗi sai xoay vặn thân mình thay vì nghiêng lườn.\n- Khen ngợi những em thực hiện độ uốn lườn sâu và đúng kỹ thuật.`;
-      hsTask = `- Đội hình 4 hàng ngang so le giãn cách 1 sải tay.\n- Quan sát hướng uốn của thân người trên mặt phẳng trán, ghi nhớ nhịp thở đều đặn.\n- Thực hiện từng nhịp chậm rãi, tự cảm nhận độ căng của cơ lườn khi uốn nghiêng.\n- Tích cực sửa sai tư thế tay áp sát tai theo hướng dẫn của giáo viên.`;
-      practiceFocus = 'độ uốn lườn sâu trên mặt phẳng trán và tay vươn sát tai';
-      break;
-
-    case 'bung':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa thẳng lên cao song song, lòng bàn tay hướng vào nhau, đầu ngửa nhẹ.\n- Nhịp 2: Cúi gập thân sâu ra trước, cúi đầu, hai tay hướng xuống chạm hai mu bàn chân, hai chân giữ thẳng.\n- Nhịp 3: Đứng thẳng lên, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải.`;
-      gvExplanation = `- GV giới thiệu Động tác Bụng, phân tích tác dụng tăng cường độ dẻo dai của gân kheo cơ đùi sau và săn chắc các nhóm cơ bụng.\n- Làm mẫu trực quan 2 - 3 lần kết hợp phân tích nhịp: nhịp 1 vươn căng hai tay lên cao, nhịp 2 gập sâu thân người thở ra hết, hai chân giữ thẳng không được co gập gối.\n- Cho học sinh quan sát tranh vẽ kỹ thuật SGK, lưu ý tư thế đầu cúi tự nhiên theo thân người.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn cho những em chân còn bị co gập hoặc cúi gập quá vội vàng.\n- Tuyên dương các em giữ được chân thẳng và chạm tay tới mu bàn chân.`;
-      hsTask = `- Đội hình 4 hàng ngang giãn cách cự ly 1 sải tay.\n- Chăm chú theo dõi tư thế cúi gập thân và giữ thẳng đầu gối của thầy cô.\n- Tập mô phỏng chậm rãi, thở ra hết khi gập thân và hít sâu khi vươn người đứng thẳng.\n- Tự giác điều chỉnh không co gối khi tay với xuống chạm mu bàn chân.`;
-      practiceFocus = 'hai chân giữ thẳng và cúi gập thân sâu thở ra nhịp nhàng';
-      break;
-
-    case 'van_minh':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang bằng vai, lòng bàn tay ngửa.\n- Nhịp 2: Vặn mình sang trái 90 độ, hai bàn chân giữ nguyên cố định bám sàn, hai tay giữ ngang vai.\n- Nhịp 3: Như nhịp 1 (về tư thế hai tay dang ngang).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng bước chân phải và vặn mình sang phải.`;
-      gvExplanation = `- GV giới thiệu Động tác Vặn mình, nêu rõ tác dụng tăng độ linh hoạt của khớp háng, cột sống và rèn luyện sự khéo léo phối hợp vận động.\n- Làm mẫu kỹ thuật 2 - 3 lần; nhấn mạnh yêu cầu: hai bàn chân phải bám chắc trên mặt sân, chỉ xoay vặn phần thân trên 90 độ, không xoay nhấc gót chân.\n- Hướng dẫn học sinh quan sát hình ảnh SGK, nhắc nhở giữ hai tay ngang bằng vai trong suốt quá trình vặn mình.\n- Hô nhịp chậm hướng dẫn lớp tập luyện; quan sát phát hiện lỗi xoay cả chân hoặc hạ tay xuống thấp để kịp thời nhắc nhở sửa chữa.\n- Biểu dương sự cố gắng và chuyển động dứt khoát của học sinh.`;
-      hsTask = `- Đội hình 4 hàng ngang so le 1 sải tay.\n- Quan sát góc xoay 90 độ của thân trên và vị trí cố định của hai bàn chân.\n- Thực hiện động tác vặn mình dứt khoát, giữ hai cánh tay thẳng ngang vai.\n- Chỉnh sửa tư thế bàn chân bám chắc mặt sân theo nhắc nhở của thầy cô.`;
-      practiceFocus = 'bàn chân cố định bám sàn và vặn thân trên 90 độ dứt khoát';
-      break;
-
-    case 'toan_than':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Bước chân trái chếch trước, khuỵu gối sâu, chân sau thẳng, hai tay vươn chếch cao chữ V, ngửa đầu.\n- Nhịp 2: Rút chân trái về, cúi gập thân hai tay chạm mũi chân, chân thẳng.\n- Nhịp 3: Đứng thẳng hai tay dang ngang bằng vai, ngực căng.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng bước chân phải chếch trước.`;
-      gvExplanation = `- GV giới thiệu Động tác Toàn thân, phân tích tác dụng kéo giãn liên hoàn các nhóm cơ đùi, lưng và cánh tay, nâng cao khả năng phối hợp vận động toàn diện.\n- Thị phạm chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích kỹ thuật dồn trọng tâm lên chân trước khi khuỵu gối và độ căng cơ lưng khi cúi gập.\n- Cho học sinh quan sát tranh ảnh kỹ thuật đính kèm trong SGK, chỉ rõ độ mở của hai chân.\n- Hô nhịp chậm cho học sinh tập mô phỏng; kịp thời uốn nắn tư thế khuỵu gối vững chãi và thẳng chân sau.\n- Khen ngợi những em thực hiện nhịp nhàng, vững vàng thăng bằng.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le, khoảng cách 1 sải tay.\n- Quan sát kỹ thuật bước chân chếch trước và khuỵu gối của GV.\n- Tập mô phỏng từng nhịp theo nhịp hô chậm, chú ý giữ thăng bằng chân trước chân sau.\n- Tiếp thu chỉ dẫn để hoàn thiện độ vươn cao của hai tay và độ dẻo thân người.`;
-      practiceFocus = 'dồn trọng tâm chân trước khuỵu gối và phối hợp toàn thân nhịp nhàng';
-      break;
-
-    case 'nhay':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Bật nhảy tách hai chân sang ngang rộng bằng vai, đồng thời hai tay dang ngang bằng vai, lòng bàn tay sấp.\n- Nhịp 2: Bật nhảy khép hai chân về, đồng thời hai tay vỗ vào nhau trên đỉnh đầu.\n- Nhịp 3: Như nhịp 1 (bật nhảy tách chân, hai tay dang ngang).\n- Nhịp 4: Bật nhảy khép chân về TTCB (hạ hai tay xuôi theo thân).\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
-      gvExplanation = `- GV giới thiệu Động tác Nhảy, giải thích tác dụng phát triển sức bật của đôi chân, độ linh hoạt toàn thân và sự hào hứng phấn chấn.\n- Thị phạm mẫu chuẩn 2 - 3 lần; lưu ý điểm an toàn quan trọng: khi bật nhảy phải tiếp đất nhẹ nhàng bằng nửa trước bàn chân để hoãn xung, tránh dộng gót gây đau khớp gối.\n- Cho học sinh quan sát tranh ảnh SGK, chỉ rõ nhịp vỗ tay trên đỉnh đầu dứt khoát kết hợp bật nhảy nhịp nhàng.\n- Hô nhịp đếm chậm cho học sinh tập thử từng nhịp; trực tiếp sửa sai cách tiếp đất cho các em; nhắc nhở học sinh giữ nhịp thở đều.\n- Tuyên dương tinh thần tập luyện sôi nổi, động tác đều đẹp của cả lớp.`;
-      hsTask = `- Đội hình 4 hàng ngang giãn cách 1 sải tay an toàn.\n- Chú ý quan sát động tác tiếp đất êm bằng mũi bàn chân và nhịp vỗ tay trên đầu của GV.\n- Bật nhảy nhịp nhàng theo nhịp đếm, giữ lưng thẳng, tiếp đất nhẹ nhàng không gây tiếng ồn lớn.\n- Tự điều chỉnh biên độ nhảy vừa sức và giữ nhịp thở ổn định.`;
-      practiceFocus = 'bật nhảy nhịp nhàng và tiếp đất nhẹ nhàng bằng nửa trước bàn chân';
-      break;
-
-    case 'dieu_hoa':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang chạm bằng mũi chân, hai tay đưa ra trước lắc cổ tay nhẹ nhàng, hít sâu bằng mũi.\n- Nhịp 2: Về TTCB, thở ra từ từ bằng miệng.\n- Nhịp 3: Chân phải đưa sang ngang chạm bằng mũi chân, hai tay dang ngang lắc cổ tay nhẹ nhàng, hít sâu.\n- Nhịp 4: Về TTCB, thở ra.\n- Nhịp 5, 6, 7, 8: Thực hiện như nhịp 1, 2, 3, 4.`;
-      gvExplanation = `- GV giới thiệu Động tác Điều hòa, nhấn mạnh đây là động tác cuối cùng của bài thể dục giúp cơ thể thả lỏng, nhịp tim và hô hấp hồi phục về trạng thái cân bằng.\n- Làm mẫu 2 - 3 lần kết hợp hướng dẫn nhịp thở sâu, êm; phân tích kỹ thuật lắc cổ tay nhẹ nhàng, thả lỏng toàn bộ các cơ bắp.\n- Cho học sinh đối chiếu với tranh ảnh SGK, hướng dẫn các em tập trung cảm nhận sự thư thái khi thực hiện động tác.\n- Hô nhịp chậm, giọng điệu nhẹ nhàng truyền cảm giúp học sinh thả lỏng tối đa; nhắc nhở các em không gồng cứng cơ bắp.\n- Nhận xét và đánh giá cao sự tiến bộ của toàn lớp trong việc hoàn thiện bài tập thể dục.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng giãn cách thoải mái.\n- Lắng nghe nhịp hô chậm rãi, êm dịu của giáo viên, thả lỏng hoàn toàn các khớp cổ tay và chân.\n- Thực hiện đưa chân chạm mũi nhẹ nhàng, kết hợp hít vào sâu bằng mũi và thở ra chậm rãi bằng miệng.\n- Đưa cơ thể về trạng thái hồi phục khoan khoái sau giờ học.`;
-      practiceFocus = 'lắc cổ tay thả lỏng nhẹ nhàng và điều hòa nhịp thở sâu êm';
-      break;
-
-    case 'di_deu':
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Khẩu lệnh: "Đi đều... BƯỚC!".\n- Động tác: Bước chân trái ra trước nhịp 1, đồng thời tay phải gập vuông góc trước ngực, tay trái đánh thẳng ra sau; nhịp 2 bước chân phải, đổi tay; bước chân theo nhịp 1-2, 1-2 dứt khoát.\n- Khẩu lệnh: "Đứng lại... ĐỨNG!" (dự lệnh và động lệnh đều rơi vào chân phải).\n- Động tác: Sau động lệnh "ĐỨNG!", bước tiếp chân trái một bước rồi khép chân phải về TTCB đứng nghiêm.`;
-      gvExplanation = `- GV giới thiệu động tác Đi đều, Đứng lại, phân tích ý nghĩa rèn luyện tính kỷ luật, tác phong đội ngũ nhanh nhẹn, thống nhất và đẹp mắt.\n- Làm mẫu chuẩn xác 2 - 3 lần theo phương pháp vừa làm vừa phân tích; nhấn mạnh quy tắc: "Chân nọ tay kia", chân trái bước vào nhịp 1, chân phải bước vào nhịp 2, tay đánh vuông góc trước ngực.\n- Cho học sinh xem tranh kỹ thuật SGK lớp 3 trang 27, hướng dẫn cách nghe khẩu lệnh dự lệnh và động lệnh.\n- Hô nhịp tại chỗ cho học sinh tập dậm chân trước, sau đó cho đi đều từng bước ngắn; quan sát phát hiện lỗi đi cùng chân cùng tay để sửa ngay.\n- Khen ngợi các em bước chân đúng nhịp hô dứt khoát.`;
-      hsTask = `- Đội hình hàng dọc hoặc hàng ngang theo cự ly chuẩn bị đi đều.\n- Lắng nghe dự lệnh và động lệnh của GV, ghi nhớ quy tắc bước chân trái ở nhịp 1 và chân phải ở nhịp 2.\n- Đi đều dứt khoát, tay đánh tự nhiên vuông góc trước ngực, mắt nhìn thẳng phía trước.\n- Chỉnh đốn cự ly hàng ngũ thẳng đều theo các bạn xung quanh.`;
-      practiceFocus = 'bước chân đúng nhịp 1 - 2 chân nọ tay kia và đứng lại chuẩn khẩu lệnh';
-      break;
-
-    case 'bung_gay':
-      movementSteps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa gậy ra trước - lên cao, mắt nhìn theo gậy.\n- Nhịp 2: Cúi người, gập thân, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay đưa gậy lên cao, mắt nhìn theo gậy).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.`;
-      gvExplanation = `- GV giới thiệu Động tác Bụng với gậy (SGK Lớp 5 Trang 30), phân tích tác dụng tăng cường độ dẻo của cột sống, phát triển cơ bụng và cơ đùi sau.\n- Làm mẫu trực quan 2 - 3 lần kết hợp phân tích kỹ thuật: nhịp 1 nâng gậy lên cao thân thẳng, nhịp 2 cúi gập thân sâu thở ra hết, hai chân giữ thẳng không được co gập gối, gậy chạm mũi bàn chân.\n- Cho học sinh quan sát hình ảnh kỹ thuật SGK lớp 5 trang 30, lưu ý cách cầm hai đầu gậy chắc chắn.\n- Hô nhịp chậm điều khiển lớp tập thử; di chuyển quan sát uốn nắn cho những em chân còn bị co gập hoặc cúi gập vội vàng.\n- Tuyên dương các em giữ được chân thẳng và hạ gậy chạm mũi chân chuẩn xác.`;
-      hsTask = `- Đội hình 4 hàng ngang giãn cách cự ly 1.5m đảm bảo không chạm gậy vào bạn bên cạnh.\n- Chăm chú theo dõi tư thế cúi gập thân và giữ thẳng đầu gối của thầy cô.\n- Cầm chắc gậy, tập mô phỏng chậm rãi, thở ra hết khi gập thân và hít sâu khi vươn người đứng thẳng.\n- Tự giác điều chỉnh không co gối khi gậy hạ xuống chạm mu bàn chân.`;
-      practiceFocus = 'hai chân giữ thẳng, cúi gập thân sâu và hạ gậy chạm mũi bàn chân';
-      break;
-
-    case 'bung_van_minh_gay':
-      movementSteps = `* Học Động tác Bụng với gậy (SGK GDTC Lớp 5 Trang 30):\n- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng hơn vai, hai tay đưa gậy lên cao chếch chữ V, ngửa đầu (hít sâu).\n- Nhịp 2: Cúi gập thân sâu, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân (thở ra).\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (hai tay đưa gậy lên cao).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân phải.\n\n* Học Động tác Vặn mình với gậy (SGK GDTC Lớp 5 Trang 30):\n- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Giữ nguyên hai bàn chân bám sàn, vặn mình sang trái 90 độ, hai tay đưa gậy sang trái ra sau dứt khoát, mắt nhìn theo gậy.\n- Nhịp 3: Về nhịp 1 (gậy ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân, nhịp 6 vặn mình sang phải.`;
-      gvExplanation = `- GV giới thiệu 2 động tác mới trong tiết 1: Động tác Bụng với gậy và Động tác Vặn mình với gậy (SGK GDTC Lớp 5 Trang 30); phân tích tác dụng tăng cường độ dẻo dai của cột sống và rèn luyện cơ lườn săn chắc.\n- Quán triệt kỷ luật an toàn sử dụng gậy; làm mẫu chuẩn xác từng động tác 2-3 lần theo phương pháp chiều gương: với động tác Bụng nhấn mạnh gập sâu nhưng hai chân luôn giữ thẳng; với động tác Vặn mình nhấn mạnh hai bàn chân cố định bám sàn, chỉ vặn phần thân trên 90 độ.\n- Hướng dẫn học sinh đối chiếu hình vẽ kỹ thuật SGK trang 30, lưu ý cách cầm hai đầu gậy thăng bằng.\n- Hô nhịp chậm cho học sinh tập mô phỏng: tập thuần thục Động tác Bụng trước, sau đó tập Động tác Vặn mình, rồi phối hợp liên hoàn cả 2 động tác.\n- Quan sát uốn nắn tư thế gậy và lưng thẳng cho từng em; biểu dương sự tiến bộ của cả lớp.`;
-      hsTask = `- Đội hình 4 hàng ngang so le cự ly 1.5m đảm bảo an toàn tuyệt đối khi vung gậy.\n- Chăm chú quan sát động tác làm mẫu của GV và hình ảnh kỹ thuật SGK; ghi nhớ điểm mấu chốt: giữ thẳng chân khi gập thân và giữ chắc bàn chân bám sàn khi vặn mình.\n- Lần lượt tập mô phỏng từng nhịp động tác Bụng rồi đến động tác Vặn mình theo khẩu lệnh của giáo viên.\n- Thực hiện liên hoàn 2 động tác nhịp nhàng, đúng biên độ và giữ gậy chắc chắn.`;
-      practiceFocus = 'hai chân giữ thẳng khi gập thân ở động tác Bụng và bàn chân cố định bám sàn khi vặn mình 90 độ';
-      break;
-
-    case 'van_minh_gay':
-      movementSteps = `- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Giữ nguyên chân, vặn mình sang trái, hai tay cầm gậy đưa ngang sang trái - ra sau, mắt nhìn theo gậy.\n- Nhịp 3: Về nhịp 1 (gậy đưa thẳng ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân, nhịp 6 đổi hướng vặn mình sang phải.`;
-      gvExplanation = `- GV giới thiệu Động tác Vặn mình với gậy (SGK Lớp 5 Trang 30), nêu rõ tác dụng tăng độ linh hoạt khớp háng, cơ lườn và cột sống.\n- Làm mẫu kỹ thuật 2 - 3 lần; nhấn mạnh yêu cầu cốt lõi: hai bàn chân phải bám chắc trên mặt sân, chỉ xoay vặn phần thân trên, hai tay cầm gậy đưa ngang ra sau dứt khoát.\n- Hướng dẫn học sinh quan sát hình ảnh SGK trang 30, nhắc nhở giữ gậy thăng bằng ngang vai trong suốt quá trình vặn mình.\n- Hô nhịp chậm hướng dẫn lớp tập luyện; quan sát phát hiện lỗi xoay cả chân hoặc hạ gậy xuống thấp để kịp thời nhắc nhở sửa chữa.\n- Biểu dương sự cố gắng và chuyển động dứt khoát của học sinh.`;
-      hsTask = `- Đội hình 4 hàng ngang so le 1.5m cự ly an toàn.\n- Quan sát góc xoay thân trên và vị trí cố định của hai bàn chân khi thực hiện động tác với gậy.\n- Cầm chắc gậy, thực hiện động tác vặn mình dứt khoát, giữ gậy ngang vai.\n- Chỉnh sửa tư thế bàn chân bám chắc mặt sân theo nhắc nhở của thầy cô.`;
-      practiceFocus = 'hai bàn chân bám chắc sàn, vặn thân mình và giữ gậy ngang vai';
-      break;
-
-    case 'toan_than_gay':
-      movementSteps = `* Ôn tập các động tác đã học: Động tác Bụng và Động tác Vặn mình với gậy (2 - 3 lần, mỗi lần 2x8 nhịp).\n\n* Học Động tác Toàn thân với gậy (SGK GDTC Lớp 5 Trang 31):\n- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Khuỵu gối chân trái, chân phải thẳng, hai tay đưa gậy ra trước ngang vai.\n- Nhịp 2: Duỗi gối, cúi người gập thân sâu, hai chân thẳng, hai tay đưa gậy xuống chạm mũi bàn chân, mắt nhìn theo gậy.\n- Nhịp 3: Đứng thẳng, chân trái đưa ra sau kiễng gót tì mũi chân, trọng tâm dồn chân phải, hai tay đưa gậy lên cao chếch chữ V, ngửa đầu.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 dồn chân phải, nhịp 7 đổi chân.`;
-      gvExplanation = `- GV tổ chức cho lớp ôn tập 2 động tác Bụng và Vặn mình với gậy 1-2 lần để tạo sự kết nối liên hoàn và khởi động các nhóm cơ.\n- GV giới thiệu động tác mới: Động tác Toàn thân với gậy (SGK Lớp 5 Trang 31), phân tích tác dụng phối hợp toàn diện các khớp chân, cơ lưng, bụng và cánh tay.\n- Thị phạm chuẩn xác 2 - 3 lần theo phương pháp chiều gương; phân tích kỹ thuật: nhịp 1 khuỵu gối giữ lưng thẳng, nhịp 2 cúi gập thân thẳng chân gậy chạm chân, nhịp 3 nâng gậy lên cao chân sau kiễng gót dồn trọng tâm chân trước.\n- Cho học sinh quan sát tranh ảnh kỹ thuật SGK trang 31; hô nhịp chậm cho học sinh tập mô phỏng động tác Toàn thân; sau đó ghép liên hoàn cả 3 động tác: Bụng - Vặn mình - Toàn thân.\n- Khen ngợi những em thực hiện nhịp nhàng, vững vàng thăng bằng.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le, khoảng cách 1.5m.\n- Cả lớp thực hiện bài tập ôn tập 2 động tác Bụng và Vặn mình theo hiệu lệnh cán sự.\n- Quan sát kỹ thuật khuỵu gối, gập thân và vươn gậy kiễng gót của giáo viên ở động tác mới Toàn thân.\n- Tập mô phỏng từng nhịp theo nhịp hô chậm; ghép liên hoàn cả 3 động tác với gậy đẹp mắt.`;
-      practiceFocus = 'khuỵu gối lưng thẳng, cúi gập thân chạm gậy và nâng gậy kiễng gót thăng bằng';
-      break;
-
-    case 'vuon_tho_tay_gay':
-      movementSteps = `* Học Động tác Vươn thở với gậy (SGK GDTC Lớp 5 Trang 24):\n- TTCB: Đứng nghiêm, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Hai tay đưa gậy lên cao chếch chữ V, ngửa đầu, hít sâu bằng mũi.\n- Nhịp 3: Về nhịp 1 (gậy ra trước ngang vai).\n- Nhịp 4: Về TTCB (thở ra bằng miệng).\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân phải.\n\n* Học Động tác Tay với gậy (SGK GDTC Lớp 5 Trang 24-25):\n- TTCB: Đứng nghiêm, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Bước chân trái sang ngang rộng bằng vai, hai tay đưa gậy lên cao chếch chữ V, mắt nhìn theo gậy.\n- Nhịp 2: Hạ gậy ngang ra sau gáy, ngực ưỡn căng.\n- Nhịp 3: Đưa gậy lên cao như nhịp 1.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân phải.`;
-      gvExplanation = `- GV giới thiệu 2 động tác mới trong tiết 1: Động tác Vươn thở và Động tác Tay với gậy (SGK Lớp 5 Trang 24-25); phân tích tác dụng mở rộng lồng ngực và tăng cường sức mạnh cơ cánh tay, khớp vai.\n- Quán triệt an toàn khi sử dụng gậy; làm mẫu chuẩn xác 2-3 lần từng động tác; phân tích chi tiết nhịp hít sâu bằng mũi khi đưa gậy lên cao và nhịp thở ra khi hạ gậy; với động tác Tay nhấn mạnh nhịp hạ gậy sau gáy ưỡn căng ngực.\n- Cho học sinh đối chiếu hình vẽ SGK trang 24-25; hô nhịp trống/còi chậm điều khiển lớp tập thử lần lượt từng động tác rồi ghép liên hoàn cả 2 động tác.\n- Luân chuyển giữa các hàng để uốn nắn độ thẳng của tay và độ thăng bằng của gậy.\n- Tuyên dương các tổ giữ cự ly thẳng hàng và động tác đồng đều.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le cách nhau 1.5m.\n- Quan sát tỉ mỉ góc vươn của gậy và nhịp thở sâu của giáo viên.\n- Thực hiện mô phỏng từng nhịp theo nhịp hô chậm của GV: tập động tác Vươn thở trước, sau đó tập động tác Tay.\n- Phối hợp liên hoàn 2 động tác theo nhịp trống dứt khoát, giữ gậy thăng bằng song song mặt đất.`;
-      practiceFocus = 'nâng gậy thăng bằng phối hợp nhịp hít thở sâu và hạ gậy sau gáy căng ngực';
-      break;
-
-    case 'chan_gay':
-      movementSteps = `* Ôn tập các động tác đã học: Động tác Vươn thở và Động tác Tay với gậy (2 - 3 lần, mỗi lần 2x8 nhịp).\n\n* Học Động tác Chân với gậy (SGK GDTC Lớp 5 Trang 25):\n- TTCB: Đứng thẳng, hai tay cầm hai đầu gậy trước đùi.\n- Nhịp 1: Kiễng gót hai chân, hai tay đưa gậy ra trước ngang vai (lưng thẳng, mắt nhìn theo gậy).\n- Nhịp 2: Hạ gót, khuỵu gối sâu, hai tay đưa gậy lên cao qua đầu, lưng giữ thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1 (kiễng gót, gậy ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Thực hiện liên tục như nhịp 1, 2, 3, 4.`;
-      gvExplanation = `- GV cho toàn lớp ôn tập lại 2 động tác Vươn thở và Tay với gậy 1-2 lần để tạo sự kết nối liên hoàn.\n- GV giới thiệu Động tác mới: Động tác Chân với gậy (SGK GDTC Lớp 5 Trang 25), phân tích tác dụng tăng cường sức mạnh cơ chân, khớp gối và khả năng giữ thăng bằng.\n- Làm mẫu chuẩn xác 2-3 lần; nhấn mạnh nhịp 1 kiễng cao gót giữ thăng bằng trên nửa trước bàn chân, nhịp 2 khuỵu gối sâu nhưng thân người luôn giữ thẳng, hai tay nâng gậy lên cao qua đầu.\n- Cho học sinh quan sát tranh ảnh kỹ thuật SGK trang 25; hô nhịp chậm cho học sinh tập mô phỏng; sau đó cho cả lớp ghép liên hoàn 3 động tác: Vươn thở - Tay - Chân với gậy.\n- Kịp thời sửa sai các lỗi mất thăng bằng hoặc gù lưng; tuyên dương học sinh thực hiện tốt.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le, cự ly 1.5m.\n- Thực hiện ôn tập 2 động tác Vươn thở và Tay với gậy nhịp nhàng theo nhịp đếm của cán sự.\n- Chăm chú quan sát tư thế kiễng gót và khuỵu gối lưng thẳng của giáo viên ở động tác Chân.\n- Tập mô phỏng động tác Chân theo nhịp đếm chậm; sau đó ghép liên hoàn cả 3 động tác với gậy.`;
-      practiceFocus = 'kiễng gót thăng bằng, khuỵu gối lưng thẳng và nâng gậy qua đầu';
-      break;
-
-    case 'gay':
-      movementSteps = `- TTCB: Đứng nghiêm, hai tay cầm hai đầu gậy thể dục đặt ngang trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa gậy ra trước ngang vai (lòng bàn tay sấp).\n- Nhịp 2: Hai tay đưa gậy lên cao, mắt nhìn theo gậy (đầu ngửa nhẹ, hít sâu).\n- Nhịp 3: Về nhịp 1 (hai tay đưa gậy ra trước ngang vai).\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng ở nhịp 5 đổi chân.`;
-      gvExplanation = `- GV giới thiệu bài tập thể dục với gậy (Động tác Vươn thở và Động tác Tay - SGK Lớp 5 Trang 24-25), nêu rõ tác dụng phát triển sức mạnh tay vai, mở rộng lồng ngực và rèn luyện tư thế chuẩn mực.\n- Quán triệt kỷ luật an toàn sử dụng gậy; kiểm tra gậy nhẵn bóng không nứt gãy trước khi tập; thị phạm mẫu chuẩn xác 2 - 3 lần.\n- Cho học sinh quan sát tranh ảnh SGK lớp 5 trang 24-25, chỉ rõ cách cầm gậy cân đối và giữ gậy thăng bằng song song với mặt sân.\n- Hô nhịp trống/còi dứt khoát hướng dẫn học sinh tập thử từng nhịp; luân chuyển uốn nắn tư thế gậy và lưng thẳng cho từng em.\n- Đánh giá cao ý thức giữ cự ly an toàn và sự đồng đều của các tổ.`;
-      hsTask = `- Đội hình 4 hàng ngang so le cự ly 1.5m đảm bảo không chạm gậy vào nhau.\n- Cầm chắc hai đầu gậy, chăm chú quan sát tư thế nâng gậy song song và vươn cao của GV.\n- Tập liên hoàn theo nhịp trống dứt khoát, nâng gậy đều đẹp và hạ gậy dứt khoát.\n- Tự giác bảo quản dụng cụ học tập cẩn thận trong suốt tiết học.`;
-      practiceFocus = 'cầm chắc hai đầu gậy, nâng gậy song song thăng bằng và hít thở sâu nhịp nhàng';
-      break;
-
-    case 'dung_nghiem':
-      movementSteps = `- Tư thế đứng nghiêm: Khẩu lệnh "Nghiêm!" - Học sinh đứng thẳng người, ngực căng, hai gót chân chạm sát nhau, hai mũi chân mở tự nhiên hình chữ V (45-60 độ); hai tay duỗi thẳng dọc đùi, ngón tay khép nhẹ, mắt nhìn thẳng.\n- Tư thế đứng nghỉ: Khẩu lệnh "Nghỉ!" - Học sinh trùng nhẹ khớp gối chân trái (hoặc chân phải), trọng tâm dồn lên chân còn lại, thân người thả lỏng tự nhiên; khi mỏi có thể đổi chân.`;
-      gvExplanation = `- GV giới thiệu và làm mẫu chuẩn mực hai tư thế Đứng nghiêm và Đứng nghỉ, giải thích ý nghĩa rèn nếp sống kỷ luật, tư thế tác phong ngay ngắn trong học tập và sinh hoạt.\n- Thị phạm 2 - 3 lần kết hợp giải thích chi tiết: tư thế nghiêm gót chân phải khép chạm, ngực căng thẳng, hai tay khép sát sườn đùi, không nhấp nhổm.\n- Cho học sinh quan sát tranh ảnh SGK lớp 1 trang 10-11, chỉ rõ sự khác biệt giữa chân đứng thẳng và chân trùng gối khi nghỉ.\n- Phát khẩu lệnh "Nghiêm!" - "Nghỉ!" luân phiên cho toàn lớp thực hiện; trực tiếp đi sửa tư thế mở bàn chân chữ V và góc nhìn thẳng cho học sinh.\n- Biểu dương sự tập trung, tác phong nhanh nhẹn và nghiêm túc của lớp.`;
-      hsTask = `- Đội hình 4 hàng ngang tập trung chỉnh đốn hàng ngũ.\n- Lắng nghe khẩu lệnh dứt khoát, thực hiện dứt khoát tư thế đứng nghiêm (khép gót, căng ngực) và tư thế nghỉ (trùng gối tự nhiên).\n- Giữ trật tự, mắt nhìn thẳng, không quay nghiêng ngửa đầu khi đứng nghiêm.\n- Tự điều chỉnh tư thế bàn chân theo hướng dẫn của giáo viên.`;
-      practiceFocus = 'gót chân khép chạm mở mũi chữ V và phản xạ dứt khoát theo khẩu lệnh';
-      break;
-
-    case 'vuot_cnv':
-      movementSteps = `- TTCB: Đứng chân trước chân sau trước vạch xuất phát, hai tay buông tự nhiên, mắt quan sát chướng ngại vật.\n- Động tác: Bước đi tự nhiên theo đường thẳng; khi đến gần chướng ngại vật (cọc mốc, vạch kẻ, bóng), nâng cao đùi bước dứt khoát qua vật cản, tiếp đất êm bằng nửa trước bàn chân rồi bước tiếp tục, hai tay đánh phối hợp thăng bằng.`;
-      gvExplanation = `- GV giới thiệu bài tập Đi vượt chướng ngại vật, nêu rõ tác dụng rèn luyện sự khéo léo, khả năng định hướng và kỹ năng vượt vật cản an toàn trong đời sống.\n- Bố trí các chướng ngại vật thấp (10-15cm), cự ly an toàn 1.5 - 2m; làm mẫu chuẩn xác 2-3 lần kết hợp giải thích cách nâng cao đùi và tiếp đất nhẹ nhàng.\n- Cho học sinh quan sát hình ảnh SGK lớp 3 trang 41-43, chỉ rõ điểm đặt chân trước và sau vật cản.\n- Cho từng nhóm học sinh đi thử, GV đứng sát bên quan sát uốn nắn, nhắc nhở không nhảy vội vàng làm xô đổ chướng ngại vật.\n- Khen ngợi những em bước qua êm ái, giữ vững thăng bằng.`;
-      hsTask = `- Đội hình hàng dọc trước làn chướng ngại vật.\n- Quan sát điểm chạm đất và biên độ nâng đùi của giáo viên.\n- Lần lượt từng học sinh thực hiện đi vượt chướng ngại vật theo hiệu lệnh còi, giữ thăng bằng thân người.\n- Chờ đến lượt trật tự, cổ vũ động viên các bạn trong tổ.`;
-      practiceFocus = 'nâng cao đùi bước qua vật cản và tiếp đất thăng bằng an toàn';
-      break;
-
-    case 'tung_bong':
-      movementSteps = `- TTCB: Đứng chân trước chân sau (hoặc hai chân rộng bằng vai), hai tay ôm đón bóng ở trước ngực.\n- Động tác tung bóng: Hơi khuỵu gối lấy đà, dùng lực cẳng tay và cổ tay đẩy tung bóng thẳng lên cao phía trước mặt từ 0.8m - 1.2m.\n- Động tác bắt bóng: Hai mắt chăm chú theo dõi đường bóng rơi, hai tay giơ lên xòe rộng các ngón đón bóng ngang ngực, hoãn xung giữ êm vào lòng bàn tay.`;
-      gvExplanation = `- GV giới thiệu kỹ thuật Tung và bắt bóng, nêu rõ tác dụng phát triển phản xạ thị giác, khả năng phán đoán quỹ đạo và sự khéo léo của đôi tay.\n- Thị phạm làm mẫu 2 - 3 lần kết hợp chỉ dẫn: khi tung bóng phải đẩy bóng theo phương thẳng đứng, khi bắt bóng phải xòe rộng ngón tay đón bóng và co nhẹ tay hoãn xung.\n- Cho học sinh quan sát hình ảnh SGK, nhắc nhở không dùng lòng bàn tay đập vào bóng làm nảy bóng rơi.\n- Hướng dẫn học sinh tập tung bắt bóng tại chỗ cá nhân trước, sau đó phát triển sang chuyền bắt bóng cặp đôi.\n- Tuyên dương những em bắt bóng dính và chuẩn xác.`;
-      hsTask = `- Đội hình 4 hàng ngang giãn cách cự ly 2m để không va chạm bóng.\n- Mỗi học sinh cầm 1 quả bóng tập trung quan sát hướng tung và đón bóng của GV.\n- Tự giác luyện tập tung bóng vừa tầm mắt và đón bắt êm bằng hai tay.\n- Phối hợp cặp đôi chuyền bắt bóng nhịp nhàng, giúp bạn nhặt bóng rơi.`;
-      practiceFocus = 'tung bóng thẳng hướng và xòe ngón đón bóng hoãn xung êm ái';
-      break;
-
-    case 'dan_bong':
-      movementSteps = `- TTCB: Chân trước chân sau, hai đầu gối khuỵu hạ thấp trọng tâm, lưng thẳng nghiêng nhẹ về trước, mắt quan sát phía trước.\n- Động tác dẫn bóng: Dùng các chai ngón tay và cổ tay ấn đẩy bóng nhịp nhàng xuống sân; bóng nảy lên ngang tầm hông thì tiếp tục ấn bóng xuống; tay không dẫn bóng co tự nhiên trước ngực bảo vệ bóng.`;
-      gvExplanation = `- GV giới thiệu kỹ thuật Dẫn bóng trong môn bóng rổ, phân tích tầm quan trọng của cảm giác bóng và khả năng giữ thăng bằng khi di chuyển.\n- Làm mẫu kỹ thuật dẫn bóng tại chỗ bằng tay thuận và tay không thuận; nhấn mạnh không được dùng cả lòng bàn tay tát vào bóng mà phải dùng độ dẻo ngón tay ấn đẩy bóng nhịp nhàng.\n- Cho học sinh xem tranh kỹ thuật SGK, nhắc các em tập thói quen không nhìn chằm chằm vào bóng mà phải ngẩng đầu quan sát sân.\n- Hướng dẫn học sinh nhồi bóng theo nhịp đếm; trực tiếp uốn nắn độ khuỵu gối và độ cao của bóng cho từng em.\n- Khen ngợi học sinh kiểm soát bóng tự tin, nhịp nhàng.`;
-      hsTask = `- Đội hình 4 hàng ngang so le, mỗi em 1 bóng cự ly giãn cách an toàn.\n- Quan sát độ nảy của bóng và điểm tiếp xúc bằng các ngón tay của GV.\n- Tập nhồi bóng tại chỗ bằng tay thuận rồi đổi sang tay trái, giữ trọng tâm thấp.\n- Ngẩng đầu quan sát tín hiệu tay của thầy cô trong khi nhồi bóng.`;
-      practiceFocus = 'dùng các ngón tay nhồi bóng nảy ngang hông và mắt nhìn quan sát';
-      break;
-
-    case 'boi':
-      movementSteps = `- TTCB: Hai tay bám chắc mép thành bể (hoặc nằm sấp trên thảm tập), thân người duỗi thẳng tự nhiên trên mặt nước phẳng.\n- Động tác đập chân: Hai chân duỗi thẳng, phát lực từ khớp hông đập so le lên xuống nhịp nhàng, cổ chân thả lỏng, mũi chân duỗi thẳng tạo bọt nước mịn.\n- Động tác quạt tay: Tay đưa ra trước ôm nước, kéo nước dọc theo thân người ra sau rồi nhấc khuỷu tay vung lên đưa về trước.`;
-      gvExplanation = `- GV giới thiệu kỹ thuật bơi trườn sấp, phân tích tầm quan trọng của kỹ năng bơi phòng chống đuối nước và rèn luyện thể lực toàn diện.\n- Quán triệt nội quy an toàn sông nước tuyệt đối; làm mẫu chuẩn xác động tác đập chân và quạt tay trên cạn 2-3 lần trước khi xuống nước.\n- Cho học sinh xem tranh ảnh kỹ thuật SGK, chỉ rõ cách phát lực từ hông chứ không phải co gập đầu gối.\n- Hướng dẫn học sinh tập mô phỏng trên cạn, sau đó thực hành đập chân bám thành bể có áo phao/phao bơi hỗ trợ an toàn.\n- Động viên, khích lệ tinh thần tự tin, dạn nước của các em.`;
-      hsTask = `- Đội hình xếp hàng trật tự dọc theo thành bể bơi có phao cứu sinh an toàn.\n- Tập trung quan sát kỹ thuật chân duỗi thẳng phát lực từ hông của GV.\n- Thực hiện bài tập mô phỏng trên cạn thuần thục trước khi xuống bể bơi.\n- Chấp hành nghiêm ngặt hiệu lệnh còi cứu hộ của giáo viên.`;
-      practiceFocus = 'phát lực đập chân từ hông và phối hợp quạt tay thở nhịp nhàng';
-      break;
-
-    case 'lan_lon':
-      movementSteps = `- TTCB: Ngồi xổm trên mép đệm thể dục, hai tay chống đệm phía trước rộng bằng vai, mắt nhìn đệm.\n- Động tác lộn xuôi: Đạp nhẹ hai chân, nâng mông cao, gập sâu cằm sát vào ngực, cong tròn lưng; đặt phần sau gáy chạm đệm rồi lăn tròn thân người theo lưng ra trước, hai tay ôm lấy cẳng chân đứng dậy về TTCB.`;
-      gvExplanation = `- GV giới thiệu kỹ thuật Lộn xuôi và Lăn trên đệm thể dục, nêu rõ tác dụng rèn luyện sự khéo léo, khả năng định hướng không gian và kỹ năng tự bảo vệ khi ngã.\n- Kiểm tra kỹ đệm thể dục êm ái, bề mặt phẳng an toàn; làm mẫu chuẩn xác 2 - 3 lần kết hợp giải thích chậm: điểm chạm đệm là phần gáy và lưng trên, tuyệt đối không chống đỉnh đầu xuống đệm.\n- Hướng dẫn học sinh xem tranh kỹ thuật SGK lớp 5 trang 41, nhắc nhở tư thế cuộn tròn người hình cầu.\n- Đứng sát đệm trực tiếp đỡ lưng bảo hiểm cho từng học sinh thực hiện; nhắc nhở học sinh gập cằm sát ngực trong suốt quá trình lộn.\n- Khen ngợi những em thực hiện động tác lăn êm, đứng dậy thăng bằng.`;
-      hsTask = `- Đội hình hàng dọc trước 4 thảm đệm thể dục an toàn.\n- Quan sát kỹ thuật giấu cằm vào ngực và cuộn tròn lưng của giáo viên.\n- Luân phiên từng bạn lên thực hiện động tác trên đệm có sự bảo hiểm của GV.\n- Tự giác đứng dậy gọn gàng và di chuyển về cuối hàng trật tự.`;
-      practiceFocus = 'giấu cằm sát ngực, cuộn tròn lưng lăn êm và đứng dậy thăng bằng';
-      break;
-
-    default:
-      // Mặc định Vươn thở
-      movementSteps = `- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa lên cao chếch chữ V, lòng bàn tay hướng vào nhau, đầu ngửa nhẹ, hít sâu bằng mũi.\n- Nhịp 2: Hai tay đưa xuống bắt chéo trước bụng, cúi nhẹ đầu, thở ra từ từ bằng miệng.\n- Nhịp 3: Như nhịp 1 (hít sâu).\n- Nhịp 4: Về TTCB (thở ra).\n- Nhịp 5, 6, 7, 8: Như nhịp 1, 2, 3, 4 nhưng đổi chân phải.`;
-      gvExplanation = `- GV giới thiệu tên động tác ${targetName}, nêu rõ tác dụng giúp phát triển các nhóm cơ và rèn luyện tư thế chuẩn xác.\n- Thị phạm làm mẫu chuẩn xác 2 - 3 lần theo phương pháp chiều gương kết hợp phân tích chậm từng nhịp; nhấn mạnh nhịp hít sâu bằng mũi, vươn căng các cơ, và nhịp thở ra hết bằng miệng.\n- Cho học sinh quan sát tranh ảnh kỹ thuật đính kèm trong SGK, chỉ rõ hướng của các chi và góc ngửa của đầu thân người.\n- Hô nhịp chậm hướng dẫn toàn lớp tập thử từng nhịp; quan sát phát hiện các lỗi sai phổ biến (cúi gập đầu quá thấp, tay chùng chưa căng, thở nông) và hướng dẫn sửa sai ngay tại chỗ.\n- Khen ngợi những em thực hiện đúng biên độ.`;
-      hsTask = `- Đội hình 4 hàng ngang đứng so le, cự ly giãn cách 1 sải tay để không va chạm.\n- Chăm chú quan sát động tác làm mẫu của GV và hình ảnh kỹ thuật SGK, ghi nhớ khẩu lệnh và thứ tự từng nhịp.\n- Bắt chước thực hiện mô phỏng từng nhịp theo nhịp hô chậm của giáo viên; phối hợp nhịp nhàng giữa nhịp thở và cử động tay chân.\n- Tự giác nhận biết và sửa lỗi sai tư thế theo hướng dẫn của thầy cô.`;
-      practiceFocus = 'vươn căng hai tay chếch chữ V và phối hợp nhịp thở sâu';
-      break;
-  }
-
+  const profile = getSingleMovementProfile(targetName, grade, userImages);
   return {
-    movementName: targetName,
-    imgUrl: resolvedImgUrl,
-    imgTitle: resolvedImgTitle,
-    movementSteps,
-    gvExplanation,
-    hsTask,
-    practiceFocus
+    movementName: profile.name,
+    imgUrl: profile.imgUrl,
+    imgTitle: profile.imgTitle,
+    movementSteps: profile.steps,
+    gvExplanation: profile.gv,
+    hsTask: profile.hs,
+    practiceFocus: profile.practiceFocus,
+    newMovements: [profile.name],
+    reviewMovements: [],
+    allImages: [{ id: 'img_single', url: profile.imgUrl, title: profile.imgTitle }]
   };
 }
 
@@ -695,6 +902,12 @@ export function resolveAccurateGameImage(
       title: 'Trò chơi bổ trợ khởi động: Ai kéo khoẻ hơn - SGK GDTC 5 (Trang 27)'
     };
   }
+  if (cleanName.includes('người thừa') || cleanName.includes('nguoi thua') || cleanName.includes('thừa thứ hai')) {
+    return {
+      url: '/assets/sgk_chuan/k5_tro_choi_doi_nao_nhanh_nhat.jpg',
+      title: 'Trò chơi bổ trợ khởi động: Người thừa thứ hai - SGK GDTC 5 (Trang 34)'
+    };
+  }
   if (category === 'tro_choi_kd') {
     return {
       url: '/assets/sgk_chuan/k5_tro_choi_doi_nao_nhanh_nhat.jpg',
@@ -781,6 +994,12 @@ export function createBalanced7LessonRows(
       hs: accurate.hsTask,
       contentImgUrl: accurate.imgUrl,
       contentImgTitle: accurate.imgTitle,
+      contentImages:
+        accurate.allImages && accurate.allImages.length > 0
+          ? accurate.allImages
+          : accurate.imgUrl
+          ? [{ id: 'img_kt_7r_1', url: accurate.imgUrl, title: accurate.imgTitle }]
+          : [],
       hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
       hsImgTitle: 'Đội hình quan sát tranh mẫu & GV làm mẫu',
       hsImages: [
@@ -859,9 +1078,9 @@ export function createBalanced7LessonRows(
     },
     // HÀNG 7: 4. VẬN DỤNG & HỒI TĨNH (Ô RIÊNG)
     {
-      content: `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng cơ toàn thân, rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi.\n4.2. Vận dụng:\n- Nêu câu hỏi vận dụng bài tập vào thực tế: "Em nên tập bài thể dục này vào thời điểm nào trong ngày để nâng cao sức khỏe?"\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, thu dọn dụng cụ đúng nơi quy định.\n4.3. Nhận xét & Dặn dò về nhà:\n- Đánh giá thái độ học tập; giao nhiệm vụ tự tập ở nhà.`,
+      content: `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng cơ toàn thân, rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi.\n4.2. Vận dụng:\n- Câu hỏi vận dụng SGK: "${getLessonSpecificApplication(mName, title, grade).question}"\n- Gợi ý trả lời & Vận dụng: ${getLessonSpecificApplication(mName, title, grade).answerGuide}\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, thu dọn dụng cụ đúng nơi quy định.\n4.3. Nhận xét & Dặn dò về nhà:\n- Đánh giá thái độ học tập; giao nhiệm vụ tự tập ở nhà: ${getLessonSpecificApplication(mName, title, grade).practicalHabit}`,
       lvd: `3 - 5 phút\n1 - 2 lần`,
-      gv: `- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ tay, rung thả lỏng cơ đùi, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n- Đặt câu hỏi tương tác thực tế giúp học sinh khắc sâu kiến thức; liên hệ thói quen tập thể dục buổi sáng cùng gia đình để tăng cường sức đề kháng.\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.`,
+      gv: `- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ tay, rung thả lỏng cơ đùi, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n- Đặt câu hỏi tương tác thực tế: "${getLessonSpecificApplication(mName, title, grade).question}" giúp học sinh khắc sâu kiến thức; liên hệ thói quen tập luyện: ${getLessonSpecificApplication(mName, title, grade).answerGuide}\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.`,
       hs: `- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n- Tích cực xung phong trả lời câu hỏi vận dụng kiến thức vào thực tế cuộc sống.\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe dặn dò của thầy cô, chào giáo viên và xếp hàng trật tự đi về lớp học.`,
       hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
       hsImgTitle: 'Đội hình hồi tĩnh và thả lỏng toàn thân',
@@ -874,6 +1093,96 @@ export function createBalanced7LessonRows(
       ]
     }
   ];
+}
+
+export interface LessonApplicationDetails {
+  question: string;
+  answerGuide: string;
+  practicalHabit: string;
+  environmentNote: string;
+  fullContentText: string;
+  fullGvText: string;
+  fullHsText: string;
+}
+
+/**
+ * Generates dynamic, pedagogical questions, answers, and real-life application tailored
+ * specifically to each movement/lesson instead of a static generic question.
+ */
+export function getLessonSpecificApplication(
+  movementName: string,
+  title: string = '',
+  grade: number = 1
+): LessonApplicationDetails {
+  const mLower = (movementName + ' ' + title).toLowerCase();
+
+  let question = 'Em nên tập động tác này vào thời điểm nào trong ngày để rèn luyện sức khỏe và phòng tránh cong vẹo cột sống?';
+  let answerGuide = 'Tập vào mỗi buổi sáng khi thức dậy hoặc sau giờ học căng thẳng; kết hợp hít thở sâu để nâng cao thể lực và sự tỉnh táo.';
+  let practicalHabit = 'Tự giác thực hiện 2 lần 8 nhịp tại nhà mỗi ngày cùng người thân.';
+
+  if (mLower.includes('phối hợp')) {
+    question = 'Khi thực hiện Động tác Phối hợp, sự kết hợp giữa tay, chân và cúi gập thân người giúp cơ thể phát triển điều gì và em nên tập vào lúc nào?';
+    answerGuide = 'Giúp toàn thân phát triển hài hòa, kéo giãn các nhóm cơ, tăng độ dẻo dai cột sống và phản xạ khéo léo. Em nên tập 2 lần 8 nhịp mỗi sáng hoặc sau khi ngồi học bài 35 - 45 phút để chống mỏi lưng.';
+    practicalHabit = 'Tập động tác phối hợp vào mỗi buổi sáng và hướng dẫn người thân cùng tập để giữ vóc dáng cân đối.';
+  } else if (mLower.includes('điều hòa')) {
+    question = 'Vì sao Động tác Điều hòa luôn được xếp ở cuối bài thể dục và cần kết hợp lắc cổ tay, hít thở chậm rãi?';
+    answerGuide = 'Vì động tác điều hòa kết hợp hít sâu, thở chậm và thả lỏng cổ tay giúp nhịp tim, nhịp thở và các nhóm cơ dần trở về trạng thái ổn định bình thường sau các vận động mạnh.';
+    practicalHabit = 'Tập động tác điều hòa sau các giờ chạy nhảy, vui chơi thể thao hoặc khi cảm thấy mệt mỏi để lấy lại năng lượng.';
+  } else if (mLower.includes('nhảy') || mLower.includes('nhay')) {
+    question = 'Khi thực hiện Động tác Nhảy, vì sao em cần tiếp đất nhẹ nhàng bằng nửa trước bàn chân và hơi khuỵu nhẹ gối?';
+    answerGuide = 'Tiếp đất bằng nửa trước bàn chân và khuỵu nhẹ gối giúp hoãn xung lực cơ thể, bảo vệ khớp gối, khớp cổ chân và tránh chấn động lên cột sống não bộ.';
+    practicalHabit = 'Tập bật nhảy nhẹ nhàng tại chỗ mỗi sáng kết hợp hít thở đều để tăng sức bật của đôi chân.';
+  } else if (mLower.includes('bụng')) {
+    question = 'Động tác Bụng với tư thế gập thân sâu và hai tay chạm mũi chân có tác dụng gì đối với cơ thể và hệ tiêu hóa của em?';
+    answerGuide = 'Làm dẻo dai cột sống lưng, săn chắc cơ bụng và kích thích hệ tiêu hóa hoạt động tốt hơn. Cần giữ thẳng gối khi cúi gập thân.';
+    practicalHabit = 'Tập động tác bụng vào buổi sáng hoặc trước bữa ăn tối 30 phút để rèn luyện cơ thể thon gọn, khỏe mạnh.';
+  } else if (mLower.includes('chân')) {
+    question = 'Khi kiễng gót hoặc khụy gối trong Động tác Chân, em làm thế nào để giữ thăng bằng cơ thể thật tốt?';
+    answerGuide = 'Giữ lưng thẳng, mắt nhìn thẳng phía trước, hai tay chống hông hoặc dang ngang để giữ thăng bằng, dồn trọng tâm đều vào các ngón chân giúp cơ đùi và bắp chân khỏe mạnh.';
+    practicalHabit = 'Thường xuyên tập kiễng gót và khụy gối đúng kỹ thuật mỗi sáng để đôi chân dẻo dai, nhanh nhẹn.';
+  } else if (mLower.includes('vặn mình')) {
+    question = 'Khi xoay người sang trái hoặc phải trong Động tác Vặn mình, hai bàn chân của em cần giữ như thế nào để đạt hiệu quả cao?';
+    answerGuide = 'Hai bàn chân giữ cố định bám chắc mặt sàn, chỉ xoay phần thân trên để kéo căng cơ liên sườn và khớp hông, rèn sự linh hoạt của cột sống.';
+    practicalHabit = 'Tập vặn mình sau khi ngồi học bài lâu để giải tỏa căng thẳng cho cột sống và thắt lưng.';
+  } else if (mLower.includes('lườn')) {
+    question = 'Tác dụng của Động tác Lườn đối với lồng ngực và hơi thở của em trong sinh hoạt hằng ngày là gì?';
+    answerGuide = 'Mở rộng lồng ngực, kéo giãn cơ liên sườn hai bên, giúp dung tích phổi tăng lên, hơi thở sâu hơn và tăng lượng oxy cho cơ thể.';
+    practicalHabit = 'Tập nghiêng lườn luân phiên hai bên mỗi ngày để giữ thân hình dẻo dai và phòng tránh lệch vẹo cột sống.';
+  } else if (mLower.includes('vươn thở')) {
+    question = 'Em hít vào và thở ra ở những nhịp nào trong Động tác Vươn thở để lồng ngực nở rộng và cơ thể sảng khoái nhất?';
+    answerGuide = 'Nhịp 1 vươn tay lên cao ngẩng đầu hít sâu bằng mũi; nhịp 2 hạ tay cúi đầu thở ra từ từ bằng miệng; giúp thanh lọc không khí trong phổi và cung cấp oxy cho não bộ.';
+    practicalHabit = 'Mỗi sáng thức dậy mở cửa sổ hít thở không khí trong lành và tập động tác vươn thở 2 lần 8 nhịp.';
+  } else if (mLower.includes('tay')) {
+    question = 'Thường xuyên tập Động tác Tay kết hợp vỗ tay trên cao giúp ích gì cho em khi học tập và sinh hoạt?';
+    answerGuide = 'Rèn khớp vai linh hoạt, cơ cánh tay và cổ tay dẻo dai, giảm mỏi cơ khi ngồi viết bài lâu và tăng khả năng phản xạ khéo léo.';
+    practicalHabit = 'Tập các cử động vươn tay, vỗ tay nhịp nhàng giữa các giờ học để cổ tay mềm mại, viết bài nhanh đẹp.';
+  } else if (mLower.includes('gậy') || mLower.includes('bài thể dục với gậy')) {
+    question = 'Việc cầm gậy thể dục tập luyện giúp cải thiện dáng đứng và cột sống của em như thế nào?';
+    answerGuide = 'Giúp giữ thẳng cột sống lưng, chống gù vai, mở rộng lồng ngực và tăng lực bám chắc chắn của hai bàn tay.';
+    practicalHabit = 'Tập với gậy thể dục hoặc thanh tre nhỏ tại nhà để rèn tác phong nhanh nhẹn và tư thế đi đứng ngay ngắn.';
+  } else if (mLower.includes('đi đều') || mLower.includes('đội hình')) {
+    question = 'Kỹ năng tập hợp hàng ngũ và đi đều bước giúp ích gì cho em khi tham gia các hoạt động ở trường và nơi công cộng?';
+    answerGuide = 'Rèn tác phong nhanh nhẹn, tính kỷ luật, giữ cự ly hàng lối ngay ngắn khi chào cờ, xếp hàng vào lớp và đi bộ trên đường an toàn.';
+    practicalHabit = 'Ý thức giữ trật tự, đi đứng ngay ngắn, xếp hàng văn minh trong mọi hoạt động tập thể.';
+  }
+
+  const environmentNote = 'Kiểm tra vệ sinh sân tập, nhặt vật sắc nhọn/nguy hiểm, thu dọn và cất dụng cụ thể dục đúng nơi quy định an toàn.';
+
+  const fullContentText = `4.2. Vận dụng & Dặn dò về nhà:\n- Câu hỏi vận dụng SGK: "${question}"\n- Gợi ý trả lời & Vận dụng: ${answerGuide}\n- Nhiệm vụ rèn luyện: ${practicalHabit}\n- Tích hợp bảo vệ môi trường: ${environmentNote}\n- Nhận xét thái độ học tập; giao nhiệm vụ tự tập ở nhà.\n4.3. Xuống lớp.`;
+
+  const fullGvText = `- Đặt câu hỏi tương tác thực tế: "${question}" giúp học sinh khắc sâu kiến thức bài học; liên hệ thói quen tập luyện: ${answerGuide}\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.`;
+
+  const fullHsText = `- Tích cực xung phong trả lời câu hỏi vận dụng kiến thức vào thực tế cuộc sống; ghi nhớ: "${answerGuide.slice(0, 80)}...".\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe dặn dò của thầy cô, chào giáo viên và xếp hàng trật tự đi về lớp học.`;
+
+  return {
+    question,
+    answerGuide,
+    practicalHabit,
+    environmentNote,
+    fullContentText,
+    fullGvText,
+    fullHsText
+  };
 }
 
 /**
@@ -983,7 +1292,12 @@ export function createBalancedGranularLessonRows(
       hs: accurate.hsTask,
       contentImgUrl: accurate.imgUrl,
       contentImgTitle: accurate.imgTitle,
-      contentImages: accurate.imgUrl ? [{ id: 'img_kt_1', url: accurate.imgUrl, title: accurate.imgTitle }] : [],
+      contentImages:
+        accurate.allImages && accurate.allImages.length > 0
+          ? accurate.allImages
+          : accurate.imgUrl
+          ? [{ id: 'img_kt_1', url: accurate.imgUrl, title: accurate.imgTitle }]
+          : [],
       hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
       hsImgTitle: 'Đội hình quan sát tranh mẫu & GV làm mẫu',
       hsImages: [
@@ -1102,10 +1416,10 @@ export function createBalancedGranularLessonRows(
 
     // 11. VẬN DỤNG, NHẬN XÉT & DẶN DÒ (HÀNG RIÊNG)
     {
-      content: `4.2. Vận dụng & Dặn dò về nhà:\n- Câu hỏi thực tế: "Em nên tập động tác này vào thời điểm nào trong ngày để rèn luyện sức khỏe?"\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, thu dọn dụng cụ đúng nơi quy định.\n- Nhận xét thái độ học tập; giao nhiệm vụ tự tập ở nhà.\n4.3. Xuống lớp.`,
+      content: getLessonSpecificApplication(mName, title, grade).fullContentText,
       lvd: `2 - 3 phút`,
-      gv: `- Đặt câu hỏi tương tác thực tế giúp học sinh khắc sâu kiến thức; liên hệ thói quen tập thể dục buổi sáng cùng gia đình để tăng cường sức đề kháng.\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.`,
-      hs: `- Tích cực xung phong trả lời câu hỏi vận dụng kiến thức vào thực tế cuộc sống.\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe dặn dò của thầy cô, chào giáo viên và xếp hàng trật tự đi về lớp học.`,
+      gv: getLessonSpecificApplication(mName, title, grade).fullGvText,
+      hs: getLessonSpecificApplication(mName, title, grade).fullHsText,
       hsImgUrl: standardFormationDiagrams[0].svgDataUrl,
       hsImgTitle: 'Đội hình kết thúc tiết học và xuống lớp',
       hsImages: [
@@ -1131,9 +1445,22 @@ export function splitAndAlignRows1to1(
   customWarmupGame?: string,
   customPracticeGame?: string
 ): LessonRow[] {
-  // If already 10 or more rows, it's already granularly separated!
+  // If already 10 or more rows, update any generic application question to be lesson-specific
   if (rows && rows.length >= 10) {
-    return rows;
+    const accurate = resolveAccurateMovement('', title, grade, userImages);
+    const mName = accurate.movementName;
+    const appDetails = getLessonSpecificApplication(mName, title, grade);
+    const updated = [...rows];
+    const lastIdx = updated.length - 1;
+    if (updated[lastIdx] && (updated[lastIdx].content.includes('Em nên tập động tác này') || updated[lastIdx].content.includes('4.2. Vận dụng'))) {
+      updated[lastIdx] = {
+        ...updated[lastIdx],
+        content: appDetails.fullContentText,
+        gv: appDetails.fullGvText,
+        hs: appDetails.fullHsText
+      };
+    }
+    return updated;
   }
 
   // Create clean 1:1 granular rows

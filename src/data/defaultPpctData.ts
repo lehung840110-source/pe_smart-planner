@@ -178,7 +178,7 @@ export const defaultGrade5Ppct: PpctItem[] = [
     (w) => `- Tích hợp năng lực số (6.1TC2a): Học sinh làm quen với AI phân tích tư thế chuyển động, độ căng và nhịp biên độ động tác gậy.\n- Tích hợp bảo vệ môi trường: Giữ gìn vệ sinh sân bãi, sử dụng gậy thể dục an toàn.`
   ),
   ...createPpctRange(5, 11, 12, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC PHÁT TRIỂN CHUNG VỚI GẬY', (p, w, sub) =>
-    `Bài 3: Động tác thăng bằng, động tác nhảy, động tác điều hòa với gậy (tiết ${sub})`
+    `Bài 3: Động tác nhảy, động tác điều hòa với gậy (tiết ${sub})`
   ),
   // Weeks 13-16 (Periods 25-32): Hoàn thiện bài thể dục gậy & Tư thế vận động nâng cao
   ...createPpctRange(5, 13, 14, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC PHÁT TRIỂN CHUNG VỚI GẬY', (p, w, sub) =>
@@ -227,7 +227,24 @@ export function getStoredPpctData(): PpctItem[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Sanitize any outdated items (e.g. remove erroneous "thăng bằng" from Grade 5 Bài 3)
+        let needsSave = false;
+        const sanitized = parsed.map((item: PpctItem) => {
+          if (item.grade === 5 && item.lessonTitle.toLowerCase().includes('thăng bằng')) {
+            needsSave = true;
+            return {
+              ...item,
+              lessonTitle: item.lessonTitle
+                .replace(/động tác thăng bằng,\s*/gi, '')
+                .replace(/thăng bằng,\s*/gi, '')
+            };
+          }
+          return item;
+        });
+        if (needsSave) {
+          saveStoredPpctData(sanitized);
+        }
+        return sanitized;
       }
     }
   } catch (e) {

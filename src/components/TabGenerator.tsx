@@ -21,21 +21,30 @@ import {
   Download,
   Palette,
   Edit3,
-  PlusCircle
+  PlusCircle,
+  Compass
 } from 'lucide-react';
-import { LessonRow, ScenarioItem, SgkImageItem } from '../types/gdtc';
+import { LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment } from '../types/gdtc';
 import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8 } from '../data/masterTemplateTuan8';
 import {
   generateNextWeekPlan,
   AutoMatchResult,
   autoScanLibraryAndAttachToRows,
   extractMovementNamesFromTitle,
+  partitionLessonMovements,
   createBalanced7LessonRows,
   createBalancedGranularLessonRows,
   splitAndAlignRows1to1,
   splitAndBalanceExistingRows,
   resolveAccurateMovement
 } from '../utils/planAutoMatcher';
+import { auditPlanAgainstCurriculum, ComplianceAuditReport } from '../utils/curriculumAuditSync';
+import {
+  RichTextWithImages,
+  hasInlineMedia,
+  sanitizeInlineImageTagsInText,
+  registerInlineImage
+} from '../utils/inlineImageHelper';
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationStudioModal } from './FormationStudioModal';
@@ -89,15 +98,36 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 }) => {
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
   const [lastAutoMatch, setLastAutoMatch] = useState<AutoMatchResult | null>(null);
+  const [isEditMode, setIsEditMode] = useState<boolean>(true);
 
   // Compute textbook PDF page for current lesson
   const sgkInfo = useMemo(() => getSgkPageForLesson(grade, title, topic), [grade, title, topic]);
+
+  // Real-time MoET & SGK Compliance Audit (Check 100% match)
+  const auditReport: ComplianceAuditReport = useMemo(() => {
+    return auditPlanAgainstCurriculum(grade, week, lessonNum, title, lessonRows);
+  }, [grade, week, lessonNum, title, lessonRows]);
 
   // Modals for manual picking
   const [targetRowForFormation, setTargetRowForFormation] = useState<number | null>(null);
   const [targetRowForStudio, setTargetRowForStudio] = useState<number | null>(null);
   const [studioInitialDiagram, setStudioInitialDiagram] = useState<FormationDiagram | null>(null);
   const [targetRowForImage, setTargetRowForImage] = useState<number | null>(null);
+
+  // Advanced inline & column attachment pickers
+  const [targetInlinePicker, setTargetInlinePicker] = useState<{
+    rowIndex: number;
+    col: 'content' | 'gv' | 'hs';
+    type: 'image' | 'formation';
+    cursorStart: number;
+    cursorEnd: number;
+  } | null>(null);
+
+  const [targetColAttachment, setTargetColAttachment] = useState<{
+    rowIndex: number;
+    col: 'content' | 'gv' | 'hs';
+    type: 'image' | 'formation';
+  } | null>(null);
 
   // Filter syllabus presets for current grade and week
   const relevantPresets = nextWeeksSyllabusPresets.filter(
@@ -332,6 +362,167 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     showToast(`Đã gắn ảnh kỹ thuật "${imgTitle}" vào Cột 1 dòng ${rowIdx + 1}!`);
   };
 
+  const handleAddRowBelow = (idx: number) => {
+    setLessonRows((prev) => {
+      const updated = [...prev];
+      updated.splice(idx + 1, 0, {
+        content: 'Hoạt động bổ sung...',
+        lvd: '2 - 3 phút',
+        gv: '- Giáo viên hướng dẫn và thị phạm.',
+        hs: '- Học sinh tích cực tập luyện theo hiệu lệnh.',
+      });
+      return updated;
+    });
+    showToast(`Đã chèn 1 dòng mới bên dưới dòng ${idx + 1}!`);
+  };
+
+  const handleRemoveInlineTag = (rowIndex: number, col: 'content' | 'gv' | 'hs', rawTag: string) => {
+    setLessonRows((prev) => {
+      const updated = [...prev];
+      const currentText = updated[rowIndex]?.[col] || '';
+      updated[rowIndex] = {
+        ...updated[rowIndex],
+        [col]: currentText.replace(rawTag, '').trim()
+      };
+      return updated;
+    });
+  };
+
+  const onConfirmImageSelection = (rowIndex: number, imgUrl: string, imgTitle: string) => {
+    if (targetInlinePicker && targetInlinePicker.type === 'image') {
+      const { col, cursorStart, cursorEnd } = targetInlinePicker;
+      const rIdx = targetInlinePicker.rowIndex;
+      setLessonRows((prev) => {
+        const updated = [...prev];
+        const row = updated[rIdx];
+        if (row) {
+          const text = row[col] || '';
+          const before = text.slice(0, cursorStart);
+          const after = text.slice(cursorEnd);
+          const cleanTitle = imgTitle.trim();
+          registerInlineImage(cleanTitle, imgUrl);
+          const tag = `[HÌNH: ${cleanTitle}]`;
+          const newText = `${before}${before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''}${tag}${after.length > 0 && !after.startsWith(' ') && !after.startsWith('\n') ? ' ' : ''}${after}`;
+          updated[rIdx] = {
+            ...row,
+            [col]: newText
+          };
+        }
+        return updated;
+      });
+      setTargetInlinePicker(null);
+      showToast(`Đã chèn ảnh "[HÌNH: ${imgTitle}]" vào văn bản Cột ${col === 'content' ? '1' : col === 'gv' ? '3' : '4'}!`);
+      return;
+    }
+
+    if (targetColAttachment && targetColAttachment.type === 'image') {
+      const { col } = targetColAttachment;
+      const rIdx = targetColAttachment.rowIndex;
+      setLessonRows((prev) => {
+        const updated = [...prev];
+        const row = updated[rIdx];
+        if (row) {
+          if (col === 'content') {
+            const list = row.contentImages && row.contentImages.length > 0
+              ? [...row.contentImages]
+              : row.contentImgUrl
+              ? [{ id: 'init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh' }]
+              : [];
+            list.push({ id: `cimg_${Date.now()}`, url: imgUrl, title: imgTitle });
+            updated[rIdx] = { ...row, contentImgUrl: list[0]?.url, contentImgTitle: list[0]?.title, contentImages: list };
+          } else if (col === 'gv') {
+            const list = row.gvImages && row.gvImages.length > 0
+              ? [...row.gvImages]
+              : row.gvImgUrl
+              ? [{ id: 'init', url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
+              : [];
+            list.push({ id: `gvimg_${Date.now()}`, url: imgUrl, title: imgTitle });
+            updated[rIdx] = { ...row, gvImgUrl: list[0]?.url, gvImgTitle: list[0]?.title, gvImages: list };
+          } else {
+            const list = row.hsImages && row.hsImages.length > 0
+              ? [...row.hsImages]
+              : row.hsImgUrl
+              ? [{ id: 'init', url: row.hsImgUrl, title: row.hsImgTitle || 'Ảnh HS' }]
+              : [];
+            list.push({ id: `hsimg_${Date.now()}`, url: imgUrl, title: imgTitle });
+            updated[rIdx] = { ...row, hsImgUrl: list[0]?.url, hsImgTitle: list[0]?.title, hsImages: list };
+          }
+        }
+        return updated;
+      });
+      setTargetColAttachment(null);
+      showToast(`Đã đính kèm ảnh vào Cột ${col === 'content' ? '1' : col === 'gv' ? '3' : '4'} dòng ${rIdx + 1}!`);
+      return;
+    }
+
+    handleSelectMovementImage(rowIndex, imgUrl, imgTitle);
+    setTargetRowForImage(null);
+  };
+
+  const onConfirmFormationSelection = (rowIndex: number, formation: FormationDiagram) => {
+    if (targetInlinePicker && targetInlinePicker.type === 'formation') {
+      const { col, cursorStart, cursorEnd } = targetInlinePicker;
+      const rIdx = targetInlinePicker.rowIndex;
+      setLessonRows((prev) => {
+        const updated = [...prev];
+        const row = updated[rIdx];
+        if (row) {
+          const text = row[col] || '';
+          const before = text.slice(0, cursorStart);
+          const after = text.slice(cursorEnd);
+          const cleanTitle = formation.name.trim();
+          registerInlineImage(cleanTitle, formation.svgDataUrl);
+          const tag = `[SƠ ĐỒ: ${cleanTitle}]`;
+          const newText = `${before}${before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : ''}${tag}${after.length > 0 && !after.startsWith(' ') && !after.startsWith('\n') ? ' ' : ''}${after}`;
+          updated[rIdx] = {
+            ...row,
+            [col]: newText
+          };
+        }
+        return updated;
+      });
+      setTargetInlinePicker(null);
+      showToast(`Đã chèn "[SƠ ĐỒ: ${formation.name}]" vào vị trí con trỏ!`);
+      return;
+    }
+
+    if (targetColAttachment && targetColAttachment.type === 'formation') {
+      const { col } = targetColAttachment;
+      const rIdx = targetColAttachment.rowIndex;
+      setLessonRows((prev) => {
+        const updated = [...prev];
+        const row = updated[rIdx];
+        if (row) {
+          if (col === 'content') {
+            const list = row.contentImages && row.contentImages.length > 0
+              ? [...row.contentImages]
+              : row.contentImgUrl
+              ? [{ id: 'init', url: row.contentImgUrl, title: row.contentImgTitle || 'Sơ đồ' }]
+              : [];
+            list.push({ id: `cform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name });
+            updated[rIdx] = { ...row, contentImgUrl: list[0]?.url, contentImgTitle: list[0]?.title, contentImages: list };
+          } else if (col === 'gv') {
+            const list = row.gvImages && row.gvImages.length > 0
+              ? [...row.gvImages]
+              : row.gvImgUrl
+              ? [{ id: 'init', url: row.gvImgUrl, title: row.gvImgTitle || 'Sơ đồ GV' }]
+              : [];
+            list.push({ id: `gvform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name });
+            updated[rIdx] = { ...row, gvImgUrl: list[0]?.url, gvImgTitle: list[0]?.title, gvImages: list };
+          } else {
+            handleSelectFormation(rIdx, formation);
+          }
+        }
+        return updated;
+      });
+      setTargetColAttachment(null);
+      return;
+    }
+
+    handleSelectFormation(rowIndex, formation);
+    setTargetRowForFormation(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Master Template Source Banner */}
@@ -491,18 +682,26 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
           {/* Pedagogical Rule Guidance & Textbook Page Info */}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-[11px] font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              {grade === 5 ? (
-                (title.toLowerCase().includes('tiết 2') || title.toLowerCase().includes('tiết 18') || title.toLowerCase().includes('tiết 16') || lessonNum % 2 === 0)
-                  ? 'Quy chuẩn GDPT 2018 (Tiết 2): Ôn 2 động tác trước + Học 1 động tác mới thứ ba'
-                  : 'Quy chuẩn GDPT 2018 (Tiết 1): Học 2 động tác mới đầu tiên'
-              ) : (
-                (title.toLowerCase().includes('tiết 2') || lessonNum % 2 === 0)
-                  ? 'Quy chuẩn GDPT 2018 (Tiết 2): Ôn Động tác 1 + Học Động tác 2'
-                  : 'Quy chuẩn GDPT 2018 (Tiết 1): Học Động tác 1'
-              )}
-            </span>
+            {(() => {
+              const movs = extractMovementNamesFromTitle(title);
+              const isP2 =
+                (title.toLowerCase().includes('tiết 2') ||
+                  title.toLowerCase().includes('tiet 2') ||
+                  title.toLowerCase().includes('(tiết 2)') ||
+                  lessonNum % 2 === 0) &&
+                !title.toLowerCase().includes('tiết 1') &&
+                !title.toLowerCase().includes('tiết 21') &&
+                !title.toLowerCase().includes('tiết 19') &&
+                !title.toLowerCase().includes('tiết 17') &&
+                !title.toLowerCase().includes('tiết 15');
+              const part = partitionLessonMovements(movs, isP2);
+              return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-900 text-[11px] font-semibold">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  🎯 <strong>Quy tắc sư phạm GDPT 2018 ({movs.length} động tác):</strong> {part.summaryExplanation} {part.reviewMovements.length > 0 ? `(Bao gồm phần ôn ${part.reviewMovements.join(' & ')} ở Tiết 1)` : ''}
+                </span>
+              );
+            })()}
             {sgkInfo.lesson && (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -537,62 +736,153 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         )}
       </div>
 
-      {/* Auto-Match Audit Status Box */}
-      {lastAutoMatch && (
-        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-xs text-emerald-950 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-          <div className="space-y-1">
-            <p className="font-bold text-emerald-900 flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Đã Khớp Tự Động Thành Công Vào Kế Hoạch Bài Dạy:
-            </p>
-            <p className="text-emerald-800 text-[11.5px]">
-              <strong>• Động tác tìm thấy:</strong> {lastAutoMatch.detectedMovements.join(', ')}
-            </p>
-            <p className="text-emerald-800 text-[11.5px]">
-              <strong>• Ảnh kỹ thuật Cột 1:</strong>{' '}
-              {lastAutoMatch.matchedImages.length > 0
-                ? lastAutoMatch.matchedImages.map((m) => m.title).join(', ')
-                : 'Đã gắn tranh kỹ thuật chuẩn vector'}
-            </p>
-            <p className="text-emerald-800 text-[11.5px]">
-              <strong>• Sơ đồ đội hình Cột 4:</strong>{' '}
-              {lastAutoMatch.matchedFormations.length} sơ đồ đội hình chuẩn (Nhận lớp, Khởi động, Tập mẫu, Tập tổ, Trò chơi, Hồi tĩnh)
-            </p>
+      {/* 100% SGK & PPCT Compliance Audit Bar (Tick Xanh Chuẩn Bộ GD&ĐT) */}
+      <div className={`p-4 rounded-2xl border-2 transition-all shadow-xs ${
+        auditReport.is100PercentCompliant
+          ? 'bg-emerald-50/90 border-emerald-400 text-emerald-950'
+          : 'bg-amber-50/90 border-amber-300 text-amber-950'
+      }`}>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+          <div className="flex items-start md:items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm ${
+              auditReport.is100PercentCompliant ? 'bg-emerald-600 text-white' : 'bg-amber-600 text-white'
+            }`}>
+              {auditReport.is100PercentCompliant ? (
+                <CheckCircle2 className="w-6 h-6" />
+              ) : (
+                <ShieldCheck className="w-6 h-6" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-sm tracking-tight">
+                  {auditReport.is100PercentCompliant
+                    ? 'ĐÃ KHỚP 100% VỚI SGK VÀ PHÂN PHỐI CHƯƠNG TRÌNH (BỘ GD&ĐT)'
+                    : `CẦN RÀ SOÁT ĐỂ KHỚP 100% VỚI SGK & PPCT (${auditReport.score}%)`}
+                </span>
+                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                  auditReport.is100PercentCompliant
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-amber-600 text-white animate-pulse'
+                }`}>
+                  {auditReport.is100PercentCompliant ? '✓ 100% CHUẨN ĐỒNG BỘ' : '⚠️ CẦN CHUẨN HÓA'}
+                </span>
+              </div>
+              <p className="text-[11.5px] mt-0.5 font-medium opacity-90">
+                Tuần {week} • Tiết {lessonNum} • Khối {grade}: {auditReport.is100PercentCompliant
+                  ? `Động tác "${auditReport.expectedMovement}" khớp 100% từ tên bài học, tranh kỹ thuật SGK, 4 bước luyện tập đến bài tập vận dụng thực tế.`
+                  : `Phát hiện nội dung hoặc tranh ảnh chưa đồng bộ với phân phối chương trình của Tuần ${week} (Yêu cầu: "${auditReport.expectedMovement}").`}
+              </p>
+            </div>
           </div>
 
-          <button
-            onClick={onSwitchToExport}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-2xs transition flex items-center gap-1.5 shrink-0"
-          >
-            <Eye className="w-4 h-4" /> Xem Trước & In Giáo Án
-          </button>
-        </div>
-      )}
+          <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+            {!auditReport.is100PercentCompliant && (
+              <button
+                type="button"
+                onClick={() => {
+                  const match = generateNextWeekPlan(
+                    grade,
+                    week,
+                    lessonNum,
+                    topic,
+                    auditReport.expectedTitle || title,
+                    currentMasterPlan,
+                    images
+                  );
+                  setTitle(auditReport.expectedTitle || title);
+                  setLessonRows(match.newRows);
+                  setLastAutoMatch(match);
+                  showToast('🛡️ ĐÃ TỰ ĐỘNG CHUẨN HÓA KHỚP 100% SGK VÀ PHÂN PHỐI CHƯƠNG TRÌNH!');
+                }}
+                className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-sm animate-pulse"
+              >
+                <Sparkles className="w-4 h-4 text-amber-200" />
+                <span>🛡️ Tự động Chuẩn hóa Khớp 100% Ngay</span>
+              </button>
+            )}
 
-      {/* 4-Column Table Direct Editor */}
+            <button
+              type="button"
+              onClick={handleSplitAndBalanceRows}
+              className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+              title="Đồng bộ lại cấu trúc 11 hoạt động tương xứng 1:1 theo chiều ngang"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
+              Đồng bộ 1:1
+            </button>
+          </div>
+        </div>
+
+        {/* 5-Dimension Checkmark Badges */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 mt-3 pt-3 border-t border-slate-200/60">
+          {auditReport.checks.map((c) => (
+            <div
+              key={c.id}
+              className={`p-2 rounded-xl border text-xs transition ${
+                c.passed
+                  ? 'bg-white/85 border-emerald-300 text-emerald-900'
+                  : 'bg-white/90 border-red-300 text-red-900 shadow-2xs'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 font-bold text-[11px]">
+                {c.passed ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full bg-red-600 text-white text-[9px] flex items-center justify-center font-bold shrink-0">✕</span>
+                )}
+                <span className="truncate">{c.title}</span>
+              </div>
+              <div className="text-[10px] mt-1 font-semibold truncate" title={c.currentValue}>
+                {c.passed ? `✓ ${c.currentValue}` : `Cần: ${c.expectedValue}`}
+              </div>
+              <p className="text-[9.5px] text-slate-500 mt-0.5 leading-tight truncate" title={c.description}>
+                {c.description}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 4-Column Table Direct Editor (Đã chuyển toàn bộ tính năng chỉnh sửa từ Tab Xem Trước sang đây) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
           <div>
             <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
-              Bảng Tiến Trình Giảng Dạy Đã Sinh (4 Cột Quy Chuẩn)
+              Bảng Tiến Trình Giảng Dạy Đã Sinh (Chỉnh Sửa Trực Tiếp Toàn Diện)
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Bạn có thể gõ sửa trực tiếp bất kỳ ô nào, hoặc bấm nút để đổi ảnh động tác và sơ đồ đội hình
+              Hỗ trợ gõ sửa trực tiếp, chèn ảnh SGK và sơ đồ đội hình vào bất kỳ vị trí nào trong các cột và từng dòng văn bản
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
+              type="button"
+              onClick={() => setIsEditMode(!isEditMode)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
+                isEditMode
+                  ? 'bg-blue-600 text-white shadow-2xs'
+                  : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
+              }`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+              {isEditMode ? 'Đang ở Chế Độ Sửa' : 'Bật Chế Độ Sửa'}
+            </button>
+
+            <button
+              type="button"
               onClick={handleAuditAndFixPedagogicalRules}
               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
               title="Tự động kiểm tra và loại bỏ các ảnh chèn sai vị trí, khớp đúng tranh kỹ thuật động tác mới theo chuẩn SGK"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Rà Soát Chuẩn Sư Phạm (Sửa Ảnh Sai)
+              Rà Soát Chuẩn Sư Phạm
             </button>
 
             <button
+              type="button"
               onClick={handleAiRefine}
               disabled={isAiGenerating}
               className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
@@ -602,10 +892,19 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={handleAddRow}
               className="bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
             >
               <Plus className="w-3.5 h-3.5" /> Thêm Dòng
+            </button>
+
+            <button
+              type="button"
+              onClick={onSwitchToExport}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5"
+            >
+              <Eye className="w-3.5 h-3.5" /> Xem Trước & In
             </button>
           </div>
         </div>
@@ -614,311 +913,558 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
               <tr>
-                <th className="p-3 w-6 text-center text-slate-400">STT</th>
-                <th className="p-3 w-1/4">Cột 1: Nội Dung / Ảnh Kỹ Thuật</th>
+                <th className="p-3 w-8 text-center text-slate-400">STT</th>
+                <th className="p-3 w-1/4">Cột 1: Nội Dung / Kỹ Thuật / Ảnh</th>
                 <th className="p-3 w-20 text-center">Cột 2: LVĐ</th>
                 <th className="p-3 w-1/3">Cột 3: Hoạt Động Giáo Viên</th>
                 <th className="p-3 w-1/3">Cột 4: Hoạt Động Học Sinh & Sơ Đồ</th>
-                <th className="p-3 w-16 text-center">Thao Tác</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {lessonRows.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50/70 transition">
-                  {/* STT */}
-                  <td className="p-3 text-center font-bold text-slate-400 align-top">
-                    {idx + 1}
-                  </td>
+              {lessonRows.map((row, idx) => {
+                // Gather all attachments for Column 1
+                const contentImgs: DiagramAttachment[] = row.contentImages && row.contentImages.length > 0
+                  ? row.contentImages
+                  : row.contentImgUrl
+                  ? [{ id: `c_init_${idx}`, url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+                  : [];
 
-                  {/* Cột 1: Nội dung */}
-                  {/* Cột 1: Nội dung */}
-                  <td className="p-3 align-top space-y-2">
-                    <textarea
-                      rows={4}
-                      value={row.content}
-                      onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
-                      className="w-full p-2 text-xs rounded-lg border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
-                    />
+                // Gather all attachments for Column 3 (GV)
+                const gvImgs: DiagramAttachment[] = row.gvImages && row.gvImages.length > 0
+                  ? row.gvImages
+                  : row.gvImgUrl
+                  ? [{ id: `gv_init_${idx}`, url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
+                  : [];
 
-                    {/* Tranh kỹ thuật Cột 1: Chỉ bắt buộc và ưu tiên cho Hoạt động 2 (Hình thành kiến thức mới / Khám phá) */}
-                    {idx === 1 ? (
-                      <>
-                        <button
-                          onClick={() => setTargetRowForImage(idx)}
-                          className="w-full bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
-                        >
-                          <ImageIcon className="w-3 h-3 text-blue-600" />
-                          {row.contentImgUrl ? 'Đổi tranh kỹ thuật SGK (Cột 1)' : '+ Gắn tranh kỹ thuật SGK (Cột 1)'}
-                        </button>
+                // Gather all attachments for Column 4 (HS)
+                const hsImgs: DiagramAttachment[] = row.hsImages && row.hsImages.length > 0
+                  ? row.hsImages
+                  : row.hsImgUrl
+                  ? [{ id: `hs_init_${idx}`, url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ' }]
+                  : [];
 
-                        {row.contentImgUrl ? (
-                          <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
-                            <img
-                              src={row.contentImgUrl}
-                              alt={row.contentImgTitle || 'Ảnh kỹ thuật'}
-                              className="max-h-36 w-full object-contain rounded"
-                            />
-                            <div className="text-[10px] text-slate-500 font-medium text-center mt-1 truncate">
-                              {row.contentImgTitle || 'Tranh kỹ thuật động tác mới'}
-                            </div>
-                            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                              <button
-                                onClick={() => downloadSvgAsPng(row.contentImgUrl!, `anh_ky_thuat_${idx + 1}.png`)}
-                                className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                title="Tải ảnh PNG xuống máy"
-                              >
-                                <Download className="w-3 h-3 text-emerald-400" /> PNG
-                              </button>
-                            </div>
-                            <button
-                              onClick={() => {
-                                setLessonRows((prev) => {
-                                  const updated = [...prev];
-                                  delete updated[idx].contentImgUrl;
-                                  delete updated[idx].contentImgTitle;
-                                  return updated;
-                                });
-                              }}
-                              className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                              title="Xóa ảnh"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-xl text-center space-y-1">
-                            <p className="text-[10px] text-amber-900 font-medium">
-                              ⚠️ Chưa có tranh kỹ thuật cho:{' '}
-                              <strong className="font-bold underline text-amber-950">
-                                {extractMovementNamesFromTitle(title)[0] || 'Kỹ thuật động tác mới'}
-                              </strong>
-                            </p>
-                            <button
-                              onClick={() => setTargetRowForImage(idx)}
-                              className="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1 px-2.5 rounded-lg text-[10px] inline-flex items-center gap-1 shadow-2xs transition"
-                            >
-                              <ImageIcon className="w-3 h-3" /> Chèn tranh kỹ thuật chuẩn
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      /* Các hoạt động khác (Khởi động, Luyện tập, Trò chơi, Vận dụng): Cột 1 chỉ chứa văn bản theo chuẩn Công văn 2345 */
-                      row.contentImgUrl ? (
-                        <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
-                          <img
-                            src={row.contentImgUrl}
-                            alt={row.contentImgTitle || 'Ảnh đính kèm'}
-                            className="max-h-28 w-full object-contain rounded"
-                          />
-                          <p className="text-[9.5px] text-slate-500 text-center mt-1 truncate">
-                            {row.contentImgTitle || 'Ảnh bổ trợ'}
-                          </p>
+                return (
+                  <tr key={idx} className="hover:bg-slate-50/70 transition">
+                    {/* STT */}
+                    <td className="p-2.5 text-center font-bold text-slate-400 align-top">
+                      {idx + 1}
+                    </td>
+
+                    {/* Cột 1: Nội dung / Kỹ thuật / Ảnh */}
+                    <td className="p-2.5 align-top space-y-2">
+                      {/* Row management toolbar */}
+                      <div className="flex items-center justify-between bg-blue-50/90 border border-blue-200 px-2 py-1 rounded text-[10.5px]">
+                        <div className="flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 bg-blue-700 text-white font-bold rounded text-[9px]">
+                            Dòng {idx + 1}
+                          </span>
                           <button
-                            onClick={() => {
-                              setLessonRows((prev) => {
-                                const updated = [...prev];
-                                delete updated[idx].contentImgUrl;
-                                delete updated[idx].contentImgTitle;
-                                return updated;
-                              });
-                            }}
-                            className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                            title="Xóa ảnh khỏi Cột 1 (Theo chuẩn GDTC sơ đồ nên nằm ở Cột 4)"
+                            type="button"
+                            onClick={() => handleAddRowBelow(idx)}
+                            className="p-0.5 text-emerald-700 hover:bg-emerald-100 rounded transition"
+                            title="Thêm 1 dòng mới bên dưới dòng này"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                          </button>
+                          {idx > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleMoveRow(idx, 'up')}
+                              className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                              title="Chuyển dòng lên"
+                            >
+                              <MoveUp className="w-3 h-3" />
+                            </button>
+                          )}
+                          {idx < lessonRows.length - 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleMoveRow(idx, 'down')}
+                              className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                              title="Chuyển dòng xuống"
+                            >
+                              <MoveDown className="w-3 h-3" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRow(idx)}
+                            className="p-0.5 text-red-600 hover:bg-red-100 rounded transition"
+                            title="Xóa dòng hoạt động này"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
-                      ) : null
-                    )}
-                  </td>
 
-                  {/* Cột 2: LVĐ */}
-                  <td className="p-3 text-center align-top font-semibold text-slate-800">
-                    <input
-                      type="text"
-                      value={row.lvd}
-                      onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                      className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
-                    />
-                  </td>
+                        {/* Inline Insertion at cursor for Column 1 */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'content',
+                                type: 'image',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
+                            title="Chèn ảnh vào vị trí con trỏ hoặc dòng chữ đang chọn"
+                          >
+                            <ImageIcon className="w-3 h-3 text-amber-300" />
+                            <span>📷 Chèn ảnh</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'content',
+                                type: 'formation',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
+                            title="Chèn sơ đồ đội hình vào vị trí con trỏ"
+                          >
+                            <Compass className="w-3 h-3 text-amber-300" />
+                            <span>📐 Chèn sơ đồ</span>
+                          </button>
+                        </div>
+                      </div>
 
-                  {/* Cột 3: Hoạt động GV - Cân bằng 100-120 từ */}
-                  <td className="p-3 align-top leading-relaxed text-slate-800">
-                    <textarea
-                      rows={8}
-                      value={row.gv}
-                      onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
-                      className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
-                    />
-                  </td>
+                      <textarea
+                        rows={4}
+                        value={sanitizeInlineImageTagsInText(row.content)}
+                        onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
+                        className="w-full p-2 text-xs rounded-lg border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                        placeholder="Nhập nội dung hoạt động... (Có thể bấm 'Chèn ảnh' hoặc 'Chèn sơ đồ' để chèn trực tiếp tại con trỏ)"
+                      />
 
-                  {/* Cột 4: Hoạt động HS & Sơ đồ đội hình */}
-                  <td className="p-3 align-top leading-relaxed text-slate-800 space-y-2">
-                    <textarea
-                      rows={4}
-                      value={row.hs}
-                      onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
-                      className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
-                    />
+                      {/* Live preview if inline tags exist in Column 1 */}
+                      {row.content && hasInlineMedia(row.content) && (
+                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                            👁️ Xem trước nội dung kèm hình ảnh:
+                          </p>
+                          <RichTextWithImages
+                            text={row.content}
+                            imageHeight={80}
+                            showCaptions={true}
+                            isEditMode={true}
+                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'content', rawTag)}
+                          />
+                        </div>
+                      )}
 
-                    {/* Multi-Diagram in Column 4 */}
-                    {(() => {
-                      const rowDiagrams = row.hsImages && row.hsImages.length > 0
-                        ? row.hsImages
-                        : row.hsImgUrl
-                        ? [{ id: `dh_${idx}_0`, url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ đội hình' }]
-                        : [];
-
-                      return (
-                        <div className="space-y-2">
-                          {/* Buttons to attach/swap formation diagram & Open Studio */}
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                              onClick={() => setTargetRowForFormation(idx)}
-                              className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
-                            >
-                              <Users className="w-3 h-3 text-blue-600" />
-                              {rowDiagrams.length > 0 ? '+ Thêm từ Kho Sơ Đồ' : '+ Kho sơ đồ'}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setStudioInitialDiagram(
-                                  rowDiagrams[0]
-                                    ? {
-                                        id: `dh_row_${idx}`,
-                                        name: rowDiagrams[0].title || `Sơ đồ dòng ${idx + 1}`,
-                                        code: 'DH_CUSTOM',
-                                        phase: 'dong_loat',
-                                        description: row.hs,
-                                        svgDataUrl: rowDiagrams[0].url
-                                      }
-                                    : null
-                                );
-                                setTargetRowForStudio(idx);
-                              }}
-                              className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition shadow-2xs"
-                            >
-                              <Palette className="w-3 h-3 text-purple-600" />
-                              🎨 Studio tự vẽ
-                            </button>
-                          </div>
-
-                          {/* Formation Diagram Preview in Column 4 */}
-                          {rowDiagrams.length > 0 ? (
-                            <div className="space-y-2">
-                              <div className={`grid ${rowDiagrams.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
-                                {rowDiagrams.map((diag, diagIdx) => (
-                                  <div
-                                    key={diag.id || diagIdx}
-                                    className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group text-center"
+                      {/* Column 1 Image Gallery */}
+                      {contentImgs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className={`grid ${contentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                            {contentImgs.map((cImg, cIdx) => (
+                              <div key={cImg.id || cIdx} className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group text-center">
+                                <img
+                                  src={cImg.url}
+                                  alt={cImg.title}
+                                  className="max-h-32 w-auto mx-auto object-contain rounded bg-white"
+                                />
+                                <p className="text-[10px] text-slate-600 font-medium text-center mt-1 truncate" title={cImg.title}>
+                                  {cImg.title}
+                                </p>
+                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadSvgAsPng(cImg.url, `anh_cot1_dong_${idx + 1}.png`)}
+                                    className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                    title="Tải ảnh PNG xuống máy"
                                   >
-                                    <img
-                                      src={diag.url}
-                                      alt={diag.title || 'Sơ đồ đội hình'}
-                                      className="max-h-32 w-auto mx-auto object-contain rounded bg-white"
-                                    />
-                                    {diag.title && (
-                                      <p className="text-[10px] text-slate-700 font-medium text-center mt-1 truncate" title={diag.title}>
-                                        {diag.title}
-                                      </p>
-                                    )}
-                                    <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                                      <button
-                                        onClick={() => {
-                                          setStudioInitialDiagram({
-                                            id: diag.id || `dh_row_${idx}_${diagIdx}`,
-                                            name: diag.title || `Sơ đồ ${diagIdx + 1}`,
-                                            code: 'DH_CUSTOM',
-                                            phase: 'dong_loat',
-                                            description: row.hs,
-                                            svgDataUrl: diag.url
-                                          });
-                                          setTargetRowForStudio(idx);
-                                        }}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                        title="Chỉnh sửa sơ đồ này trong Studio"
-                                      >
-                                        <Edit3 className="w-3 h-3 text-white" /> Sửa
-                                      </button>
-                                      <button
-                                        onClick={() => downloadSvgAsPng(diag.url, `so_do_dong_${idx + 1}_${diagIdx + 1}.png`)}
-                                        className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                        title="Tải sơ đồ PNG xuống máy"
-                                      >
-                                        <Download className="w-3 h-3 text-emerald-400" /> PNG
-                                      </button>
-                                    </div>
+                                    <Download className="w-3 h-3 text-emerald-400" /> PNG
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLessonRows((prev) => {
+                                      const updated = [...prev];
+                                      const cur = updated[idx]?.contentImages || [];
+                                      const next = cur.filter((_, i) => i !== cIdx);
+                                      updated[idx] = {
+                                        ...updated[idx],
+                                        contentImages: next,
+                                        contentImgUrl: next[0]?.url,
+                                        contentImgTitle: next[0]?.title
+                                      };
+                                      return updated;
+                                    });
+                                  }}
+                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                  title="Xóa ảnh"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Add column-level image to Column 1 */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTargetColAttachment({
+                            rowIndex: idx,
+                            col: 'content',
+                            type: 'image'
+                          });
+                        }}
+                        className="w-full bg-blue-50/70 hover:bg-blue-100 text-blue-800 border border-dashed border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
+                      >
+                        <ImageIcon className="w-3 h-3 text-blue-600" />
+                        {contentImgs.length > 0 ? '+ Đính kèm thêm ảnh kỹ thuật vào Cột 1' : '+ Gắn ảnh kỹ thuật SGK (Cột 1)'}
+                      </button>
+                    </td>
+
+                    {/* Cột 2: LVĐ */}
+                    <td className="p-2.5 text-center align-top font-semibold text-slate-800">
+                      <textarea
+                        rows={3}
+                        value={row.lvd}
+                        onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
+                        className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
+                      />
+                    </td>
+
+                    {/* Cột 3: Hoạt Động Giáo Viên */}
+                    <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
+                      <div className="flex items-center justify-between bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
+                        <span className="font-bold text-emerald-800 text-[10px]">Cột 3: Kịch Bản GV</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'gv',
+                                type: 'image',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                            title="Chèn ảnh vào vị trí con trỏ trong Hoạt động GV"
+                          >
+                            <ImageIcon className="w-3 h-3 text-amber-300" />
+                            <span>📷 Chèn ảnh</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'gv',
+                                type: 'formation',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                            title="Chèn sơ đồ vị trí GV vào dòng này"
+                          >
+                            <Compass className="w-3 h-3 text-amber-300" />
+                            <span>📐 Chèn sơ đồ</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <textarea
+                        rows={7}
+                        value={sanitizeInlineImageTagsInText(row.gv)}
+                        onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
+                        className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
+                        placeholder="Nhập kịch bản hoạt động của giáo viên..."
+                      />
+
+                      {/* Live preview if inline tags exist in Column 3 */}
+                      {row.gv && hasInlineMedia(row.gv) && (
+                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                          <RichTextWithImages
+                            text={row.gv}
+                            imageHeight={70}
+                            showCaptions={true}
+                            isEditMode={true}
+                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'gv', rawTag)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Column 3 Image Gallery */}
+                      {gvImgs.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className={`grid ${gvImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                            {gvImgs.map((gImg, gIdx) => (
+                              <div key={gImg.id || gIdx} className="p-1 bg-slate-50 rounded-lg border border-slate-200 relative group text-center">
+                                <img
+                                  src={gImg.url}
+                                  alt={gImg.title}
+                                  className="max-h-24 w-auto mx-auto object-contain rounded bg-white"
+                                />
+                                <p className="text-[9.5px] text-slate-600 font-medium text-center mt-0.5 truncate">
+                                  {gImg.title}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLessonRows((prev) => {
+                                      const updated = [...prev];
+                                      const next = (updated[idx]?.gvImages || []).filter((_, i) => i !== gIdx);
+                                      updated[idx] = {
+                                        ...updated[idx],
+                                        gvImages: next,
+                                        gvImgUrl: next[0]?.url,
+                                        gvImgTitle: next[0]?.title
+                                      };
+                                      return updated;
+                                    });
+                                  }}
+                                  className="absolute top-1 right-1 bg-red-600 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                  title="Xóa ảnh"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Cột 4: Hoạt Động Học Sinh & Sơ Đồ Đội Hình */}
+                    <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
+                      <div className="flex items-center justify-between bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">
+                        <span className="font-bold text-purple-800 text-[10px]">Cột 4: Hoạt Động HS</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'hs',
+                                type: 'image',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                            title="Chèn ảnh vào vị trí con trỏ trong Hoạt động HS"
+                          >
+                            <ImageIcon className="w-3 h-3 text-amber-300" />
+                            <span>📷 Chèn ảnh</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                              const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                              const end = textarea?.selectionEnd ?? start;
+                              setTargetInlinePicker({
+                                rowIndex: idx,
+                                col: 'hs',
+                                type: 'formation',
+                                cursorStart: start,
+                                cursorEnd: end
+                              });
+                            }}
+                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                            title="Chèn sơ đồ đội hình vào vị trí con trỏ trong Hoạt động HS"
+                          >
+                            <Compass className="w-3 h-3 text-amber-300" />
+                            <span>📐 Chèn sơ đồ</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <textarea
+                        rows={4}
+                        value={sanitizeInlineImageTagsInText(row.hs)}
+                        onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
+                        className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
+                        placeholder="Nhập hoạt động của học sinh..."
+                      />
+
+                      {/* Live preview if inline tags exist in Column 4 */}
+                      {row.hs && hasInlineMedia(row.hs) && (
+                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                          <RichTextWithImages
+                            text={row.hs}
+                            imageHeight={80}
+                            showCaptions={true}
+                            isEditMode={true}
+                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'hs', rawTag)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Multi-Diagram in Column 4 */}
+                      <div className="space-y-2">
+                        {/* Buttons to attach from Library & Open Studio */}
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetColAttachment({
+                                rowIndex: idx,
+                                col: 'hs',
+                                type: 'formation'
+                              });
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
+                          >
+                            <Users className="w-3 h-3 text-blue-600" />
+                            {hsImgs.length > 0 ? '+ Thêm từ Kho Sơ Đồ' : '+ Kho sơ đồ'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStudioInitialDiagram(
+                                hsImgs[0]
+                                  ? {
+                                      id: `dh_row_${idx}`,
+                                      name: hsImgs[0].title || `Sơ đồ dòng ${idx + 1}`,
+                                      code: 'DH_CUSTOM',
+                                      phase: 'dong_loat',
+                                      description: row.hs,
+                                      svgDataUrl: hsImgs[0].url
+                                    }
+                                  : null
+                              );
+                              setTargetRowForStudio(idx);
+                            }}
+                            className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition shadow-2xs"
+                          >
+                            <Palette className="w-3 h-3 text-purple-600" />
+                            🎨 Studio tự vẽ
+                          </button>
+                        </div>
+
+                        {/* Formation Diagram Preview in Column 4 */}
+                        {hsImgs.length > 0 ? (
+                          <div className="space-y-2">
+                            <div className={`grid ${hsImgs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
+                              {hsImgs.map((diag, diagIdx) => (
+                                <div
+                                  key={diag.id || diagIdx}
+                                  className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group text-center"
+                                >
+                                  <img
+                                    src={diag.url}
+                                    alt={diag.title || 'Sơ đồ đội hình'}
+                                    className="max-h-32 w-auto mx-auto object-contain rounded bg-white"
+                                  />
+                                  {diag.title && (
+                                    <p className="text-[10px] text-slate-700 font-medium text-center mt-1 truncate" title={diag.title}>
+                                      {diag.title}
+                                    </p>
+                                  )}
+                                  <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
                                     <button
-                                      onClick={() => handleRemoveFormationDiagram(idx, diagIdx)}
-                                      className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                                      title="Xóa sơ đồ này"
+                                      type="button"
+                                      onClick={() => {
+                                        setStudioInitialDiagram({
+                                          id: diag.id || `dh_row_${idx}_${diagIdx}`,
+                                          name: diag.title || `Sơ đồ ${diagIdx + 1}`,
+                                          code: 'DH_CUSTOM',
+                                          phase: 'dong_loat',
+                                          description: row.hs,
+                                          svgDataUrl: diag.url
+                                        });
+                                        setTargetRowForStudio(idx);
+                                      }}
+                                      className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                      title="Chỉnh sửa sơ đồ này trong Studio"
                                     >
-                                      <Trash2 className="w-3 h-3" />
+                                      <Edit3 className="w-3 h-3 text-white" /> Sửa
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => downloadSvgAsPng(diag.url, `so_do_dong_${idx + 1}_${diagIdx + 1}.png`)}
+                                      className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                      title="Tải sơ đồ PNG xuống máy"
+                                    >
+                                      <Download className="w-3 h-3 text-emerald-400" /> PNG
                                     </button>
                                   </div>
-                                ))}
-                              </div>
-
-                              <button
-                                onClick={() => setTargetRowForFormation(idx)}
-                                className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 transition"
-                                title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
-                              >
-                                <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
-                                <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
-                              </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFormationDiagram(idx, diagIdx)}
+                                    className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                    title="Xóa sơ đồ này"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ) : (
-                            <div className="p-2 bg-blue-50/90 border border-dashed border-blue-300 rounded-xl text-center space-y-1">
-                              <p className="text-[10px] text-blue-900 font-medium">
-                                ⚠️ Chưa gắn sơ đồ đội hình cho hoạt động này
-                              </p>
-                              <button
-                                onClick={() => setTargetRowForFormation(idx)}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2.5 rounded-lg text-[10px] inline-flex items-center gap-1 shadow-2xs transition"
-                              >
-                                <Users className="w-3 h-3" /> Chọn sơ đồ đội hình
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </td>
 
-                  {/* Action buttons */}
-                  <td className="p-3 text-center align-top space-y-1.5">
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => handleMoveRow(idx, 'up')}
-                        disabled={idx === 0}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-500 disabled:opacity-30"
-                        title="Lên trên"
-                      >
-                        <MoveUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleMoveRow(idx, 'down')}
-                        disabled={idx === lessonRows.length - 1}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-500 disabled:opacity-30"
-                        title="Xuống dưới"
-                      >
-                        <MoveDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => handleDeleteRow(idx)}
-                      className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-600 hover:text-white transition"
-                      title="Xóa dòng này"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetColAttachment({
+                                  rowIndex: idx,
+                                  col: 'hs',
+                                  type: 'formation'
+                                });
+                              }}
+                              className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 transition"
+                              title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
+                              <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-2 bg-blue-50/90 border border-dashed border-blue-300 rounded-xl text-center space-y-1">
+                            <p className="text-[10px] text-blue-900 font-medium">
+                              ⚠️ Chưa gắn sơ đồ đội hình cho hoạt động này
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetColAttachment({
+                                  rowIndex: idx,
+                                  col: 'hs',
+                                  type: 'formation'
+                                });
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-2.5 rounded-lg text-[10px] inline-flex items-center gap-1 shadow-2xs transition"
+                            >
+                              <Users className="w-3 h-3" /> Chọn sơ đồ đội hình
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -930,6 +1476,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           </span>
 
           <button
+            type="button"
             onClick={onSwitchToExport}
             className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition"
           >
@@ -938,24 +1485,32 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         </div>
       </div>
 
-      {/* Select Formation Modal */}
-      {targetRowForFormation !== null && (
+      {/* Select Formation Modal (Dùng cho cả inline con trỏ và đính kèm cột) */}
+      {(targetRowForFormation !== null || targetColAttachment?.type === 'formation' || targetInlinePicker?.type === 'formation') && (
         <SelectFormationModal
           isOpen={true}
-          onClose={() => setTargetRowForFormation(null)}
-          targetRowIndex={targetRowForFormation}
-          onSelectFormation={handleSelectFormation}
+          onClose={() => {
+            setTargetRowForFormation(null);
+            setTargetColAttachment(null);
+            setTargetInlinePicker(null);
+          }}
+          targetRowIndex={targetRowForFormation ?? targetColAttachment?.rowIndex ?? targetInlinePicker?.rowIndex ?? 0}
+          onSelectFormation={onConfirmFormationSelection}
         />
       )}
 
-      {/* Select Movement Image Modal */}
-      {targetRowForImage !== null && (
+      {/* Select Movement Image Modal (Dùng cho cả inline con trỏ và đính kèm cột) */}
+      {(targetRowForImage !== null || targetColAttachment?.type === 'image' || targetInlinePicker?.type === 'image') && (
         <SelectMovementImageModal
           isOpen={true}
-          onClose={() => setTargetRowForImage(null)}
-          targetRowIndex={targetRowForImage}
+          onClose={() => {
+            setTargetRowForImage(null);
+            setTargetColAttachment(null);
+            setTargetInlinePicker(null);
+          }}
+          targetRowIndex={targetRowForImage ?? targetColAttachment?.rowIndex ?? targetInlinePicker?.rowIndex ?? 0}
           userImages={images}
-          onSelectImage={handleSelectMovementImage}
+          onSelectImage={onConfirmImageSelection}
         />
       )}
 

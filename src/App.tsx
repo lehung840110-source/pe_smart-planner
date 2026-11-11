@@ -832,6 +832,7 @@ export default function App() {
             }}
             onNavigateToLibrary={() => setActiveTab('tab-img-library')}
             onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
+            onNavigateToGenerator={() => setActiveTab('tab-generator')}
           />
         )}
       </main>

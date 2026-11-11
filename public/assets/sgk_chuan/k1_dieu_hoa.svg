@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGradDh" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f0fdf4"/>
+    </linearGradient>
+    <filter id="cardShadowDh" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="360" fill="url(#bgGradDh)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#bbf7d0" stroke-width="1.5" rx="15"/>
+
+  <!-- Title Banner -->
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#dcfce7" stroke="#4ade80" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#15803d">
+    ĐỘNG TÁC ĐIỀU HÒA – BÀI THỂ DỤC PHÁT TRIỂN CHUNG (SGK GDTC LỚP 1)
+  </text>
+
+  <!-- Ground line -->
+  <line x1="30" y1="285" x2="770" y2="285" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4"/>
+
+  <!-- ================= FIGURE 1: TTCB ================= -->
+  <rect x="40" y="60" width="160" height="260" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#cardShadowDh)"/>
+  <rect x="40" y="60" width="160" height="28" rx="10" fill="#f1f5f9"/>
+  <text x="120" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">TTCB (Đứng nghiêm)</text>
+  
+  <g transform="translate(120, 185)">
+    <!-- Head -->
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <!-- Torso -->
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#10b981" stroke="#047857" stroke-width="2"/>
+    <!-- Arms -->
+    <line x1="-14" y1="-50" x2="-18" y2="-10" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-50" x2="18" y2="-10" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <!-- Shorts -->
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1e3a8a" stroke="#172554" stroke-width="1.5"/>
+    <!-- Legs -->
+    <line x1="-7" y1="15" x2="-7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <!-- Shoes -->
+    <ellipse cx="-8" cy="74" rx="7" ry="4" fill="#047857"/>
+    <ellipse cx="8" cy="74" rx="7" ry="4" fill="#047857"/>
+  </g>
+  <text x="120" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#64748b">Thân người thẳng tự nhiên</text>
+
+  <!-- ================= FIGURE 2: Nhịp 1 ================= -->
+  <rect x="225" y="60" width="160" height="260" rx="10" fill="#ffffff" stroke="#bbf7d0" stroke-width="1.5" filter="url(#cardShadowDh)"/>
+  <rect x="225" y="60" width="160" height="28" rx="10" fill="#dcfce7"/>
+  <text x="305" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#15803d">Nhịp 1: Chân trái ra trước</text>
+
+  <g transform="translate(305, 185)">
+    <!-- Head -->
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <!-- Torso -->
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#10b981" stroke="#047857" stroke-width="2"/>
+    <!-- Arms forward horizontal & wave wrist -->
+    <line x1="-12" y1="-50" x2="-24" y2="-45" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="-24" y1="-45" x2="-38" y2="-48" stroke="#fed7aa" stroke-width="4" stroke-linecap="round"/>
+    <line x1="12" y1="-50" x2="24" y2="-45" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="24" y1="-45" x2="38" y2="-48" stroke="#fed7aa" stroke-width="4" stroke-linecap="round"/>
+    <!-- Wrist vibration waves -->
+    <path d="M-44 -52 Q-40 -48 -44 -44" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+    <path d="M44 -52 Q40 -48 44 -44" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+    <!-- Shorts -->
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1e3a8a" stroke="#172554" stroke-width="1.5"/>
+    <!-- Left leg forward toe touch, right leg straight -->
+    <line x1="-7" y1="15" x2="-22" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="5" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <!-- Shoes -->
+    <ellipse cx="-23" cy="74" rx="6" ry="4" fill="#047857"/>
+    <ellipse cx="5" cy="74" rx="7" ry="4" fill="#047857"/>
+  </g>
+  <text x="305" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#15803d" font-weight="600">Hai tay trước lắc cổ tay (Hít vào)</text>
+
+  <!-- ================= FIGURE 3: Nhịp 2 ================= -->
+  <rect x="410" y="60" width="160" height="260" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#cardShadowDh)"/>
+  <rect x="410" y="60" width="160" height="28" rx="10" fill="#f1f5f9"/>
+  <text x="490" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">Nhịp 2: Về TTCB</text>
+
+  <g transform="translate(490, 185)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#10b981" stroke="#047857" stroke-width="2"/>
+    <line x1="-14" y1="-50" x2="-18" y2="-10" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-50" x2="18" y2="-10" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1e3a8a" stroke="#172554" stroke-width="1.5"/>
+    <line x1="-7" y1="15" x2="-7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-8" cy="74" rx="7" ry="4" fill="#047857"/>
+    <ellipse cx="8" cy="74" rx="7" ry="4" fill="#047857"/>
+  </g>
+  <text x="490" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#64748b">Hạ tay, chân khép (Thở ra)</text>
+
+  <!-- ================= FIGURE 4: Nhịp 3 ================= -->
+  <rect x="595" y="60" width="165" height="260" rx="10" fill="#ffffff" stroke="#bbf7d0" stroke-width="1.5" filter="url(#cardShadowDh)"/>
+  <rect x="595" y="60" width="165" height="28" rx="10" fill="#dcfce7"/>
+  <text x="677" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#15803d">Nhịp 3: Chân phải &amp; Dang tay</text>
+
+  <g transform="translate(677, 185)">
+    <!-- Head -->
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <!-- Torso -->
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#10b981" stroke="#047857" stroke-width="2"/>
+    <!-- Arms wide horizontal & wave wrist -->
+    <line x1="-14" y1="-50" x2="-48" y2="-48" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-50" x2="48" y2="-48" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <!-- Wrist vibration waves -->
+    <path d="M-52 -52 Q-48 -48 -52 -44" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+    <path d="M52 -52 Q48 -48 52 -44" fill="none" stroke="#16a34a" stroke-width="1.5"/>
+    <!-- Shorts -->
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1e3a8a" stroke="#172554" stroke-width="1.5"/>
+    <!-- Left leg straight, right leg toe touch forward -->
+    <line x1="-7" y1="15" x2="-7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="22" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <!-- Shoes -->
+    <ellipse cx="-8" cy="74" rx="7" ry="4" fill="#047857"/>
+    <ellipse cx="23" cy="74" rx="6" ry="4" fill="#047857"/>
+  </g>
+  <text x="677" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#15803d" font-weight="600">Hai tay dang ngang lắc cổ tay (Hít vào)</text>
+</svg>

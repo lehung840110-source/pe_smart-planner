@@ -724,8 +724,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 1,
     lessonNum: 17,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN (BỤNG) (Tiết 1)',
-    movementNames: ['Động tác Chân', 'Động tác Bụng (Lườn)'],
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 1)',
+    movementNames: ['Học động tác Chân', 'Học động tác Vặn mình'],
     suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
   },
   {
@@ -733,36 +733,45 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 1,
     lessonNum: 18,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN (BỤNG) (Tiết 2)',
-    movementNames: ['Động tác Chân', 'Động tác Bụng (Lườn)', 'Ôn Vươn thở, Tay'],
-    suggestedGame: 'Trò chơi: Mèo đuổi chuột'
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 2)',
+    movementNames: ['Học động tác Bụng', 'Ôn động tác Chân và Động tác Vặn mình'],
+    suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
   },
   {
     week: 10,
     grade: 1,
     lessonNum: 19,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN (Tiết 1)',
-    movementNames: ['Động tác Vặn mình', 'Động tác Toàn thân'],
-    suggestedGame: 'Trò chơi: Kéo co an toàn'
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 3)',
+    movementNames: ['Học động tác Vặn mình và Động tác Bụng'],
+    suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
   },
   {
     week: 10,
     grade: 1,
     lessonNum: 20,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN (Tiết 2)',
-    movementNames: ['Động tác Vặn mình', 'Động tác Toàn thân', 'Ôn 4 động tác trước'],
-    suggestedGame: 'Trò chơi: Chạy tiếp sức'
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 4)',
+    movementNames: ['Ôn động tác Chân, Vặn mình, Bụng'],
+    suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
   },
   {
     week: 11,
     grade: 1,
     lessonNum: 21,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 4: ĐỘNG TÁC ĐIỀU HÒA - HOÀN THIỆN BÀI THỂ DỤC (Tiết 1)',
-    movementNames: ['Động tác Điều hòa', 'Hoàn thiện Bài thể dục 8 động tác'],
-    suggestedGame: 'Trò chơi: Chim bay cò bay'
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA (Tiết 1)',
+    movementNames: ['Học động tác Phối hợp'],
+    suggestedGame: 'Trò chơi: Mèo đuổi chuột'
+  },
+  {
+    week: 11,
+    grade: 1,
+    lessonNum: 22,
+    topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA (Tiết 2)',
+    movementNames: ['Học động tác Điều hòa', 'Ôn động tác Phối hợp'],
+    suggestedGame: 'Trò chơi: Chạy tiếp sức ném bóng'
   },
 
   // Khối 3
@@ -770,28 +779,55 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     week: 9,
     grade: 3,
     lessonNum: 17,
-    topic: 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ',
-    title: 'Bài 4: ĐỘNG TÁC ĐI ĐỀU, ĐỨNG LẠI (Tiết 5 - Đổi chân khi đi đều sai nhịp)',
-    movementNames: ['Đổi chân khi đi đều sai nhịp', 'Đi đều, Đứng lại'],
-    suggestedGame: 'Trò chơi: Lò cò tiếp sức ném bóng'
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 1)',
+    movementNames: ['Học động tác Vươn thở', 'Học động tác Tay'],
+    suggestedGame: 'Trò chơi: Đua ô tô'
   },
   {
     week: 9,
     grade: 3,
     lessonNum: 18,
-    topic: 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ',
-    title: 'Bài 4: ĐỘNG TÁC ĐI ĐỀU, ĐỨNG LẠI (Tiết 6 - Hoàn thiện kỹ thuật)',
-    movementNames: ['Đi đều vòng theo cự ly', 'Đứng lại đúng hiệu lệnh'],
-    suggestedGame: 'Trò chơi: Bịt mắt bắt dê'
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 2)',
+    movementNames: ['Học động tác Chân', 'Ôn động tác Vươn thở và Động tác Tay'],
+    suggestedGame: 'Trò chơi: Đua ô tô'
   },
   {
     week: 10,
     grade: 3,
     lessonNum: 19,
-    topic: 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ',
-    title: 'Bài 5: ĐI ĐỀU VÒNG PHẢI, ĐI ĐỀU VÒNG TRÁI (Tiết 1)',
-    movementNames: ['Đi đều vòng phải', 'Đi đều vòng trái'],
-    suggestedGame: 'Trò chơi: Chạy zíc zắc tiếp sức'
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 3)',
+    movementNames: ['Học động tác Chân', 'Ôn Vươn thở và Tay'],
+    suggestedGame: 'Trò chơi: Đua ô tô'
+  },
+  {
+    week: 10,
+    grade: 3,
+    lessonNum: 20,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 4)',
+    movementNames: ['Ôn động tác Vươn thở, Tay, Chân'],
+    suggestedGame: 'Trò chơi: Chạy nhanh tiếp sức'
+  },
+  {
+    week: 11,
+    grade: 3,
+    lessonNum: 21,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG, ĐỘNG TÁC PHỐI HỢP (Tiết 1)',
+    movementNames: ['Học động tác Lườn', 'Học động tác Bụng'],
+    suggestedGame: 'Trò chơi: Đua ô tô'
+  },
+  {
+    week: 11,
+    grade: 3,
+    lessonNum: 22,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG, ĐỘNG TÁC PHỐI HỢP (Tiết 2)',
+    movementNames: ['Học động tác Phối hợp', 'Ôn động tác Lườn và Động tác Bụng'],
+    suggestedGame: 'Trò chơi: Nhanh lên bạn ơi'
   },
 
   // Khối 5
@@ -799,36 +835,63 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     week: 9,
     grade: 5,
     lessonNum: 17,
-    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 1)',
-    movementNames: ['Động tác Bụng với gậy', 'Động tác Vặn mình với gậy (Học 2 động tác mới)'],
-    suggestedGame: 'Trò chơi: Ai kéo khoẻ hơn'
+    movementNames: ['Học động tác Bụng với gậy', 'Học động tác Vặn mình với gậy'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
     week: 9,
     grade: 5,
     lessonNum: 18,
-    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 2)',
-    movementNames: ['Ôn Bụng, Vặn mình với gậy', 'Động tác Toàn thân với gậy (Học 1 động tác mới)'],
+    movementNames: ['Học động tác Toàn thân với gậy', 'Ôn động tác Bụng và Vặn mình với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
     week: 10,
     grade: 5,
     lessonNum: 19,
-    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
-    movementNames: ['Động tác Thăng bằng với gậy', 'Động tác Nhảy với gậy (Học 2 động tác mới)'],
-    suggestedGame: 'Trò chơi: Nhảy tiếp sức'
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 3)',
+    movementNames: ['Học động tác Toàn thân với gậy'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
     week: 10,
     grade: 5,
     lessonNum: 20,
-    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC THĂNG BẰNG, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 2)',
-    movementNames: ['Ôn Thăng bằng, Nhảy với gậy', 'Động tác Điều hòa với gậy (Học 1 động tác mới)'],
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 4)',
+    movementNames: ['Ôn động tác Bụng, Vặn mình, Toàn thân với gậy'],
+    suggestedGame: 'Trò chơi: Chuyển bóng tiếp sức'
+  },
+  {
+    week: 11,
+    grade: 5,
+    lessonNum: 21,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
+    movementNames: ['Học động tác Nhảy với gậy'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
+  },
+  {
+    week: 11,
+    grade: 5,
+    lessonNum: 22,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 2)',
+    movementNames: ['Học động tác Điều hòa với gậy', 'Ôn động tác Nhảy với gậy'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
+  },
+  {
+    week: 12,
+    grade: 5,
+    lessonNum: 23,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 3)',
+    movementNames: ['Ôn động tác Nhảy và Điều hòa với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   }
 ];

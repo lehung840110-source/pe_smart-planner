@@ -68,8 +68,7 @@ import { defaultGrade1Ppct, defaultGrade3Ppct, defaultGrade5Ppct } from '../data
 export function getGradePpctInfo(grade: 1 | 3 | 5, week: number): WeeklyGradePpctInfo {
   const p1 = (week - 1) * 2 + 1;
   const p2 = (week - 1) * 2 + 2;
-  const p3 = (week - 1) * 2 + 3;
-  const periods = grade === 5 ? [p1, p2, p3] : [p1, p2];
+  const periods = [p1, p2];
 
   const ppctList = grade === 1 ? defaultGrade1Ppct : grade === 3 ? defaultGrade3Ppct : defaultGrade5Ppct;
   const matched = ppctList.filter((item) => item.week === week);
@@ -89,7 +88,7 @@ export function getGradePpctInfo(grade: 1 | 3 | 5, week: number): WeeklyGradePpc
     grade,
     week,
     periods,
-    periodLabel: grade === 5 ? `Tiết ${p1}, ${p2}, ${p3}` : `Tiết ${p1}, ${p2}`,
+    periodLabel: `Tiết ${p1}, ${p2}`,
     defaultTopic,
     defaultTitle
   };
