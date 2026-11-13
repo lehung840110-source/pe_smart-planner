@@ -15,7 +15,8 @@ import {
   LayoutGrid,
   Maximize2,
   RefreshCw,
-  Plus
+  Plus,
+  Image as ImageIcon
 } from 'lucide-react';
 import {
   standardFormationDiagrams,
@@ -28,12 +29,15 @@ import {
 } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { FormationStudioModal } from './FormationStudioModal';
+import { SgkImageItem } from '../types/gdtc';
 
 interface SelectFormationModalProps {
   isOpen: boolean;
   onClose: () => void;
   targetRowIndex: number;
   onSelectFormation: (rowIndex: number, formation: FormationDiagram) => void;
+  grade?: number;
+  libraryImages?: SgkImageItem[];
 }
 
 export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
@@ -41,9 +45,14 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
   onClose,
   targetRowIndex,
   onSelectFormation,
+  grade,
+  libraryImages = []
 }) => {
   // Bỏ tab 'all' (Tất Cả) theo yêu cầu người dùng, mặc định vào Khởi Động & Nhận Lớp
   const [selectedPhase, setSelectedPhase] = useState<string>('khoi_dong');
+  const [gradeFilter, setGradeFilter] = useState<string>(() =>
+    grade === 1 || grade === 3 || grade === 5 ? String(grade) : 'all'
+  );
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [courtTheme, setCourtTheme] = useState<'clean' | 'turf' | 'court'>('clean');
   
@@ -56,6 +65,7 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
 
   // Studio and custom state
   const [isStudioOpen, setIsStudioOpen] = useState<boolean>(false);
+  const [openStudioWithRef, setOpenStudioWithRef] = useState<boolean>(false);
   const [selectedToEdit, setSelectedToEdit] = useState<FormationDiagram | null>(null);
   const [customList, setCustomList] = useState<FormationDiagram[]>([]);
 
@@ -72,8 +82,13 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
       if (targetRowIndex >= 0) {
         setSelectedRow(targetRowIndex);
       }
+      if (grade === 1 || grade === 3 || grade === 5) {
+        setGradeFilter(String(grade));
+      } else {
+        setGradeFilter('all');
+      }
     }
-  }, [isOpen, targetRowIndex]);
+  }, [isOpen, targetRowIndex, grade]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -126,7 +141,7 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
   }, [customList]);
 
   const filteredDiagrams = useMemo(() => {
-    return allDiagrams.filter((item) => {
+    const matched = allDiagrams.filter((item) => {
       const isCustom = customList.some((c) => c.id === item.id);
       let matchPhase = false;
       if (selectedPhase === 'custom') {
@@ -139,14 +154,28 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
         matchPhase = item.phase === selectedPhase;
       }
 
+      const matchGrade =
+        gradeFilter === 'all' ||
+        String(item.grade) === gradeFilter ||
+        ((item.phase === 'tro_choi' || isCustom) && (!item.grade || item.grade === 'all'));
+
       const matchSearch =
         !searchKeyword.trim() ||
         item.name.toLowerCase().includes(searchKeyword.toLowerCase()) ||
         item.description.toLowerCase().includes(searchKeyword.toLowerCase());
 
-      return matchPhase && matchSearch;
+      return matchPhase && matchGrade && matchSearch;
     });
-  }, [allDiagrams, customList, selectedPhase, searchKeyword]);
+
+    if (gradeFilter !== 'all') {
+      return [...matched].sort((a, b) => {
+        const aExact = String(a.grade) === gradeFilter ? 1 : 0;
+        const bExact = String(b.grade) === gradeFilter ? 1 : 0;
+        return bExact - aExact;
+      });
+    }
+    return matched;
+  }, [allDiagrams, customList, selectedPhase, gradeFilter, searchKeyword]);
 
   if (!isOpen) return null;
 
@@ -194,6 +223,12 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
           name: data.name || `Sơ đồ AI: ${aiPrompt}`,
           code: 'DH_AI',
           phase: (data.phase as any) || (selectedPhase === 'custom' ? 'tro_choi' : (selectedPhase as any)),
+          grade:
+            gradeFilter === '1' || gradeFilter === '3' || gradeFilter === '5'
+              ? (Number(gradeFilter) as 1 | 3 | 5)
+              : grade === 1 || grade === 3 || grade === 5
+              ? grade
+              : 'all',
           description: data.description || aiPrompt,
           svgDataUrl: data.svgDataUrl
         };
@@ -277,10 +312,25 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
               </select>
             </div>
 
+            {/* Tạo Sơ Đồ Từ Ảnh Trò Chơi Button */}
+            <button
+              onClick={() => {
+                setSelectedToEdit(null);
+                setOpenStudioWithRef(true);
+                setIsStudioOpen(true);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition whitespace-nowrap cursor-pointer"
+              title="Chọn ảnh trò chơi từ thư viện hoặc tải ảnh lên để dựng sơ đồ trò chơi tương tác"
+            >
+              <ImageIcon className="w-4 h-4 text-amber-200" />
+              <span>Từ Ảnh Trò Chơi</span>
+            </button>
+
             {/* Studio Tự Vẽ Button */}
             <button
               onClick={() => {
                 setSelectedToEdit(null);
+                setOpenStudioWithRef(false);
                 setIsStudioOpen(true);
               }}
               className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs px-3 py-2 rounded-xl flex items-center gap-1.5 shadow-md transition whitespace-nowrap cursor-pointer"
@@ -318,6 +368,32 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
                   }`}
                 >
                   {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Khối Filter Bar + Size/Density Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-600">Kiểu theo Khối:</span>
+              {[
+                { id: 'all', label: 'Tất cả Khối' },
+                { id: '1', label: 'Khối 1' },
+                { id: '3', label: 'Khối 3' },
+                { id: '5', label: 'Khối 5' }
+              ].map((gTab) => (
+                <button
+                  key={gTab.id}
+                  type="button"
+                  onClick={() => setGradeFilter(gTab.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                    gradeFilter === gTab.id
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
+                  }`}
+                >
+                  {gTab.label}
                 </button>
               ))}
             </div>
@@ -448,6 +524,11 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-900/80 text-white backdrop-blur-xs">
                           {formation.code || 'SƠ ĐỒ'}
                         </span>
+                        {formation.grade && formation.grade !== 'all' && (
+                          <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-blue-600 text-white shadow-2xs">
+                            Khối {formation.grade}
+                          </span>
+                        )}
                         {isCustom && (
                           <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-600 text-white shadow-2xs">
                             Tự thiết kế
@@ -519,6 +600,7 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
                         <button
                           onClick={() => {
                             setSelectedToEdit(formation);
+                            setOpenStudioWithRef(false);
                             setIsStudioOpen(true);
                           }}
                           className="p-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-slate-600 rounded-lg transition cursor-pointer"
@@ -547,14 +629,21 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
         {isStudioOpen && (
           <FormationStudioModal
             isOpen={isStudioOpen}
-            onClose={() => setIsStudioOpen(false)}
+            onClose={() => {
+              setIsStudioOpen(false);
+              setOpenStudioWithRef(false);
+            }}
             targetRowIndex={selectedRow}
             initialFormation={selectedToEdit}
+            libraryImages={libraryImages}
+            grade={gradeFilter === 'all' ? grade : Number(gradeFilter)}
+            openReferencePanelInitially={openStudioWithRef}
             onApplyFormationToRow={(rowIdx, customFormation) => {
               saveCustomFormationToStorage(customFormation);
               setCustomList(getSavedCustomFormations());
               onSelectFormation(rowIdx, customFormation);
               setIsStudioOpen(false);
+              setOpenStudioWithRef(false);
               onClose();
             }}
             onSaveToLibrary={(customFormation) => {

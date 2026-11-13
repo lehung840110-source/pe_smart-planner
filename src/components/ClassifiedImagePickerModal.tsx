@@ -13,8 +13,16 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { SgkImageItem } from '../types/gdtc';
+import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 
-export type ImageClassificationCategory = 'dong_tac' | 'tro_choi_kd' | 'tro_choi_vd' | 'luyen_tap';
+export type ImageClassificationCategory =
+  | 'dong_tac'
+  | 'khoi_dong'
+  | 'tro_choi_kd'
+  | 'luyen_tap'
+  | 'tro_choi_vd'
+  | 'van_dung';
 
 export interface ClassifiedImageInfo {
   category: ImageClassificationCategory;
@@ -25,60 +33,110 @@ export interface ClassifiedImageInfo {
 }
 
 /**
- * Accurately classifies an image item into one of the 4 standard categories and assigns grade.
+ * Accurately classifies an image item into one of the 6 standard SGK categories and assigns grade.
+ * Explicit folder/category tags always take precedence over caption keyword inference.
  */
 export function classifyImageItem(img: SgkImageItem): ClassifiedImageInfo {
   const t = (img.title || '').toLowerCase();
-  const c = (img.caption || '').toLowerCase();
+  const capHead = ((img.caption || '').split('•')[0] || '').toLowerCase();
   const cat = (img.category || '').toLowerCase();
   const folder = (img.folder || '').toLowerCase();
   const id = (img.id || '').toLowerCase();
   const lTitle = (img.lessonTitle || '').toLowerCase();
 
-  // 1. Determine Grade
+  // 1. Determine Grade strictly
   let grade: '1' | '3' | '5' | 'chung' = 'chung';
-  if (img.grade === '1' || id.includes('k1') || t.includes('lớp 1') || t.includes('khối 1') || lTitle.includes('lớp 1')) {
+  if (img.grade === '1' || id.includes('k1_') || t.includes('lớp 1') || t.includes('khối 1') || lTitle.includes('lớp 1')) {
     grade = '1';
-  } else if (img.grade === '3' || id.includes('k3') || t.includes('lớp 3') || t.includes('khối 3') || lTitle.includes('lớp 3')) {
+  } else if (img.grade === '3' || id.includes('k3_') || t.includes('lớp 3') || t.includes('khối 3') || lTitle.includes('lớp 3')) {
     grade = '3';
-  } else if (img.grade === '5' || id.includes('k5') || t.includes('lớp 5') || t.includes('khối 5') || lTitle.includes('lớp 5')) {
+  } else if (img.grade === '5' || id.includes('k5_') || t.includes('lớp 5') || t.includes('khối 5') || lTitle.includes('lớp 5')) {
     grade = '5';
   }
 
-  // 2. Determine Category
-  // A. Trò chơi khởi động
-  const kdKeywords = [
-    'khởi động',
+  const makeMeta = (category: ImageClassificationCategory): ClassifiedImageInfo => {
+    switch (category) {
+      case 'khoi_dong':
+        return {
+          category,
+          categoryLabel: 'Khởi động chung',
+          grade,
+          badgeBg: 'bg-sky-50 text-sky-800',
+          badgeBorder: 'border-sky-200'
+        };
+      case 'tro_choi_kd':
+        return {
+          category,
+          categoryLabel: 'Trò chơi khởi động',
+          grade,
+          badgeBg: 'bg-amber-50 text-amber-800',
+          badgeBorder: 'border-amber-200'
+        };
+      case 'luyen_tap':
+        return {
+          category,
+          categoryLabel: 'Luyện tập',
+          grade,
+          badgeBg: 'bg-teal-50 text-teal-800',
+          badgeBorder: 'border-teal-200'
+        };
+      case 'tro_choi_vd':
+        return {
+          category,
+          categoryLabel: 'Trò chơi vận động',
+          grade,
+          badgeBg: 'bg-purple-50 text-purple-800',
+          badgeBorder: 'border-purple-200'
+        };
+      case 'van_dung':
+        return {
+          category,
+          categoryLabel: 'Vận dụng',
+          grade,
+          badgeBg: 'bg-emerald-50 text-emerald-800',
+          badgeBorder: 'border-emerald-200'
+        };
+      default:
+        return {
+          category: 'dong_tac',
+          categoryLabel: 'Động tác kỹ thuật',
+          grade,
+          badgeBg: 'bg-blue-50 text-blue-800',
+          badgeBorder: 'border-blue-200'
+        };
+    }
+  };
+
+  // 2. Trust explicit folder / category metadata first
+  if (folder === 'trochoikhoidong' || cat === 'tro_choi_khoi_dong') return makeMeta('tro_choi_kd');
+  if (folder === 'khoidong' || cat === 'khoi_dong') return makeMeta('khoi_dong');
+  if (folder === 'vandung' || cat === 'van_dung') return makeMeta('van_dung');
+  if (folder === 'luyentap' || cat === 'tap_luyen') return makeMeta('luyen_tap');
+  if (folder === 'trochoi' || cat === 'tro_choi') return makeMeta('tro_choi_vd');
+  if (folder === 'kythuat' || cat === 'dong_tac') return makeMeta('dong_tac');
+
+  // 3. Fallback keyword inference on title & first caption clause
+  const corpus = `${t} ${capHead}`;
+  const kdGameKeywords = [
+    'trò chơi khởi động',
+    'trò chơi bổ trợ khởi động',
     'kết bạn',
     'làm theo hiệu lệnh',
     'đứng ngồi theo hiệu lệnh',
     'di chuyển theo tín hiệu',
-    'ai nhanh hơn',
     'ai kéo khoẻ',
     'ai kéo khỏe',
-    'gió thổi gậy'
+    'chui qua hầm',
+    'người thừa thứ hai'
   ];
-  if (
-    cat === 'tro_choi_khoi_dong' ||
-    cat === 'khoi_dong' ||
-    folder === 'trochoikhoidong' ||
-    folder === 'khoidong' ||
-    kdKeywords.some((kw) => t.includes(kw) || c.includes(kw))
-  ) {
-    return {
-      category: 'tro_choi_kd',
-      categoryLabel: 'Trò chơi khởi động',
-      grade,
-      badgeBg: 'bg-amber-50 text-amber-800',
-      badgeBorder: 'border-amber-200'
-    };
-  }
+  if (kdGameKeywords.some((kw) => corpus.includes(kw))) return makeMeta('tro_choi_kd');
 
-  // B. Hình ảnh luyện tập của bài học
+  const vdKeywords = ['vận dụng', 'câu hỏi vận dụng', 'hồi tĩnh', 'thả lỏng'];
+  if (vdKeywords.some((kw) => corpus.includes(kw))) return makeMeta('van_dung');
+
   const practiceKeywords = [
     'luyện tập',
     'tập luyện',
-    'luyện tập động tác',
     'tập theo tổ',
     'tổ nhóm',
     'tập đồng loạt',
@@ -86,61 +144,27 @@ export function classifyImageItem(img: SgkImageItem): ClassifiedImageInfo {
     'thi đua',
     'đội hình luyện tập'
   ];
-  if (
-    cat === 'tap_luyen' ||
-    folder === 'luyentap' ||
-    practiceKeywords.some((kw) => t.includes(kw) || c.includes(kw))
-  ) {
-    return {
-      category: 'luyen_tap',
-      categoryLabel: 'Hình ảnh luyện tập',
-      grade,
-      badgeBg: 'bg-emerald-50 text-emerald-800',
-      badgeBorder: 'border-emerald-200'
-    };
-  }
+  if (practiceKeywords.some((kw) => corpus.includes(kw))) return makeMeta('luyen_tap');
 
-  // C. Trò chơi vận động
   const gameKeywords = [
     'trò chơi',
     'tiếp sức',
     'lò cò',
-    'chui qua hầm',
     'đua ô tô',
     'trao gậy',
     'chuyền gậy',
-    'con thỏ',
     'thỏ nhường hang',
     'mèo đuổi chuột',
     'chim về tổ',
     'hoàng anh hoàng yến',
     'cướp cờ',
-    'kéo co',
-    'ném bóng vào rổ',
-    'vận động'
+    'nhanh lên bạn ơi'
   ];
-  if (
-    cat === 'tro_choi' ||
-    folder === 'trochoi' ||
-    gameKeywords.some((kw) => t.includes(kw) || c.includes(kw))
-  ) {
-    return {
-      category: 'tro_choi_vd',
-      categoryLabel: 'Trò chơi vận động',
-      grade,
-      badgeBg: 'bg-purple-50 text-purple-800',
-      badgeBorder: 'border-purple-200'
-    };
-  }
+  if (gameKeywords.some((kw) => corpus.includes(kw))) return makeMeta('tro_choi_vd');
 
-  // D. Động tác kỹ thuật (mặc định)
-  return {
-    category: 'dong_tac',
-    categoryLabel: 'Động tác kỹ thuật',
-    grade,
-    badgeBg: 'bg-blue-50 text-blue-800',
-    badgeBorder: 'border-blue-200'
-  };
+  if (corpus.includes('khởi động') || corpus.includes('xoay khớp')) return makeMeta('khoi_dong');
+
+  return makeMeta('dong_tac');
 }
 
 export interface ClassifiedImagePickerModalProps {
@@ -216,9 +240,11 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
     return {
       all: currentGradeImages.length,
       dong_tac: currentGradeImages.filter((i) => i.meta.category === 'dong_tac').length,
+      khoi_dong: currentGradeImages.filter((i) => i.meta.category === 'khoi_dong').length,
       tro_choi_kd: currentGradeImages.filter((i) => i.meta.category === 'tro_choi_kd').length,
       tro_choi_vd: currentGradeImages.filter((i) => i.meta.category === 'tro_choi_vd').length,
       luyen_tap: currentGradeImages.filter((i) => i.meta.category === 'luyen_tap').length,
+      van_dung: currentGradeImages.filter((i) => i.meta.category === 'van_dung').length,
       g1: classifiedImages.filter((i) => i.meta.grade === '1').length,
       g3: classifiedImages.filter((i) => i.meta.grade === '3').length,
       g5: classifiedImages.filter((i) => i.meta.grade === '5').length,
@@ -396,10 +422,26 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                   : 'bg-white text-blue-900 border-blue-200 hover:bg-blue-50'
               }`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>Động tác kỹ thuật</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${categoryFilter === 'dong_tac' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800'}`}>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'dong_tac' ? 'bg-blue-800 text-white' : 'bg-blue-100 text-blue-800'}`}>
                 {counts.dong_tac}
+              </span>
+            </button>
+
+            {/* Khởi động chung */}
+            <button
+              onClick={() => setCategoryFilter('khoi_dong')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border flex items-center gap-1.5 ${
+                categoryFilter === 'khoi_dong'
+                  ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                  : 'bg-white text-sky-900 border-sky-200 hover:bg-sky-50'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-sky-500" />
+              <span>Khởi động chung</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'khoi_dong' ? 'bg-sky-800 text-white' : 'bg-sky-100 text-sky-800'}`}>
+                {counts.khoi_dong}
               </span>
             </button>
 
@@ -414,8 +456,24 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
             >
               <Flame className="w-3.5 h-3.5 text-amber-500" />
               <span>Trò chơi khởi động</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${categoryFilter === 'tro_choi_kd' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800'}`}>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'tro_choi_kd' ? 'bg-amber-800 text-white' : 'bg-amber-100 text-amber-800'}`}>
                 {counts.tro_choi_kd}
+              </span>
+            </button>
+
+            {/* Hình ảnh luyện tập */}
+            <button
+              onClick={() => setCategoryFilter('luyen_tap')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border flex items-center gap-1.5 ${
+                categoryFilter === 'luyen_tap'
+                  ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                  : 'bg-white text-teal-900 border-teal-200 hover:bg-teal-50'
+              }`}
+            >
+              <Users2 className="w-3.5 h-3.5 text-teal-500" />
+              <span>Luyện tập</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'luyen_tap' ? 'bg-teal-800 text-white' : 'bg-teal-100 text-teal-800'}`}>
+                {counts.luyen_tap}
               </span>
             </button>
 
@@ -430,24 +488,24 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
             >
               <Gamepad2 className="w-3.5 h-3.5 text-purple-500" />
               <span>Trò chơi vận động</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${categoryFilter === 'tro_choi_vd' ? 'bg-purple-800 text-white' : 'bg-purple-100 text-purple-800'}`}>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'tro_choi_vd' ? 'bg-purple-800 text-white' : 'bg-purple-100 text-purple-800'}`}>
                 {counts.tro_choi_vd}
               </span>
             </button>
 
-            {/* Hình ảnh luyện tập */}
+            {/* Vận dụng thực tế */}
             <button
-              onClick={() => setCategoryFilter('luyen_tap')}
+              onClick={() => setCategoryFilter('van_dung')}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition border flex items-center gap-1.5 ${
-                categoryFilter === 'luyen_tap'
+                categoryFilter === 'van_dung'
                   ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                   : 'bg-white text-emerald-900 border-emerald-200 hover:bg-emerald-50'
               }`}
             >
-              <Users2 className="w-3.5 h-3.5 text-emerald-500" />
-              <span>Hình ảnh luyện tập</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${categoryFilter === 'luyen_tap' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
-                {counts.luyen_tap}
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Vận dụng</span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold tabular-nums ${categoryFilter === 'van_dung' ? 'bg-emerald-800 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                {counts.van_dung}
               </span>
             </button>
           </div>
@@ -456,7 +514,7 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
         {/* Results Count & Current Filter Breadcrumbs */}
         <div className="flex items-center justify-between text-xs text-slate-500 px-1 shrink-0">
           <span>
-            Đang hiển thị <strong>{filteredImages.length}</strong> hình ảnh
+            Đang hiển thị <strong className="tabular-nums">{filteredImages.length}</strong> hình ảnh
             {gradeFilter !== 'all' && (
               <span className="font-semibold text-slate-800"> · Khối {gradeFilter}</span>
             )}
@@ -466,10 +524,14 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                 ·{' '}
                 {categoryFilter === 'dong_tac'
                   ? 'Động tác kỹ thuật'
+                  : categoryFilter === 'khoi_dong'
+                  ? 'Khởi động chung'
                   : categoryFilter === 'tro_choi_kd'
                   ? 'Trò chơi khởi động'
                   : categoryFilter === 'tro_choi_vd'
                   ? 'Trò chơi vận động'
+                  : categoryFilter === 'van_dung'
+                  ? 'Vận dụng'
                   : 'Hình ảnh luyện tập'}
               </span>
             )}
@@ -494,6 +556,7 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
           {filteredImages.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {filteredImages.map((img) => {
+                const prov = resolveImageUsageProvenance(img);
                 const gradeBadge =
                   img.meta.grade === '1'
                     ? { text: 'Khối 1', bg: 'bg-blue-100 text-blue-800 border-blue-200' }
@@ -527,19 +590,23 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                         </span>
                       </div>
 
-                      {/* Image Thumbnail */}
-                      <div className="h-32 w-full bg-slate-50 rounded-lg p-1.5 flex items-center justify-center border border-slate-100 group-hover:border-blue-200 transition">
+                      {/* Image Thumbnail + Hover Provenance Tooltip */}
+                      <div className="relative group/imgtip h-32 w-full bg-slate-50 rounded-lg p-1.5 flex items-center justify-center border border-slate-100 group-hover:border-blue-200 transition">
                         <img
                           src={img.imgUrl}
                           alt={img.title}
                           className="max-h-full max-w-full object-contain rounded"
                           loading="lazy"
                         />
+                        <ImageProvenanceTooltip image={img} position="bottom" />
                       </div>
 
-                      {/* Title & Caption */}
+                      {/* Title & Week/Slot hint */}
                       <p className="text-[11.5px] font-bold text-slate-800 group-hover:text-blue-600 mt-2 line-clamp-2 leading-snug">
                         {img.title}
+                      </p>
+                      <p className="text-[9.5px] font-semibold text-emerald-700 mt-0.5 truncate tabular-nums">
+                        {prov.weekLabel} · Mục {prov.slotCode}
                       </p>
                     </div>
 

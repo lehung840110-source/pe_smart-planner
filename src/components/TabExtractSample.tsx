@@ -698,6 +698,8 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
           isOpen={true}
           onClose={() => setTargetRowForFormation(null)}
           targetRowIndex={targetRowForFormation}
+          grade={plan.grade}
+          libraryImages={userImages}
           onSelectFormation={handleSelectFormation}
         />
       )}

@@ -28,7 +28,14 @@ import {
   Filter,
   X,
   Save,
-  Check
+  Check,
+  Edit3,
+  RotateCcw,
+  Gamepad2,
+  Flame,
+  Users,
+  HelpCircle,
+  Target
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -38,7 +45,16 @@ import {
   autoCropCanvas,
   smartExtendFloor,
 } from '../utils/imageProcessing';
-import { sgkCurriculumTree, SgkLessonFolder } from '../data/sgkCurriculumTree';
+import {
+  sgkCurriculumTree,
+  SgkLessonFolder,
+  getEffectiveSgkCurriculumTree,
+  saveSgkTreeLessonOverride,
+  resetSgkTreeLessonOverride,
+  doesImageBelongToSgkLesson
+} from '../data/sgkCurriculumTree';
+import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { standardMovementsLibrary } from '../data/movementLibrary';
 import { standardFormationDiagrams } from '../data/formationDiagrams';
 
@@ -48,6 +64,7 @@ if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
 }
 
 interface TabScanProps {
+  images?: SgkImageItem[];
   onImageExtracted: (newImg: SgkImageItem) => void;
   onNavigateToGallery: () => void;
   onAnalyzeVision?: (img: SgkImageItem) => void;
@@ -57,7 +74,17 @@ interface TabScanProps {
   initialPage?: number;
 }
 
+const SUBFOLDER_LABELS: Record<SubFolderType, string> = {
+  khoiDong: '1. Khởi động chung',
+  troChoiKhoiDong: '2. Trò chơi khởi động',
+  kyThuat: '3. Kỹ thuật động tác',
+  luyenTap: '4. Luyện tập',
+  troChoi: '5. Trò chơi vận động',
+  vanDung: '6. Vận dụng & Câu hỏi'
+};
+
 export const TabScan: React.FC<TabScanProps> = ({
+  images = [],
   onImageExtracted,
   onNavigateToGallery,
   onAnalyzeVision,
@@ -74,6 +101,13 @@ export const TabScan: React.FC<TabScanProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingText, setLoadingText] = useState<string>('Đang mở trang sách...');
   const [zoomScale, setZoomScale] = useState<number>(0.85); // Cố định canvas xem trang sách ở 85% theo yêu cầu
+
+  // Effective Tree + Inline Tree Metadata Editing
+  const [treeRevision, setTreeRevision] = useState<number>(0);
+  const effectiveTree = useMemo(() => getEffectiveSgkCurriculumTree(), [treeRevision]);
+  const [isEditingLessonMeta, setIsEditingLessonMeta] = useState<boolean>(false);
+  const [editWarmupGame, setEditWarmupGame] = useState<string>('');
+  const [editPracticeGame, setEditPracticeGame] = useState<string>('');
 
   // Search by Lesson or Movement
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -102,6 +136,7 @@ export const TabScan: React.FC<TabScanProps> = ({
   const cancelBatchRef = useRef<boolean>(false);
   const isDrawingRef = useRef<boolean>(false);
   const startCoordRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const subFolderLockRef = useRef<{ page: number; folder: SubFolderType; itemTitle?: string } | null>(null);
 
   // Map grade to default local PDF file
   const gradePdfMap = {
@@ -112,6 +147,7 @@ export const TabScan: React.FC<TabScanProps> = ({
 
   // Load Grade PDF on mount or grade switch
   useEffect(() => {
+    subFolderLockRef.current = null;
     loadPdfFromPath(gradePdfMap[selectedGrade].file, gradePdfMap[selectedGrade].name, initialPage || gradePdfMap[selectedGrade].defaultPage);
   }, [selectedGrade]);
 
@@ -124,6 +160,7 @@ export const TabScan: React.FC<TabScanProps> = ({
 
   useEffect(() => {
     if (initialPage && initialPage > 0 && initialPage !== currentPage) {
+      subFolderLockRef.current = null;
       setCurrentPage(initialPage);
       if (pdfDocRef.current) {
         renderPdfPage(pdfDocRef.current, initialPage, zoomScale);
@@ -131,32 +168,43 @@ export const TabScan: React.FC<TabScanProps> = ({
     }
   }, [initialPage]);
 
-  // Tự động đồng bộ bài học & thư mục con (Kỹ thuật động tác mới vs Luyện tập) theo khối lớp và số trang hiện tại
+  // Tự động đồng bộ bài học & thư mục con khi đổi trang, nhưng TÔN TRỌNG khóa mục tiêu khi người dùng vừa bấm chọn nhánh trong Cây Thư Mục
   useEffect(() => {
-    const matched = sgkCurriculumTree.find(
+    const matched = effectiveTree.find(
       (f) => f.grade === selectedGrade && currentPage >= f.startPage && currentPage <= f.endPage
-    ) || sgkCurriculumTree.find((f) => f.grade === selectedGrade);
+    ) || effectiveTree.find((f) => f.grade === selectedGrade);
 
     if (matched) {
       setSelectedFolderId(matched.id);
 
-      // Phân biệt chính xác Kỹ thuật mới vs Luyện tập dựa trên dữ liệu trang chuẩn của SGK
+      // Nếu người dùng vừa bấm chọn rõ 1 nhánh trong cây cho trang này, giữ nguyên lựa chọn đó
+      if (subFolderLockRef.current && subFolderLockRef.current.page === currentPage) {
+        setSelectedSubCategory(subFolderLockRef.current.folder);
+        return;
+      }
+
+      const isTroChoiKd = matched.subFolders.troChoiKhoiDong.items.some((it) => it.page === currentPage);
+      const isTroChoiVd = matched.subFolders.troChoi.items.some((it) => it.page === currentPage);
       const isLuyenTap = matched.subFolders.luyenTap.items.some((it) => it.page === currentPage);
       const isKyThuat = matched.subFolders.kyThuat.items.some((it) => it.page === currentPage);
       const isKhoiDong = matched.subFolders.khoiDong.suggestedPage === currentPage;
       const isVanDung = matched.subFolders.vanDung.suggestedPage === currentPage;
 
-      if (isLuyenTap) {
-        setSelectedSubCategory('luyenTap');
-      } else if (isKyThuat) {
+      if (isKyThuat) {
         setSelectedSubCategory('kyThuat');
+      } else if (isLuyenTap) {
+        setSelectedSubCategory('luyenTap');
+      } else if (isTroChoiVd) {
+        setSelectedSubCategory('troChoi');
+      } else if (isTroChoiKd) {
+        setSelectedSubCategory('troChoiKhoiDong');
       } else if (isKhoiDong) {
         setSelectedSubCategory('khoiDong');
       } else if (isVanDung) {
         setSelectedSubCategory('vanDung');
       }
     }
-  }, [selectedGrade, currentPage]);
+  }, [selectedGrade, currentPage, effectiveTree]);
 
   const loadPdfFromPath = async (url: string, name: string, targetPage = 10) => {
     setIsLoading(true);
@@ -241,9 +289,9 @@ export const TabScan: React.FC<TabScanProps> = ({
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
 
-    const matchedFolder = sgkCurriculumTree.find(
+    const matchedFolder = effectiveTree.find(
       (f) => f.grade === selectedGrade && pageNum >= f.startPage && pageNum <= f.endPage
-    ) || sgkCurriculumTree.find((f) => f.id === selectedFolderId);
+    ) || effectiveTree.find((f) => f.id === selectedFolderId);
 
     // Book Header
     ctx.fillStyle = '#1e3a8a';
@@ -304,8 +352,11 @@ export const TabScan: React.FC<TabScanProps> = ({
     }
   };
 
-  const handlePageChange = (newPage: number) => {
+  const handlePageChange = (newPage: number, preserveLock = false) => {
     if (newPage < 1 || newPage > totalPages) return;
+    if (!preserveLock) {
+      subFolderLockRef.current = null;
+    }
     setCurrentPage(newPage);
     if (pdfDocRef.current) {
       renderPdfPage(pdfDocRef.current, newPage, zoomScale);
@@ -436,23 +487,60 @@ export const TabScan: React.FC<TabScanProps> = ({
     const cleanDataUrl = cropCanvas.toDataURL('image/png');
 
     // 1. Tự động xác định bài học theo trang đang mở & khối lớp (Ưu tiên theo trang trước)
-    const activeFolder = sgkCurriculumTree.find(
+    const activeFolder = effectiveTree.find(
       (f) => f.grade === selectedGrade && currentPage >= f.startPage && currentPage <= f.endPage
-    ) || sgkCurriculumTree.find((f) => f.id === selectedFolderId) ||
-         sgkCurriculumTree.find((f) => f.grade === selectedGrade);
+    ) || effectiveTree.find((f) => f.id === selectedFolderId) ||
+         effectiveTree.find((f) => f.grade === selectedGrade);
 
-    // 2. Tự động phân loại: Đâu là Kỹ thuật động tác mới, đâu là Luyện tập, đâu là Trò chơi
-    let autoFolder: SubFolderType = selectedSubCategory;
+    // 2. Xác định phân loại thư mục theo: (a) Khóa lựa chọn từ Cây Thư Mục, hoặc (b) Suy diễn chuẩn xác theo trang & hạng mục đang chọn
+    const isLockedForThisPage = subFolderLockRef.current && subFolderLockRef.current.page === currentPage;
+    let autoFolder: SubFolderType = isLockedForThisPage
+      ? subFolderLockRef.current!.folder
+      : selectedSubCategory;
     let autoTitle = customTitle || '';
 
     if (!autoTitle && activeFolder) {
+      const lessonTitle = activeFolder.lessonName.split(':')[1]?.trim() || activeFolder.lessonName;
       const kyThuatItem = activeFolder.subFolders.kyThuat.items.find((it) => it.page === currentPage);
       const luyenTapItem = activeFolder.subFolders.luyenTap.items.find((it) => it.page === currentPage);
-      const troChoiItem = activeFolder.subFolders.troChoiKhoiDong?.items?.find((it) => it.page === currentPage);
+      const troChoiKdItem = activeFolder.subFolders.troChoiKhoiDong.items.find((it) => it.page === currentPage);
+      const troChoiVdItem = activeFolder.subFolders.troChoi.items.find((it) => it.page === currentPage);
 
-      if (troChoiItem) {
+      if (isLockedForThisPage) {
+        const lockedItemTitle = subFolderLockRef.current?.itemTitle;
+        if (autoFolder === 'troChoiKhoiDong') {
+          const gName = troChoiKdItem?.gameName || activeFolder.subFolders.troChoiKhoiDong.items[0]?.gameName || 'Trò chơi khởi động';
+          autoTitle = `${gName} - Trò chơi khởi động (Khối ${selectedGrade}, Trang ${currentPage})`;
+        } else if (autoFolder === 'troChoi') {
+          const gName = troChoiVdItem?.gameName || activeFolder.subFolders.troChoi.items[0]?.gameName || 'Trò chơi vận động';
+          autoTitle = `${gName} - Trò chơi vận động (Khối ${selectedGrade}, Trang ${currentPage})`;
+        } else if (autoFolder === 'khoiDong') {
+          autoTitle = `Khởi động - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
+        } else if (autoFolder === 'luyenTap') {
+          autoTitle = `${luyenTapItem?.name || `Luyện tập - ${lessonTitle}`} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
+        } else if (autoFolder === 'vanDung') {
+          autoTitle = `Vận dụng - ${lessonTitle} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
+        } else {
+          autoTitle = `${lockedItemTitle || kyThuatItem?.name || activeFolder.movements[0] || lessonTitle} (Khối ${selectedGrade}) - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
+        }
+      } else if (kyThuatItem && selectedSubCategory === 'kyThuat') {
+        autoFolder = 'kyThuat';
+        autoTitle = `${kyThuatItem.name} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
+      } else if (luyenTapItem && selectedSubCategory === 'luyenTap') {
+        autoFolder = 'luyenTap';
+        autoTitle = `${luyenTapItem.name} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
+      } else if (troChoiKdItem && selectedSubCategory === 'troChoiKhoiDong') {
         autoFolder = 'troChoiKhoiDong';
-        autoTitle = `${troChoiItem.name} - Trò chơi khởi động (Trang ${currentPage})`;
+        autoTitle = `${troChoiKdItem.gameName} - Trò chơi khởi động (Khối ${selectedGrade}, Trang ${currentPage})`;
+      } else if (troChoiVdItem && selectedSubCategory === 'troChoi') {
+        autoFolder = 'troChoi';
+        autoTitle = `${troChoiVdItem.gameName} - Trò chơi vận động (Khối ${selectedGrade}, Trang ${currentPage})`;
+      } else if (troChoiVdItem) {
+        autoFolder = 'troChoi';
+        autoTitle = `${troChoiVdItem.gameName} - Trò chơi vận động (Khối ${selectedGrade}, Trang ${currentPage})`;
+      } else if (troChoiKdItem) {
+        autoFolder = 'troChoiKhoiDong';
+        autoTitle = `${troChoiKdItem.gameName} - Trò chơi khởi động (Khối ${selectedGrade}, Trang ${currentPage})`;
       } else if (luyenTapItem) {
         autoFolder = 'luyenTap';
         autoTitle = `${luyenTapItem.name} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
@@ -461,61 +549,54 @@ export const TabScan: React.FC<TabScanProps> = ({
         autoTitle = `${kyThuatItem.name} - SGK Lớp ${selectedGrade} (Trang ${currentPage})`;
       } else if (activeFolder.subFolders.khoiDong.suggestedPage === currentPage) {
         autoFolder = 'khoiDong';
-        autoTitle = `Khởi động - ${activeFolder.lessonName.split(':')[1]?.trim() || activeFolder.lessonName} (Trang ${currentPage})`;
+        autoTitle = `Khởi động - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
       } else if (activeFolder.subFolders.vanDung.suggestedPage === currentPage) {
         autoFolder = 'vanDung';
-        autoTitle = `Vận dụng - ${activeFolder.lessonName.split(':')[1]?.trim() || activeFolder.lessonName} (Trang ${currentPage})`;
+        autoTitle = `Vận dụng - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
       } else {
-        const lessonTitle = activeFolder.lessonName.split(':')[1]?.trim() || activeFolder.lessonName;
         const pageOffset = currentPage - activeFolder.startPage;
         if (pageOffset <= 1) {
           autoFolder = 'kyThuat';
-          autoTitle = `Kỹ thuật động tác mới - ${lessonTitle} (Trang ${currentPage})`;
+          autoTitle = `Kỹ thuật động tác - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
         } else if (pageOffset >= 2 && pageOffset < (activeFolder.endPage - activeFolder.startPage)) {
           autoFolder = 'luyenTap';
-          autoTitle = `Luyện tập - ${lessonTitle} (Trang ${currentPage})`;
+          autoTitle = `Luyện tập - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
         } else {
           autoFolder = 'vanDung';
-          autoTitle = `Vận dụng - ${lessonTitle} (Trang ${currentPage})`;
+          autoTitle = `Vận dụng - ${lessonTitle} (SGK Lớp ${selectedGrade}, Trang ${currentPage})`;
         }
       }
     }
 
-    // Keyword refinement from custom title or auto title
-    const lowerTitle = (autoTitle || '').toLowerCase();
-    if (
-      lowerTitle.includes('trò chơi vận động') ||
-      lowerTitle.includes('tiếp sức') ||
-      lowerTitle.includes('kéo co') ||
-      lowerTitle.includes('mèo đuổi chuột') ||
-      lowerTitle.includes('tam giác') ||
-      lowerTitle.includes('con thỏ') ||
-      lowerTitle.includes('lò cò')
-    ) {
-      autoFolder = 'troChoi';
-    } else if (
-      lowerTitle.includes('luyện tập') ||
-      lowerTitle.includes('tập luyện') ||
-      lowerTitle.includes('đồng loạt') ||
-      lowerTitle.includes('tổ nhóm') ||
-      lowerTitle.includes('cặp đôi')
-    ) {
-      autoFolder = 'luyenTap';
-    } else if (
-      lowerTitle.includes('động tác') ||
-      lowerTitle.includes('kỹ thuật') ||
-      lowerTitle.includes('vươn thở') ||
-      lowerTitle.includes('tay') ||
-      lowerTitle.includes('chân') ||
-      lowerTitle.includes('lườn') ||
-      lowerTitle.includes('bụng') ||
-      lowerTitle.includes('vặn mình') ||
-      lowerTitle.includes('toàn thân') ||
-      lowerTitle.includes('nhảy') ||
-      lowerTitle.includes('điều hòa') ||
-      lowerTitle.includes('đi đều')
-    ) {
-      autoFolder = 'kyThuat';
+    // Refined title override ONLY when the user explicitly typed a customTitle (never overwrite locked branch with naive movement keywords inside lessonName!)
+    if (customTitle) {
+      const lowerTitle = customTitle.toLowerCase();
+      if (lowerTitle.includes('trò chơi khởi động') || lowerTitle.includes('bổ trợ khởi động')) {
+        autoFolder = 'troChoiKhoiDong';
+      } else if (
+        lowerTitle.includes('trò chơi vận động') ||
+        lowerTitle.includes('tiếp sức') ||
+        lowerTitle.includes('kéo co') ||
+        lowerTitle.includes('mèo đuổi chuột') ||
+        lowerTitle.includes('đua ô tô') ||
+        lowerTitle.includes('nhanh lên bạn ơi')
+      ) {
+        autoFolder = 'troChoi';
+      } else if (lowerTitle.includes('khởi động') || lowerTitle.includes('xoay khớp')) {
+        autoFolder = 'khoiDong';
+      } else if (lowerTitle.includes('vận dụng') || lowerTitle.includes('hồi tĩnh')) {
+        autoFolder = 'vanDung';
+      } else if (
+        lowerTitle.includes('luyện tập') ||
+        lowerTitle.includes('tập luyện') ||
+        lowerTitle.includes('đồng loạt') ||
+        lowerTitle.includes('tổ nhóm') ||
+        lowerTitle.includes('cặp đôi')
+      ) {
+        autoFolder = 'luyenTap';
+      } else if (lowerTitle.includes('động tác') || lowerTitle.includes('kỹ thuật')) {
+        autoFolder = 'kyThuat';
+      }
     }
 
     if (!autoTitle) {
@@ -621,6 +702,7 @@ export const TabScan: React.FC<TabScanProps> = ({
         let cat: ImageCategory = 'dong_tac';
         if (pendingCropFolder === 'khoiDong') cat = 'khoi_dong';
         else if (pendingCropFolder === 'troChoiKhoiDong') cat = 'tro_choi_khoi_dong';
+        else if (pendingCropFolder === 'troChoi') cat = 'tro_choi';
         else if (pendingCropFolder === 'kyThuat') cat = 'dong_tac';
         else if (pendingCropFolder === 'luyenTap') cat = 'tap_luyen';
         else if (pendingCropFolder === 'vanDung') cat = 'van_dung';
@@ -695,26 +777,92 @@ export const TabScan: React.FC<TabScanProps> = ({
     }
   };
 
-  // Jump to specific Lesson in the Curriculum Tree
-  const handleSelectLessonFolder = (folder: SgkLessonFolder, subCat: 'khoiDong' | 'kyThuat' | 'luyenTap' | 'vanDung', specificPage?: number) => {
-    setSelectedFolderId(folder.id);
-    setSelectedSubCategory(subCat);
-    setSelectedGrade(folder.grade);
-
+  // Jump to specific Lesson + SubFolder in the Curriculum Tree
+  const handleSelectLessonFolder = (
+    folder: SgkLessonFolder,
+    subCat: SubFolderType,
+    specificPage?: number,
+    specificItemTitle?: string
+  ) => {
     let targetPage = specificPage;
     if (!targetPage) {
       if (subCat === 'kyThuat') targetPage = folder.subFolders.kyThuat.items[0]?.page || folder.startPage;
       else if (subCat === 'khoiDong') targetPage = folder.subFolders.khoiDong.suggestedPage;
+      else if (subCat === 'troChoiKhoiDong') targetPage = folder.subFolders.troChoiKhoiDong.suggestedPage || folder.startPage;
       else if (subCat === 'luyenTap') targetPage = folder.subFolders.luyenTap.items[0]?.page || folder.startPage;
+      else if (subCat === 'troChoi') targetPage = folder.subFolders.troChoi.suggestedPage || folder.endPage;
       else if (subCat === 'vanDung') targetPage = folder.subFolders.vanDung.suggestedPage;
       else targetPage = folder.startPage;
     }
-    handlePageChange(targetPage);
+
+    subFolderLockRef.current = { page: targetPage, folder: subCat, itemTitle: specificItemTitle };
+    setSelectedFolderId(folder.id);
+    setSelectedSubCategory(subCat);
+    setSelectedGrade(folder.grade);
+    handlePageChange(targetPage, true);
+  };
+
+  // Active Lesson Folder + live image counts per (lessonId, subFolder)
+  const activeLessonFolder = useMemo(() => {
+    return (
+      effectiveTree.find((f) => f.id === selectedFolderId) ||
+      effectiveTree.find((f) => f.grade === selectedGrade && currentPage >= f.startPage && currentPage <= f.endPage) ||
+      effectiveTree.find((f) => f.grade === selectedGrade) ||
+      null
+    );
+  }, [effectiveTree, selectedFolderId, selectedGrade, currentPage]);
+
+  useEffect(() => {
+    if (activeLessonFolder) {
+      setEditWarmupGame(activeLessonFolder.subFolders.troChoiKhoiDong.items[0]?.gameName || '');
+      setEditPracticeGame(activeLessonFolder.subFolders.troChoi.items[0]?.gameName || '');
+    }
+  }, [activeLessonFolder]);
+
+  const matchesSubFolderType = (img: SgkImageItem, sub: SubFolderType): boolean => {
+    if (img.folder === sub) return true;
+    if (!img.folder) {
+      if (sub === 'khoiDong') return img.category === 'khoi_dong';
+      if (sub === 'troChoiKhoiDong') return img.category === 'tro_choi_khoi_dong';
+      if (sub === 'kyThuat') return img.category === 'dong_tac';
+      if (sub === 'luyenTap') return img.category === 'tap_luyen';
+      if (sub === 'troChoi') return img.category === 'tro_choi';
+      if (sub === 'vanDung') return img.category === 'van_dung';
+    }
+    return false;
+  };
+
+  const getFolderSubCount = (lesson: SgkLessonFolder, sub?: SubFolderType): number => {
+    if (!images || images.length === 0) return 0;
+    return images.filter((img) => {
+      if (!doesImageBelongToSgkLesson(img, lesson)) return false;
+      if (!sub) return true;
+      return matchesSubFolderType(img, sub);
+    }).length;
+  };
+
+  const handleSaveLessonMeta = () => {
+    if (!activeLessonFolder) return;
+    saveSgkTreeLessonOverride(activeLessonFolder.id, {
+      warmupGameName: editWarmupGame.trim() || activeLessonFolder.subFolders.troChoiKhoiDong.items[0]?.gameName,
+      practiceGameName: editPracticeGame.trim() || activeLessonFolder.subFolders.troChoi.items[0]?.gameName,
+      vanDungQuestion: 'Câu hỏi vận dụng sách giáo khoa.',
+      vanDungAnswerGuide: ''
+    });
+    setTreeRevision((r) => r + 1);
+    setIsEditingLessonMeta(false);
+  };
+
+  const handleResetLessonMeta = () => {
+    if (!activeLessonFolder) return;
+    resetSgkTreeLessonOverride(activeLessonFolder.id);
+    setTreeRevision((r) => r + 1);
+    setIsEditingLessonMeta(false);
   };
 
   // Filter lessons for the Tree View
   const filteredTree = useMemo(() => {
-    return sgkCurriculumTree.filter((f) => {
+    return effectiveTree.filter((f) => {
       const matchGrade = f.grade === selectedGrade;
 
       let matchTopic = true;
@@ -730,14 +878,18 @@ export const TabScan: React.FC<TabScanProps> = ({
         matchTopic = f.topicId.includes('boi') || f.topicName.includes('BƠI');
       }
 
+      const q = searchQuery.toLowerCase();
       const matchQuery =
         !searchQuery ||
-        f.lessonName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.topicName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        f.movements.some((m) => m.toLowerCase().includes(searchQuery.toLowerCase()));
+        f.lessonName.toLowerCase().includes(q) ||
+        f.topicName.toLowerCase().includes(q) ||
+        f.movements.some((m) => m.toLowerCase().includes(q)) ||
+        f.subFolders.troChoiKhoiDong.items.some((g) => g.gameName.toLowerCase().includes(q)) ||
+        f.subFolders.troChoi.items.some((g) => g.gameName.toLowerCase().includes(q)) ||
+        f.subFolders.vanDung.question.toLowerCase().includes(q);
       return matchGrade && matchTopic && matchQuery;
     });
-  }, [selectedGrade, selectedTopicFilter, searchQuery]);
+  }, [effectiveTree, selectedGrade, selectedTopicFilter, searchQuery]);
 
   // One-time auto-loader of authentic textbook figures for all 3 grades
   const handleAutoLoadDefaultSgkFigures = async () => {
@@ -1125,15 +1277,15 @@ export const TabScan: React.FC<TabScanProps> = ({
 
       {/* Main Workspace: Left Tree Directory + Center Large Canvas + Right Recent Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* 1. Left Column: Hierarchical Curriculum Tree Navigation */}
-        <div className="lg:col-span-3 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col max-h-[750px]">
+        {/* 1. Left Column: Detailed 6-Branch Curriculum Tree Navigation */}
+        <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col max-h-[800px]">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
             <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
-              <FolderTree className="w-4 h-4 text-blue-600" />
-              <span>Cây Thư Mục SGK (Khối {selectedGrade})</span>
+              <FolderTree className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Cây Thư Mục SGK · Khối {selectedGrade}</span>
             </h3>
-            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
-              {filteredTree.length} bài
+            <span className="text-[11px] font-semibold text-slate-500 tabular-nums whitespace-nowrap shrink-0">
+              {filteredTree.length} bài · 6 phân mục/bài
             </span>
           </div>
 
@@ -1144,13 +1296,13 @@ export const TabScan: React.FC<TabScanProps> = ({
               { id: 'dhdn', label: 'ĐHĐN' },
               { id: 'the_duc', label: selectedGrade === 5 ? 'TD gậy' : 'Bài TD' },
               { id: 'knvd', label: 'KN Vận động' },
-              { id: 'bong_ro', label: '🏀 Bóng rổ' },
-              { id: 'boi', label: '🏊 Bơi lội' },
+              { id: 'bong_ro', label: 'Bóng rổ' },
+              { id: 'boi', label: 'Bơi lội' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedTopicFilter(tab.id as any)}
-                className={`px-2 py-0.5 rounded-lg text-[10.5px] font-semibold transition ${
+                className={`px-2 py-0.5 rounded-lg text-[11px] font-semibold transition whitespace-nowrap shrink-0 ${
                   selectedTopicFilter === tab.id
                     ? 'bg-blue-600 text-white shadow-2xs font-bold'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
@@ -1164,84 +1316,169 @@ export const TabScan: React.FC<TabScanProps> = ({
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 text-xs pr-1">
             {filteredTree.map((lesson) => {
               const isSelected = selectedFolderId === lesson.id;
+              const totalLessonImgs = getFolderSubCount(lesson);
+              const kdCount = getFolderSubCount(lesson, 'khoiDong');
+              const tckdCount = getFolderSubCount(lesson, 'troChoiKhoiDong');
+              const ktCount = getFolderSubCount(lesson, 'kyThuat');
+              const ltCount = getFolderSubCount(lesson, 'luyenTap');
+              const tcCount = getFolderSubCount(lesson, 'troChoi');
+              const vdCount = getFolderSubCount(lesson, 'vanDung');
+              const warmupGameTitle = lesson.subFolders.troChoiKhoiDong.items[0]?.gameName || 'Trò chơi khởi động';
+              const practiceGameTitle = lesson.subFolders.troChoi.items[0]?.gameName || 'Trò chơi vận động';
+
               return (
                 <div
                   key={lesson.id}
                   className={`border rounded-xl p-2.5 transition ${
-                    isSelected ? 'bg-blue-50/70 border-blue-300 ring-1 ring-blue-200' : 'bg-slate-50 border-slate-200'
+                    isSelected ? 'bg-blue-50/60 border-blue-300 ring-1 ring-blue-200' : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  {/* Topic Tag */}
-                  <p className="text-[10px] font-bold text-blue-800 uppercase tracking-wide">
-                    {lesson.topicName}
-                  </p>
+                  {/* Topic + Grade + Page Range */}
+                  <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                    <span className="text-blue-800 truncate">{lesson.topicName}</span>
+                    <span className="tabular-nums whitespace-nowrap shrink-0 text-slate-500">
+                      Tr.{lesson.startPage}-{lesson.endPage} · {totalLessonImgs} ảnh
+                    </span>
+                  </div>
 
                   {/* Lesson Title */}
                   <div
                     onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', lesson.subFolders.kyThuat.items[0]?.page || lesson.startPage)}
-                    className="font-bold text-slate-800 text-xs mt-1 cursor-pointer hover:text-blue-700 leading-snug flex items-start gap-1"
+                    className="font-bold text-slate-900 text-xs mt-1 cursor-pointer hover:text-blue-700 leading-snug flex items-start gap-1.5"
                   >
                     <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
                     <span>{lesson.lessonName}</span>
                   </div>
 
-                  {/* 4 Standard Sub-folders */}
-                  <div className="mt-2 pl-3 space-y-1 border-l-2 border-slate-200 text-[11px]">
-                    {/* 1. Khởi động */}
+                  {/* 6 Authentic SGK Sub-folders */}
+                  <div className="mt-2 pl-2.5 space-y-1 border-l border-slate-300 text-[11px]">
+                    {/* 1. Khởi động chung */}
                     <div
                       onClick={() => handleSelectLessonFolder(lesson, 'khoiDong', lesson.subFolders.khoiDong.suggestedPage)}
-                      className={`cursor-pointer py-0.5 px-1.5 rounded flex items-center justify-between ${
-                        isSelected && selectedSubCategory === 'khoiDong' ? 'bg-amber-100 text-amber-900 font-bold' : 'text-slate-600 hover:bg-slate-200/60'
+                      className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                        isSelected && selectedSubCategory === 'khoiDong'
+                          ? 'bg-sky-600 text-white font-semibold'
+                          : 'text-slate-700 hover:bg-slate-200/70'
                       }`}
                     >
-                      <span>📁 1. Ảnh Khởi động</span>
-                      <span className="text-[10px] text-slate-400">P.{lesson.subFolders.khoiDong.suggestedPage}</span>
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Flame className="w-3 h-3 shrink-0" />
+                        <span className="truncate">1. Khởi động chung</span>
+                      </span>
+                      <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                        P.{lesson.subFolders.khoiDong.suggestedPage} · {kdCount} ảnh
+                      </span>
                     </div>
 
-                    {/* 2. Kỹ thuật động tác */}
+                    {/* 2. Trò chơi khởi động + Tên trò chơi */}
+                    <div
+                      onClick={() => handleSelectLessonFolder(lesson, 'troChoiKhoiDong', lesson.subFolders.troChoiKhoiDong.suggestedPage, warmupGameTitle)}
+                      className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                        isSelected && selectedSubCategory === 'troChoiKhoiDong'
+                          ? 'bg-amber-600 text-white font-semibold'
+                          : 'text-amber-900 bg-amber-50/70 hover:bg-amber-100'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <Gamepad2 className="w-3 h-3 shrink-0" />
+                        <span className="truncate">2. TC Khởi động: <strong>{warmupGameTitle}</strong></span>
+                      </span>
+                      <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                        P.{lesson.subFolders.troChoiKhoiDong.suggestedPage} · {tckdCount} ảnh
+                      </span>
+                    </div>
+
+                    {/* 3. Kỹ thuật động tác */}
                     <div className="space-y-0.5">
                       <div
                         onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', lesson.subFolders.kyThuat.items[0]?.page || lesson.startPage)}
-                        className={`cursor-pointer py-0.5 px-1.5 rounded flex items-center justify-between ${
-                          isSelected && selectedSubCategory === 'kyThuat' ? 'bg-blue-600 text-white font-bold' : 'text-blue-700 font-semibold hover:bg-blue-100'
+                        className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                          isSelected && selectedSubCategory === 'kyThuat'
+                            ? 'bg-blue-600 text-white font-semibold'
+                            : 'text-blue-800 font-semibold hover:bg-blue-100/80'
                         }`}
                       >
-                        <span>📁 2. Ảnh Kỹ thuật Động tác</span>
-                        <span className="text-[10px] opacity-80">({lesson.subFolders.kyThuat.items.length})</span>
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Layers className="w-3 h-3 shrink-0" />
+                          <span className="truncate">3. Kỹ thuật động tác ({lesson.subFolders.kyThuat.items.length})</span>
+                        </span>
+                        <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                          {ktCount} ảnh
+                        </span>
                       </div>
                       {lesson.subFolders.kyThuat.items.map((it, idx) => (
                         <div
                           key={idx}
-                          onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', it.page)}
-                          className="pl-3.5 py-0.5 text-[10.5px] text-slate-600 hover:text-blue-600 cursor-pointer flex items-center justify-between"
+                          onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', it.page, it.name)}
+                          className="pl-4 py-0.5 text-[10.5px] text-slate-600 hover:text-blue-700 cursor-pointer flex items-center justify-between gap-1.5"
                         >
-                          <span className="truncate max-w-[140px]">• {it.name}</span>
-                          <span className="text-[10px] text-slate-400">P.{it.page}</span>
+                          <span className="truncate">• {it.name}</span>
+                          <span className="text-[10px] text-slate-400 tabular-nums whitespace-nowrap shrink-0">P.{it.page}</span>
                         </div>
                       ))}
                     </div>
 
-                    {/* 3. Luyện tập */}
+                    {/* 4. Luyện tập */}
                     <div className="space-y-0.5">
                       <div
                         onClick={() => handleSelectLessonFolder(lesson, 'luyenTap', lesson.subFolders.luyenTap.items[0]?.page || lesson.startPage + 1)}
-                        className={`cursor-pointer py-0.5 px-1.5 rounded flex items-center justify-between ${
-                          isSelected && selectedSubCategory === 'luyenTap' ? 'bg-indigo-100 text-indigo-900 font-bold' : 'text-slate-600 hover:bg-slate-200/60'
+                        className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                          isSelected && selectedSubCategory === 'luyenTap'
+                            ? 'bg-indigo-600 text-white font-semibold'
+                            : 'text-slate-700 hover:bg-slate-200/70'
                         }`}
                       >
-                        <span>📁 3. Ảnh Luyện tập (Cá nhân, Cặp đôi, Tổ)</span>
+                        <span className="flex items-center gap-1.5 truncate">
+                          <Users className="w-3 h-3 shrink-0" />
+                          <span className="truncate">4. Ảnh Luyện tập (Tổ/Cặp)</span>
+                        </span>
+                        <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                          P.{lesson.subFolders.luyenTap.items[0]?.page || lesson.startPage + 1} · {ltCount} ảnh
+                        </span>
                       </div>
                     </div>
 
-                    {/* 4. Vận dụng */}
+                    {/* 5. Trò chơi vận động + Tên trò chơi */}
                     <div
-                      onClick={() => handleSelectLessonFolder(lesson, 'vanDung', lesson.subFolders.vanDung.suggestedPage)}
-                      className={`cursor-pointer py-0.5 px-1.5 rounded flex items-center justify-between ${
-                        isSelected && selectedSubCategory === 'vanDung' ? 'bg-emerald-100 text-emerald-900 font-bold' : 'text-slate-600 hover:bg-slate-200/60'
+                      onClick={() => handleSelectLessonFolder(lesson, 'troChoi', lesson.subFolders.troChoi.suggestedPage, practiceGameTitle)}
+                      className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                        isSelected && selectedSubCategory === 'troChoi'
+                          ? 'bg-purple-600 text-white font-semibold'
+                          : 'text-purple-900 bg-purple-50/70 hover:bg-purple-100'
                       }`}
                     >
-                      <span>📁 4. Ảnh Vận dụng & Đời sống</span>
-                      <span className="text-[10px] text-slate-400">P.{lesson.subFolders.vanDung.suggestedPage}</span>
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <Target className="w-3 h-3 shrink-0" />
+                        <span className="truncate">5. TC Vận động: <strong>{practiceGameTitle}</strong></span>
+                      </span>
+                      <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                        P.{lesson.subFolders.troChoi.suggestedPage} · {tcCount} ảnh
+                      </span>
+                    </div>
+
+                    {/* 6. Hình ảnh & Câu hỏi Vận dụng */}
+                    <div
+                      onClick={() => handleSelectLessonFolder(lesson, 'vanDung', lesson.subFolders.vanDung.suggestedPage)}
+                      className={`cursor-pointer py-1 px-2 rounded-md transition space-y-0.5 ${
+                        isSelected && selectedSubCategory === 'vanDung'
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-emerald-950 bg-emerald-50/60 hover:bg-emerald-100/80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1.5 font-semibold">
+                        <span className="flex items-center gap-1.5 truncate">
+                          <HelpCircle className="w-3 h-3 shrink-0" />
+                          <span className="truncate">6. Vận dụng (Ảnh &amp; Câu hỏi SGK)</span>
+                        </span>
+                        <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
+                          P.{lesson.subFolders.vanDung.suggestedPage} · {vdCount} ảnh
+                        </span>
+                      </div>
+                      <p className={`text-[10px] pl-4 line-clamp-2 leading-tight ${
+                        isSelected && selectedSubCategory === 'vanDung' ? 'text-emerald-50' : 'text-slate-600'
+                      }`}>
+                        Câu hỏi vận dụng sách giáo khoa (Kèm ảnh SGK)
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1250,36 +1487,153 @@ export const TabScan: React.FC<TabScanProps> = ({
           </div>
         </div>
 
-        {/* 2. Center Column: Large Expanded Canvas Viewport */}
-        <div className="lg:col-span-6 bg-slate-900 rounded-2xl border border-slate-700 relative overflow-auto custom-scrollbar flex items-center justify-center p-4 min-h-[640px] max-h-[750px]">
-          {/* Instruction Tooltip Overlay */}
-          <div className="absolute top-4 left-4 z-20 bg-slate-800/90 backdrop-blur-xs text-white px-3 py-1.5 rounded-xl border border-slate-700 text-xs flex items-center gap-2 shadow-lg">
-            <span className={`w-2 h-2 rounded-full ${autoSaveOnCrop ? 'bg-amber-400' : 'bg-emerald-400'} animate-pulse`} />
-            <span>
-              {autoSaveOnCrop
-                ? '⚡ Chế độ tự lưu: Nhả chuột sẽ lưu ảnh ngay'
-                : '🛡️ Chế độ an toàn: Kéo chọn xong sẽ hiện hộp thoại xác nhận trước khi lưu'}
-            </span>
-          </div>
+        {/* 2. Center Column: Active SGK Target Bar + Expanded Canvas Viewport */}
+        <div className="lg:col-span-5 flex flex-col gap-3">
+          {/* Structured Lesson Metadata & Target Category Lock Bar */}
+          {activeLessonFolder && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2.5 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-slate-500 tabular-nums">
+                    Khối {selectedGrade} · Trang hiện hành {currentPage}/{totalPages} · Khoảng trang bài Tr.{activeLessonFolder.startPage}-{activeLessonFolder.endPage}
+                  </div>
+                  <div className="font-bold text-slate-900 truncate mt-0.5">
+                    {activeLessonFolder.lessonName}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingLessonMeta((v) => !v)}
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-[11px] flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{isEditingLessonMeta ? 'Đóng chỉnh sửa' : 'Chỉnh sửa mục bài'}</span>
+                </button>
+              </div>
 
-          {/* Loading Indicator */}
-          {isLoading && (
-            <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center z-30 text-white">
-              <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
-              <p className="mt-3 text-xs font-semibold text-slate-200">{loadingText}</p>
+              {/* Quick Subfolder Target Lock Selector (so crops ALWAYS go to exact intended slot) */}
+              <div className="space-y-1">
+                <div className="text-[11px] font-semibold text-slate-600">
+                  Mục tiêu phân loại khi cắt ảnh trang {currentPage}:
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  {(['khoiDong', 'troChoiKhoiDong', 'kyThuat', 'luyenTap', 'troChoi', 'vanDung'] as SubFolderType[]).map((sub) => (
+                    <button
+                      key={sub}
+                      type="button"
+                      onClick={() => {
+                        subFolderLockRef.current = { page: currentPage, folder: sub };
+                        setSelectedSubCategory(sub);
+                      }}
+                      className={`px-2 py-1 rounded-md text-[10.5px] font-semibold border text-left truncate transition ${
+                        selectedSubCategory === sub
+                          ? 'bg-slate-900 text-white border-slate-900'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {SUBFOLDER_LABELS[sub]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Explicit Readout or Inline Editor for Games & Application Question */}
+              {!isEditingLessonMeta ? (
+                <div className="grid grid-cols-1 gap-1.5 pt-1 text-[11px] text-slate-700 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold text-amber-800 whitespace-nowrap shrink-0">Trò chơi Khởi động:</span>
+                    <span className="font-medium text-right truncate">
+                      {activeLessonFolder.subFolders.troChoiKhoiDong.items[0]?.gameName} (P.{activeLessonFolder.subFolders.troChoiKhoiDong.suggestedPage})
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-semibold text-purple-800 whitespace-nowrap shrink-0">Trò chơi Vận động:</span>
+                    <span className="font-medium text-right truncate">
+                      {activeLessonFolder.subFolders.troChoi.items[0]?.gameName} (P.{activeLessonFolder.subFolders.troChoi.suggestedPage})
+                    </span>
+                  </div>
+                  <div className="pt-1 border-t border-slate-200/80">
+                    <span className="font-semibold text-emerald-800">Mục 4.2 Vận dụng: </span>
+                    <span className="text-slate-700">Câu hỏi vận dụng sách giáo khoa (Đính kèm hình ảnh trang {activeLessonFolder.subFolders.vanDung.suggestedPage} SGK)</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2 pt-1 bg-slate-50 rounded-xl p-2.5 border border-blue-200 text-[11px]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">Tên Trò chơi Khởi động</label>
+                      <input
+                        type="text"
+                        value={editWarmupGame}
+                        onChange={(e) => setEditWarmupGame(e.target.value)}
+                        className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">Tên Trò chơi Vận động</label>
+                      <input
+                        type="text"
+                        value={editPracticeGame}
+                        onChange={(e) => setEditPracticeGame(e.target.value)}
+                        className="w-full px-2 py-1 bg-white border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-2 text-[11px] text-emerald-900">
+                    Mục 4.2 trong giáo án các khối được chuẩn hóa ghi <strong>"Câu hỏi vận dụng sách giáo khoa."</strong> kèm hình ảnh cắt từ trang SGK (bỏ gợi ý trả lời giải phẫu và dặn dò về nhà).
+                  </div>
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleResetLessonMeta}
+                      className="px-2.5 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Khôi phục gốc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveLessonMeta}
+                      className="px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-1"
+                    >
+                      <Save className="w-3 h-3" /> Lưu mục SGK
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Canvas Stacking Wrapper */}
-          <div className="relative shadow-2xl rounded-lg bg-white overflow-hidden my-auto">
-            <canvas ref={pdfCanvasRef} className="block" />
-            <canvas
-              ref={drawCanvasRef}
-              className="absolute top-0 left-0 cursor-crosshair"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-            />
+          {/* PDF Canvas Viewport */}
+          <div className="bg-slate-900 rounded-2xl border border-slate-700 relative overflow-auto custom-scrollbar flex items-center justify-center p-4 min-h-[540px] max-h-[650px]">
+            {/* Instruction Tooltip Overlay */}
+            <div className="absolute top-3 left-3 z-20 bg-slate-800/95 text-white px-3 py-1.5 rounded-lg border border-slate-700 text-[11px] flex items-center gap-2 shadow-md">
+              <Scissors className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span>
+                {autoSaveOnCrop
+                  ? `Tự lưu ngay vào: Khối ${selectedGrade} · ${SUBFOLDER_LABELS[selectedSubCategory]}`
+                  : `Kéo chọn hình để lưu vào: Khối ${selectedGrade} · ${SUBFOLDER_LABELS[selectedSubCategory]}`}
+              </span>
+            </div>
+
+            {/* Loading Indicator */}
+            {isLoading && (
+              <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex flex-col items-center justify-center z-30 text-white">
+                <div className="w-10 h-10 border-4 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <p className="mt-3 text-xs font-semibold text-slate-200">{loadingText}</p>
+              </div>
+            )}
+
+            {/* Canvas Stacking Wrapper */}
+            <div className="relative shadow-2xl rounded-lg bg-white overflow-hidden my-auto">
+              <canvas ref={pdfCanvasRef} className="block" />
+              <canvas
+                ref={drawCanvasRef}
+                className="absolute top-0 left-0 cursor-crosshair"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+              />
+            </div>
           </div>
         </div>
 
@@ -1309,26 +1663,44 @@ export const TabScan: React.FC<TabScanProps> = ({
                 </p>
               </div>
             ) : (
-              recentExtracted.map((img) => (
+              recentExtracted.map((img) => {
+                const prov = resolveImageUsageProvenance(img);
+                return (
                 <div
                   key={img.id}
                   className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 space-y-2 hover:border-blue-300 transition"
                 >
                   <div className="flex items-center gap-3">
-                    <img
-                      src={img.imgUrl}
-                      alt={img.title}
-                      className="w-16 h-16 object-contain rounded-lg border bg-white shadow-2xs shrink-0"
-                    />
+                    <div className="relative group/imgtip shrink-0">
+                      <img
+                        src={img.imgUrl}
+                        alt={img.title}
+                        className="w-16 h-16 object-contain rounded-lg border bg-white shadow-2xs"
+                      />
+                      <ImageProvenanceTooltip image={img} position="bottom" />
+                    </div>
                     <div className="flex-1 min-w-0 text-xs">
                       <p className="font-bold text-slate-800 truncate">{img.title}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-1">{img.caption}</p>
-                      <div className="mt-1 flex items-center gap-1 text-[10px]">
-                        <span className="text-blue-700 bg-blue-50 font-bold px-1.5 py-0.5 rounded">
+                      <div className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                        <span className="text-blue-700 bg-blue-50 font-bold px-1.5 py-0.5 rounded tabular-nums">
                           Khối {img.grade} · Trang {img.page}
                         </span>
                         <span className="text-emerald-700 bg-emerald-50 font-bold px-1.5 py-0.5 rounded">
-                          {img.category === 'dong_tac' ? 'Động tác' : 'Tập luyện'}
+                          {img.category === 'dong_tac'
+                            ? 'Động tác'
+                            : img.category === 'tap_luyen'
+                            ? 'Luyện tập'
+                            : img.category === 'khoi_dong'
+                            ? 'Khởi động'
+                            : img.category === 'tro_choi_khoi_dong'
+                            ? 'TC Khởi động'
+                            : img.category === 'tro_choi'
+                            ? 'TC Vận động'
+                            : 'Vận dụng'}
+                        </span>
+                        <span className="text-sky-700 bg-sky-50 font-semibold px-1.5 py-0.5 rounded tabular-nums">
+                          {prov.weekLabel} · Mục {prov.slotCode}
                         </span>
                       </div>
                     </div>
@@ -1368,7 +1740,8 @@ export const TabScan: React.FC<TabScanProps> = ({
                     )}
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

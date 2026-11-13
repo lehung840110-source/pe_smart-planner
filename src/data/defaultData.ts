@@ -215,10 +215,10 @@ export const initialLessonsData: Record<string, ExtractedLessonData> = {
         ]
       },
       {
-        content: "4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng cơ toàn thân, rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi.\n4.2. Vận dụng:\n- Nêu câu hỏi vận dụng bài tập vào thực tế: \"Em nên tập bài thể dục này vào thời điểm nào trong ngày để nâng cao sức khỏe?\"\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, thu dọn dụng cụ đúng nơi quy định.\n4.3. Nhận xét & Dặn dò về nhà:\n- Đánh giá thái độ học tập; giao nhiệm vụ tự tập ở nhà.",
+        content: "4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng toàn thân, rũ tay, rung đùi, lắc chân và hít thở sâu theo nhịp chậm rãi.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp bảo vệ môi trường: Kiểm tra vệ sinh sân tập, nhặt vật sắc nhọn/nguy hiểm, thu dọn dụng cụ đúng nơi quy định an toàn.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "3 - 5 phút\n1 - 2 lần",
-        gv: "- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ tay, rung thả lỏng cơ đùi, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n- Đặt câu hỏi tương tác thực tế giúp học sinh khắc sâu kiến thức; liên hệ thói quen tập thể dục buổi sáng cùng gia đình để tăng cường sức đề kháng.\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét ưu điểm, tinh thần tích cực của tiết học; dặn dò các em tự giác ôn tập ở nhà và chuẩn bị trang phục cho tiết tiếp theo; phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n- Tích cực xung phong trả lời câu hỏi vận dụng kiến thức vào thực tế cuộc sống.\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe dặn dò của thầy cô, chào giáo viên và xếp hàng trật tự đi về lớp học.",
+        gv: "- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ tay, rung thả lỏng đùi và chân, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Giáo dục ý thức bảo vệ môi trường: nhắc nhở các em quan sát xung quanh sân tập, cùng nhau nhặt rác, cất gậy và cọc tiêu vào phòng dụng cụ gọn gàng, an toàn.\n- Nhận xét chung tinh thần, thái độ học tập của cả lớp và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n- Học sinh quan sát hình ảnh và lắng nghe câu hỏi vận dụng sách giáo khoa của giáo viên; tích cực xung phong trả lời câu hỏi.\n- Tự giác cùng các bạn dọn dẹp vệ sinh sân bãi, xếp dụng cụ thể dục đúng nơi quy định sạch sẽ.\n- Lắng nghe nhận xét chung của giáo viên, chào thầy/cô và xếp hàng trật tự đi về lớp học.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và thả lỏng toàn thân',
         hsImages: [
@@ -264,10 +264,10 @@ export const initialLessonsData: Record<string, ExtractedLessonData> = {
         hs: "- Chia 4 hàng dọc thi đấu tiếp sức hào hứng, an toàn."
       },
       {
-        content: "4. Hoạt động vận dụng",
+        content: "4. Hoạt động vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.",
         lvd: "3 - 5'",
-        gv: "- Hướng dẫn thả lỏng, dặn dò tập luyện mỗi ngày để tăng sức đề kháng.",
-        hs: "- Thả lỏng toàn thân, giải tán: Khỏe!"
+        gv: "- Hướng dẫn thả lỏng, nêu câu hỏi vận dụng sách giáo khoa, nhận xét tiết học và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng toàn thân, trả lời câu hỏi vận dụng sách giáo khoa, giải tán: Khỏe!"
       }
     ]
   },
@@ -304,10 +304,10 @@ export const initialLessonsData: Record<string, ExtractedLessonData> = {
         hs: "- Tích cực tham gia, rèn luyện khéo léo và tốc độ."
       },
       {
-        content: "4. Vận dụng: Hồi tĩnh & Đánh giá",
+        content: "4. Vận dụng: Hồi tĩnh & Đánh giá\n- Câu hỏi vận dụng sách giáo khoa.",
         lvd: "4'",
-        gv: "- Điều hành thả lỏng, khen ngợi tổ có ý thức tổ chức kỷ luật tốt.",
-        hs: "- Thả lỏng, nghe dặn dò chuẩn bị cho tiết sau."
+        gv: "- Điều hành thả lỏng, nêu câu hỏi vận dụng sách giáo khoa, khen ngợi tổ có ý thức tổ chức kỷ luật tốt.",
+        hs: "- Thả lỏng, trả lời câu hỏi vận dụng sách giáo khoa và xếp hàng về lớp."
       }
     ]
   },
@@ -436,23 +436,23 @@ export const defaultScenarios: ScenarioItem[] = [
   },
   {
     id: 'sc_4_2_van_dung_bvmt',
-    title: '4.2. Vận dụng: Vận dụng thực tế & Tích hợp Bảo vệ môi trường',
+    title: '4.2. Vận dụng: Câu hỏi vận dụng sách giáo khoa & Tích hợp Bảo vệ môi trường',
     category: 'Vận dụng',
     grade: 'Chung',
-    content: '4.2. Vận dụng:\n- Tích hợp bảo vệ môi trường: GV nhắc HS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.',
+    content: '4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp bảo vệ môi trường: GV nhắc HS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.',
     lvd: '2 - 3 phút',
-    gv: '- GV nêu câu hỏi vận dụng kiến thức vào thực tế cuộc sống\nTích hợp bảo vệ môi trường: GV nhắc HS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.',
-    hs: '- Học sinh thực hiện theo yêu cầu của giáo viên\n- HS trả lời câu hỏi vận dụng vào thực tế đời sống.\nHS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.'
+    gv: '- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có)\nTích hợp bảo vệ môi trường: GV nhắc HS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.',
+    hs: '- Học sinh quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\nHS kiểm tra vệ sinh sân tập, nhặt vật gây nguy hiểm; sử dụng và thu dọn dụng cụ đúng nơi quy định.'
   },
   {
     id: 'sc_4_3_nhan_xet_ve_nha',
-    title: '1.3. Nhận xét và hướng dẫn tự tập luyện ở nhà & Xuống lớp',
+    title: '4.3. Nhận xét & Xuống lớp',
     category: 'Vận dụng',
     grade: 'Chung',
-    content: '1.3. Nhận xét và hướng dẫn tự tập luyện ở nhà:\n- Trao đổi ngắn về các hoạt động của bài học\n+ Về độ khó của động tác, về cảm xúc, khả năng ghi nhớ, tương tác, phối hợp trong giờ học\n- Hướng dẫn tập luyện ở nhà\n- Xuống lớp',
+    content: '4.3. Nhận xét & Xuống lớp:\n- Trao đổi ngắn về tinh thần, thái độ học tập trong tiết học\n- Xuống lớp',
     lvd: '2 - 3 phút',
-    gv: '- GV hỏi HS về giờ học này các bạn cảm thấy thế nào?\n- GV nắm bắt và tiến hành điều chỉnh kịp thời những giờ học tiếp theo.\n- Nhận xét tinh thần, ý thức, thái độ học của HS, đồng thời đưa ra hướng khắc phục hoặc trả lời câu hỏi của HS.\n- HD học sinh tập ở nhà.',
-    hs: '- HS trả lời cảm nhận về giờ học.\n- HS hiểu được nắm được về nội dung của bài học, cần chuẩn bị tinh thần , ý thức sức khoẻ, hợp lý để đảm bảo yêu cầu của từng hoạt động\n- Xuống lớp: HS đi theo hàng về lớp'
+    gv: '- GV hỏi HS cảm nhận về giờ học, nhận xét tinh thần, ý thức, thái độ học của HS và phát lệnh xuống lớp.',
+    hs: '- HS trả lời cảm nhận về giờ học.\n- Xuống lớp: HS đi theo hàng về lớp.'
   }
 ];
 
@@ -554,23 +554,6 @@ export const defaultSgkImages: SgkImageItem[] = [
     selected: false,
     createdAt: Date.now() - 3700000
   },
-  {
-    id: 'img_sgk_k1_tro_choi',
-    title: 'Trò chơi: Con thỏ / Làm theo hiệu lệnh - Khối 1',
-    grade: '1',
-    topicId: 'k1_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    lessonId: 'b1',
-    lessonTitle: 'Bài 1: Động tác Vươn thở và Động tác Tay',
-    folder: 'troChoi',
-    page: 39,
-    category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
-    caption: 'Đội hình tham gia trò chơi vận động Con thỏ / Làm theo hiệu lệnh an toàn, sinh động cho học sinh lớp 1.',
-    selected: false,
-    createdAt: Date.now() - 3300000
-  },
-
   // ===== KHỐI 3 - BẢN GỐC TỪ SGK KẾT NỐI TRI THỨC =====
   {
     id: 'img_sgk_k3_di_deu',
@@ -599,14 +582,14 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'kyThuat',
     page: 28,
     category: 'dong_tac',
-    imgUrl: '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg',
+    imgUrl: '/assets/sgk_chuan/k3_di_deu_dung_lai.jpg',
     caption: 'Kỹ thuật đổi chân khi đi đều sai nhịp: Đệm một bước ngắn của chân sai nhịp để lấy lại nhịp chân trái nhịp 1, chân phải nhịp 2.',
     selected: false,
     createdAt: Date.now() - 2450000
   },
   {
     id: 'img_sgk_k3_chay_tam_giac',
-    title: 'Trò chơi: Chạy theo hình tam giác - SGK Lớp 3 (Trang 29)',
+    title: 'Sơ đồ Trò chơi: Chạy theo hình tam giác - SGK Lớp 3 (Trang 29)',
     grade: '3',
     topicId: 'k3_cd1',
     topicTitle: 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ',
@@ -615,8 +598,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 29,
     category: 'tro_choi',
-    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_tam_giac')?.svgDataUrl || '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
-    caption: 'Trò chơi vận động Chạy theo hình tam giác: 3 cọc mốc A-B-C cự ly 8-10m, học sinh chạy tiếp sức vòng quanh tam giác theo chiều kim đồng hồ.',
+    imgUrl: standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_tam_giac')?.svgDataUrl || standardFormationDiagrams[7].svgDataUrl,
+    caption: 'Sơ đồ Trò chơi vận động Chạy theo hình tam giác: 3 cọc mốc A-B-C cự ly 8-10m, học sinh chạy tiếp sức vòng quanh tam giác.',
     selected: false,
     createdAt: Date.now() - 2400000
   },
@@ -718,41 +701,10 @@ export const defaultSgkImages: SgkImageItem[] = [
     selected: false,
     createdAt: Date.now() - 1410000
   },
-  {
-    id: 'img_sgk_k5_chuyen_gay',
-    title: 'Trò chơi: Chuyền gậy tiếp sức - SGK Lớp 5 (Trang 26)',
-    grade: '5',
-    topicId: 'k5_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    lessonId: 'b1',
-    lessonTitle: 'Bài 1: Động tác Vươn thở, Tay, Chân với gậy',
-    folder: 'troChoi',
-    page: 26,
-    category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
-    caption: 'Trò chơi vận động Chuyền gậy tiếp sức: 4 làn chạy tiếp sức cự ly 10m, kỹ thuật cầm chuyền gậy chắc chắn và an toàn.',
-    selected: false,
-    createdAt: Date.now() - 1400000
-  },
+  // (Ảnh k5_chuyen_gay_tiep_suc.jpg thực chất là ảnh Luyện tập nhóm với gậy -> chuyển đúng về mục Luyện tập bên dưới)
 
   // ===== BỔ SUNG TRÒ CHƠI KHỞI ĐỘNG, VẬN ĐỘNG & HÌNH ẢNH LUYỆN TẬP PHÂN LOẠI CHUẨN SGK =====
   // 1. Trò chơi khởi động
-  {
-    id: 'img_sgk_k1_tc_kd_hieu_lenh',
-    title: 'Trò chơi khởi động: Làm theo hiệu lệnh / Đứng ngồi theo hiệu lệnh - Khối 1',
-    grade: '1',
-    topicId: 'k1_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    lessonId: 'b1',
-    lessonTitle: 'Bài 1: Động tác Vươn thở và Động tác Tay',
-    folder: 'troChoiKhoiDong',
-    page: 38,
-    category: 'tro_choi_khoi_dong',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
-    caption: 'Học sinh phản xạ nhanh theo khẩu lệnh của giáo viên: đứng nghiêm, ngồi xổm, vươn tay tạo không khí vui tươi.',
-    selected: false,
-    createdAt: Date.now() - 1300000
-  },
   {
     id: 'img_sgk_k1_tc_kd_ket_ban',
     title: 'Trò chơi khởi động: Kết bạn - Khối 1',
@@ -764,43 +716,12 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoiKhoiDong',
     page: 42,
     category: 'tro_choi_khoi_dong',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
+    imgUrl: '/assets/sgk_chuan/k1_tro_choi_ket_ban.jpg',
     caption: 'Học sinh vừa chạy nhẹ nhàng vừa lắng nghe số lượng kết nhóm để nhanh chóng bắt tay bạn.',
     selected: false,
     createdAt: Date.now() - 1280000
   },
-  {
-    id: 'img_sgk_k3_tc_kd_chui_ham',
-    title: 'Trò chơi khởi động: Chui qua hầm / Đổi chỗ theo hiệu lệnh - Khối 3',
-    grade: '3',
-    topicId: 'k3_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    lessonId: 'b1',
-    lessonTitle: 'Bài 1: Động tác Vươn thở, Tay, Chân',
-    folder: 'troChoiKhoiDong',
-    page: 34,
-    category: 'tro_choi_khoi_dong',
-    imgUrl: '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
-    caption: 'Trò chơi khởi động Chui qua hầm giúp làm nóng toàn thân, khởi động các khớp linh hoạt và tạo hứng khởi.',
-    selected: false,
-    createdAt: Date.now() - 1250000
-  },
-  {
-    id: 'img_sgk_k3_tc_kd_meo_duoi_chuot',
-    title: 'Trò chơi khởi động: Mèo đuổi chuột / Chim về tổ - Khối 3',
-    grade: '3',
-    topicId: 'k3_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    lessonId: 'b2',
-    lessonTitle: 'Bài 2: Động tác Lườn, Bụng, Phối hợp',
-    folder: 'troChoiKhoiDong',
-    page: 36,
-    category: 'tro_choi_khoi_dong',
-    imgUrl: '/assets/sgk_chuan/k3_tro_choi_tam_giac.jpg',
-    caption: 'Trò chơi khởi động vòng tròn rèn luyện độ nhanh nhẹn, tinh thần đồng đội và phản xạ linh hoạt.',
-    selected: false,
-    createdAt: Date.now() - 1240000
-  },
+  // (Khối 3 Trò chơi khởi động: "Chui qua hầm / Đổi chỗ theo hiệu lệnh / Mèo đuổi chuột" cần giáo viên trích xuất trực tiếp từ SGK GDTC Lớp 3 — không gán nhầm ảnh "Chạy theo hình tam giác")
   {
     id: 'img_sgk_k5_tc_kd_gay',
     title: 'Trò chơi khởi động: Đội nào nhanh nhất - Khối 5 (SGK Trang 29)',
@@ -819,7 +740,7 @@ export const defaultSgkImages: SgkImageItem[] = [
   },
   {
     id: 'img_sgk_k5_tc_kd_ai_keo_khoe',
-    title: 'Trò chơi khởi động: Ai kéo khoẻ hơn / Chạy luồn cọc tiêu - Khối 5',
+    title: 'Trò chơi khởi động: Ai kéo khoẻ hơn - Khối 5 (SGK Trang 27)',
     grade: '5',
     topicId: 'k5_cd2',
     topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
@@ -828,29 +749,13 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoiKhoiDong',
     page: 27,
     category: 'tro_choi_khoi_dong',
-    imgUrl: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
-    caption: 'Học sinh cầm hai đầu gậy thể dục kéo co cân bằng thể lực tay vai an toàn.',
+    imgUrl: '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg',
+    caption: 'Trò chơi Ai kéo khoẻ hơn giúp phát triển sức mạnh tay vai và phản xạ khởi động.',
     selected: false,
     createdAt: Date.now() - 1190000
   },
 
   // 2. Trò chơi vận động
-  {
-    id: 'img_sgk_k1_tc_vd_tho',
-    title: 'Trò chơi vận động: Thỏ nhường hang - Khối 1',
-    grade: '1',
-    topicId: 'k1_cd2',
-    topicTitle: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    lessonId: 'b1',
-    lessonTitle: 'Bài 1: Động tác Vươn thở và Động tác Tay',
-    folder: 'troChoi',
-    page: 40,
-    category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
-    caption: 'Trò chơi vận động Thỏ nhường hang giúp phát triển tố chất nhanh nhẹn, khéo léo và phản xạ chạy chỗ an toàn.',
-    selected: false,
-    createdAt: Date.now() - 1180000
-  },
   {
     id: 'img_sgk_k1_tc_vd_lo_co',
     title: 'Trò chơi vận động: Lò cò tiếp sức / Chạy tiếp sức - Khối 1',
@@ -862,7 +767,7 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'troChoi',
     page: 46,
     category: 'tro_choi',
-    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
+    imgUrl: '/assets/sgk_chuan/k1_tro_choi_lo_co_tiep_suc.jpg',
     caption: '4 hàng dọc thi đua nhảy lò cò cự ly 8-10m vòng qua cọc mốc quay về chạm tay bạn tiếp theo.',
     selected: false,
     createdAt: Date.now() - 1170000
@@ -916,10 +821,10 @@ export const defaultSgkImages: SgkImageItem[] = [
     createdAt: Date.now() - 1140000
   },
 
-  // 3. Hình ảnh / Sơ đồ luyện tập của bài học (Được gán vào Cột 4 - Hoạt động HS & Sơ đồ)
+  // 3. Hình ảnh luyện tập thực tế SGK (ảnh k1_tro_choi_tho.jpg là Luyện tập cặp đôi; ảnh k5_chuyen_gay_tiep_suc.jpg là Luyện tập nhóm với gậy)
   {
     id: 'img_sgk_k1_luyen_tap',
-    title: 'Hình ảnh luyện tập: Tập đồng loạt 4 hàng ngang giãn cách - Khối 1',
+    title: 'Hình ảnh luyện tập cặp đôi - SGK Lớp 1',
     grade: '1',
     topicId: 'k1_cd2',
     topicTitle: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
@@ -928,14 +833,14 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'luyenTap',
     page: 37,
     category: 'tap_luyen',
-    imgUrl: standardFormationDiagrams[3].svgDataUrl,
-    caption: 'Sơ đồ đội hình luyện tập đồng loạt: Toàn lớp đứng 4 hàng ngang so le cự ly 1 sải tay.',
+    imgUrl: '/assets/sgk_chuan/k1_tro_choi_tho.jpg',
+    caption: 'Hình ảnh SGK: Hai học sinh tập luyện cặp đôi, quan sát và sửa sai biên độ tay cho nhau.',
     selected: false,
     createdAt: Date.now() - 1130000
   },
   {
     id: 'img_sgk_k3_luyen_tap',
-    title: 'Hình ảnh luyện tập: Luyện tập theo tổ nhóm 4 góc sân - Khối 3',
+    title: 'Sơ đồ luyện tập: Luyện tập theo tổ nhóm 4 góc sân - Khối 3',
     grade: '3',
     topicId: 'k3_cd2',
     topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
@@ -951,7 +856,7 @@ export const defaultSgkImages: SgkImageItem[] = [
   },
   {
     id: 'img_sgk_k5_luyen_tap',
-    title: 'Hình ảnh luyện tập: Luyện tập cặp đôi sửa sai với gậy - Khối 5',
+    title: 'Hình ảnh luyện tập nhóm với gậy - SGK Lớp 5',
     grade: '5',
     topicId: 'k5_cd2',
     topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
@@ -960,8 +865,8 @@ export const defaultSgkImages: SgkImageItem[] = [
     folder: 'luyenTap',
     page: 25,
     category: 'tap_luyen',
-    imgUrl: standardFormationDiagrams[5].svgDataUrl,
-    caption: 'Sơ đồ từng cặp hai bạn đứng đối diện nhau quan sát và góp ý tư thế nâng gậy song song và khuỵu gối lưng thẳng.',
+    imgUrl: '/assets/sgk_chuan/k5_chuyen_gay_tiep_suc.jpg',
+    caption: 'Hình ảnh SGK: Học sinh luyện tập nhóm các động tác thể dục với gậy đều đẹp.',
     selected: false,
     createdAt: Date.now() - 1110000
   }

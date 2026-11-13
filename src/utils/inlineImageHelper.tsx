@@ -31,7 +31,17 @@ function getStoredRegistry(): Record<string, string> {
  */
 function saveStoredRegistry(store: Record<string, string>) {
   try {
-    localStorage.setItem(INLINE_STORE_KEY, JSON.stringify(store));
+    // Keep only compact entries (<= 40KB each, max 250KB total) in localStorage;
+    // large base64 images remain in RAM and inside IndexedDB-persisted lesson plans.
+    const compact: Record<string, string> = {};
+    let approx = 2;
+    for (const [k, v] of Object.entries(store)) {
+      if (!v || v.length > 40_000) continue;
+      if (approx + k.length + v.length + 6 > 250_000) break;
+      compact[k] = v;
+      approx += k.length + v.length + 6;
+    }
+    localStorage.setItem(INLINE_STORE_KEY, JSON.stringify(compact));
   } catch {
     // Ignore storage quota limits
   }
@@ -332,6 +342,8 @@ export const RichTextWithImages: React.FC<RichTextWithImagesProps> = ({
             </div>
           );
         }
+
+        if (!seg.url || !seg.url.trim()) return null;
 
         return (
           <div

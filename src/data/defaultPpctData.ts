@@ -247,16 +247,23 @@ export function getStoredPpctData(): PpctItem[] {
         return sanitized;
       }
     }
-  } catch (e) {
-    console.error('Failed to load PPCT from localStorage:', e);
+  } catch {
+    // ignore corrupt PPCT storage
   }
   return defaultAllPpctData;
 }
 
 export function saveStoredPpctData(items: PpctItem[]): void {
+  const payload = JSON.stringify(items);
   try {
-    localStorage.setItem(STORAGE_KEY_PPCT, JSON.stringify(items));
-  } catch (e) {
-    console.error('Failed to save PPCT to localStorage:', e);
+    localStorage.setItem(STORAGE_KEY_PPCT, payload);
+  } catch {
+    try {
+      localStorage.removeItem('gdtc_user_custom_images');
+      localStorage.removeItem('gdtc_inline_images_registry');
+      localStorage.setItem(STORAGE_KEY_PPCT, payload);
+    } catch {
+      // ignore storage quota limits
+    }
   }
 }

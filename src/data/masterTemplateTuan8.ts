@@ -149,10 +149,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ Đội hình vòng tròn trò chơi vận động'
       },
       {
-        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo nhịp nhạc.\n4.2. Vận dụng: Tích hợp năng lực số (3.1TC1a) và rèn luyện thể dục buổi sáng.\n4.3. Nhận xét & Dặn dò về nhà.\n4.4. Xuống lớp.",
+        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo nhịp nhạc.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp năng lực số (3.1TC1a) và vệ sinh sân tập.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Điều hành lớp thả lỏng cơ bắp, điều hòa nhịp tim.\n- Nêu câu hỏi vận dụng: \"Em vận dụng động tác vươn thở vào thời điểm nào trong ngày?\"\n- Hướng dẫn HS sắp xếp hình ảnh động tác theo đúng thứ tự nhịp.\n- Đánh giá tiết học, tuyên dương, dặn dò tập ở nhà.",
-        hs: "- Đội hình hồi tĩnh hàng ngang thả lỏng tay chân, hít thở sâu.\n- Trả lời: Tập thể dục buổi sáng tại nhà để tăng cường sức khỏe.\n- Ghi nhớ nhiệm vụ, trật tự giải tán về lớp theo hàng dọc.",
+        gv: "- Điều hành lớp thả lỏng toàn thân, điều hòa nhịp tim.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Hướng dẫn HS sắp xếp hình ảnh động tác theo đúng thứ tự nhịp.\n- Đánh giá, nhận xét tinh thần học tập của lớp và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh hàng ngang thả lỏng tay chân, hít thở sâu.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Lắng nghe nhận xét, trật tự giải tán về lớp theo hàng dọc.",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh thả lỏng toàn thân'
       }
@@ -238,10 +238,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ Đội hình trò chơi vận động'
       },
       {
-        content: "4. Vận dụng & Hồi tĩnh:\n- Thả lỏng toàn thân, dặn dò tự tập luyện ở nhà.\n- Xuống lớp.",
+        content: "4. Vận dụng & Hồi tĩnh:\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Hướng dẫn thả lỏng các khớp tay, khớp gối.\n- Dặn dò HS tập liên hoàn 2 động tác mỗi sáng sớm.",
-        hs: "- Thả lỏng toàn thân theo nhịp điều hòa.\n- Giải tán hô to: \"KHỎE!\"",
+        gv: "- Hướng dẫn thả lỏng các khớp tay, khớp gối.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), nhận xét tinh thần tiết học và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng toàn thân theo nhịp điều hòa.\n- Trả lời câu hỏi vận dụng sách giáo khoa, chào cô/thầy và giải tán hô to: \"KHỎE!\"",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh'
       }
@@ -328,10 +328,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ Đội hình trò chơi vận động'
       },
       {
-        content: "4. Vận dụng & Hồi tĩnh:\n- Thả lỏng toàn thân.\n- Tích hợp ATGT: Rèn thói quen đi bộ ngay ngắn, tuân thủ luật đường bộ.\n- Nhận xét và dặn dò.",
+        content: "4. Vận dụng & Hồi tĩnh:\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp ATGT: Rèn thói quen đi bộ ngay ngắn, tuân thủ luật đường bộ.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Hướng dẫn thả lỏng sâu, liên hệ thực tế an toàn khi tham gia giao thông.\n- Khen ngợi tổ đi đều chuẩn xác nhất.",
-        hs: "- Thả lỏng tay chân, tiếp thu lời dặn và giải tán về lớp.",
+        gv: "- Hướng dẫn thả lỏng sâu, nêu câu hỏi vận dụng sách giáo khoa và liên hệ an toàn khi tham gia giao thông.\n- Khen ngợi tổ đi đều chuẩn xác nhất và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng tay chân, trả lời câu hỏi vận dụng sách giáo khoa và giải tán về lớp.",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh'
       }
@@ -417,10 +417,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: standardFormationDiagrams[8].name
       },
       {
-        content: "4. Vận dụng & Hồi tĩnh:\n- Thả lỏng khớp vai, cổ tay và chân.\n- Xếp gậy gọn gàng vào giá dụng cụ thể thao.\n- Dặn dò và xuống lớp.",
+        content: "4. Vận dụng & Hồi tĩnh:\n4.1. Hồi tĩnh: Thả lỏng khớp vai, cổ tay và chân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Xếp gậy gọn gàng vào giá dụng cụ thể thao.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Điều hành lớp thả lỏng toàn thân.\n- Hướng dẫn tổ trưởng thu gậy và xếp ngay ngắn vào giỏ đựng đồ dùng.\n- Tuyên dương tinh thần trách nhiệm giữ gìn dụng cụ của lớp.",
-        hs: "- Thả lỏng sâu theo điệu nhạc nhẹ.\n- Tự giác cất gậy trật tự, xếp hàng giải tán về lớp.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa; hướng dẫn tổ trưởng thu gậy và xếp ngay ngắn vào giỏ đựng đồ dùng.\n- Tuyên dương tinh thần trách nhiệm giữ gìn dụng cụ của lớp và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng sâu theo điệu nhạc nhẹ.\n- Quan sát ảnh, trả lời câu hỏi vận dụng sách giáo khoa; tự giác cất gậy trật tự, xếp hàng giải tán về lớp.",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh và cất dụng cụ'
       }
@@ -486,7 +486,7 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         lvd: "7 - 8'\n2 - 3 lần",
         gv: "- GV thị phạm làm mẫu lại động tác chuẩn xác 2 lần kết hợp phân tích kỹ thuật đánh tay và nhịp chân.\n- Cho HS quan sát tranh ảnh SGK lớp 3 trang 27-28 chỉ rõ nhịp rơi của chân trái (nhịp 1) và chân phải (nhịp 2).\n- Nhấn mạnh quy tắc: Chân trái - Nhịp 1; Chân phải - Nhịp 2; động lệnh ĐỨNG rơi vào chân phải.\n- Hướng dẫn kỹ thuật đệm chân lướt để đổi chân khi lỡ bước sai nhịp.",
         hs: "- Đội hình 4 hàng ngang quan sát mẫu và tranh ảnh SGK.\n- Chú ý quan sát động tác thị phạm của giáo viên, ghi nhớ nhịp rơi của chân.\n- Cả lớp dậm chân tại chỗ theo nhịp đếm 1-2, 1-2 để củng cố nhịp điệu trước khi bước đi đều.\n- Mạnh dạn nêu câu hỏi thắc mắc về cách đổi chân khi bước sai nhịp.",
-        contentImgUrl: '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg',
+        contentImgUrl: '/assets/sgk_chuan/k3_di_deu_dung_lai.jpg',
         contentImgTitle: 'Hình ảnh Kỹ thuật: Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp (SGK GDTC Lớp 3)',
         hsImgUrl: standardFormationDiagrams[2].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình quan sát mẫu của GV'
@@ -508,10 +508,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: standardFormationDiagrams[7].name
       },
       {
-        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng cơ bắp toàn thân (theo điệu nhạc nhẹ).\n4.2. Vận dụng: Tích hợp ATGT và rèn nếp xếp hàng ngay ngắn khi di chuyển.\n4.3. Đánh giá, nhận xét buổi học & Dặn dò tự ôn luyện ở nhà.\n4.4. Xuống lớp.",
+        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng toàn thân (theo điệu nhạc nhẹ).\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp ATGT và giữ vệ sinh sân tập.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'\n2L x 8N",
-        gv: "- Điều hành lớp thực hiện bài tập thả lỏng sâu, điều hòa nhịp thở.\n- Nêu câu hỏi vận dụng: \"Em áp dụng kỹ năng đi đều, đứng lại vào những hoạt động nào ở trường và đời sống?\"\n- Tích hợp ATGT: Nhắc nhở HS luôn đi bộ trật tự trên vỉa hè, không đùa giỡn dưới lòng đường.\n- Nhận xét ưu điểm, chỉ ra tồn tại cần khắc phục; dặn dò HS tự ôn luyện dậm chân tại nhà.",
-        hs: "- Đội hình hàng ngang thả lỏng tay chân, hít sâu thở đều theo hướng dẫn.\n- Tự tin trả lời: Áp dụng khi di chuyển vào lớp, lễ chào cờ thứ Hai và đi bộ an toàn trên đường.\n- Tích hợp BVMT: Kiểm tra vệ sinh khu vực sân tập, nhặt rác và vật nguy hiểm.\n- Lắng nghe ghi nhớ lời dặn của GV; giải tán đồng thanh hô to: \"KHỎE!\".",
+        gv: "- Điều hành lớp thực hiện bài tập thả lỏng sâu, điều hòa nhịp thở.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Tích hợp ATGT: Nhắc nhở HS luôn đi bộ trật tự trên vỉa hè, không đùa giỡn dưới lòng đường.\n- Nhận xét ưu điểm tiết học và phát lệnh xuống lớp.",
+        hs: "- Đội hình hàng ngang thả lỏng tay chân, hít sâu thở đều theo hướng dẫn.\n- Quan sát hình ảnh, trả lời câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT: Kiểm tra vệ sinh khu vực sân tập, nhặt rác và vật nguy hiểm.\n- Lắng nghe nhận xét chung; giải tán đồng thanh hô to: \"KHỎE!\".",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh và nhận xét cuối giờ'
       }
@@ -598,10 +598,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: standardFormationDiagrams[9].name
       },
       {
-        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo nhạc nhẹ; thực hiện động tác vươn vai nhẹ nhàng.\n4.2. Vận dụng: Tích hợp BVMT, thu dọn và sắp xếp gậy thể dục ngăn nắp.\n4.3. Đánh giá, nhận xét buổi học & Dặn dò tự rèn luyện ở nhà.\n4.4. Xuống lớp.",
+        content: "4. Hoạt động vận dụng & Hồi tĩnh\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo nhạc nhẹ; thực hiện động tác vươn vai nhẹ nhàng.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT, thu dọn và sắp xếp gậy thể dục ngăn nắp.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'\n2L x 8N",
-        gv: "- Hướng dẫn lớp thả lỏng sâu các khớp chân, khớp gối và cơ bắp tay.\n- Nêu câu hỏi vận dụng: \"Bài tập thể dục với gậy giúp phát triển những nhóm cơ nào?\"\n- Hướng dẫn các tổ trưởng thu gậy và xếp ngay ngắn vào giỏ/giá đựng dụng cụ của nhà trường.\n- Nhận xét đánh giá tinh thần học tập; dặn dò HS tự ôn luyện 3 động tác vào mỗi buổi sáng.",
-        hs: "- Thả lỏng tay chân, điều hòa nhịp thở thư thái theo hướng dẫn của GV.\n- Trả lời câu hỏi: Giúp thân hình dẻo dai, tay khỏe, lưng thẳng và dáng đi đẹp.\n- Tích cực thu dọn dụng cụ, xếp gậy trật tự vào giá, giữ gìn vệ sinh sân bãi sạch sẽ.\n- Lắng nghe ghi nhớ nhiệm vụ về nhà; trật tự giải tán về lớp: \"KHỎE!\".",
+        gv: "- Hướng dẫn lớp thả lỏng các khớp chân, khớp gối và cánh tay.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Hướng dẫn các tổ trưởng thu gậy và xếp ngay ngắn vào giỏ/giá đựng dụng cụ của nhà trường.\n- Nhận xét đánh giá tinh thần học tập và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng tay chân, điều hòa nhịp thở thư thái theo hướng dẫn của GV.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Tích cực thu dọn dụng cụ, xếp gậy trật tự vào giá, giữ gìn vệ sinh sân bãi sạch sẽ.\n- Lắng nghe nhận xét chung của GV; trật tự giải tán về lớp: \"KHỎE!\".",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh và cất dụng cụ gậy thể dục'
       }
@@ -644,7 +644,7 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
     integrations: {
       digitalSkill: '1.1TC1a',
       digitalDescription: 'Học sinh biết so sánh động tác của bản thân với hình ảnh kỹ thuật chuẩn trên tranh ảnh hoặc thiết bị số.',
-      lifeSkills: 'Rèn luyện khả năng phối hợp khéo léo giữa các nhóm cơ và tinh thần đồng đội.',
+      lifeSkills: 'Rèn luyện khả năng phối hợp khéo léo, nhanh nhẹn và tinh thần đồng đội.',
       environmentalEducation: 'Vệ sinh sạch sẽ sân tập sau giờ học, xếp gậy trật tự đúng nơi quy định.'
     },
     locationEquipment: {
@@ -688,10 +688,10 @@ export const masterPlansTuan8: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ Trò chơi: Chạy theo hình tam giác (3 cọc mốc A-B-C)'
       },
       {
-        content: "4. Hoạt động vận dụng & Hồi tĩnh:\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo điệu nhạc nhẹ.\n4.2. Vận dụng: Tích hợp BVMT, thu dọn và xếp gậy vào giá trật tự.\n4.3. Đánh giá nhận xét tiết học & Dặn dò tự ôn luyện ở nhà.\n4.4. Xuống lớp.",
+        content: "4. Hoạt động vận dụng & Hồi tĩnh:\n4.1. Hồi tĩnh: Thả lỏng toàn thân theo điệu nhạc nhẹ.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT, thu dọn và xếp gậy vào giá trật tự.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'\n2L x 8N",
-        gv: "- Hướng dẫn học sinh thả lỏng sâu, điều hòa nhịp tim và hơi thở.\n- Hướng dẫn các tổ trưởng thu dọn gậy thể dục cất vào phòng thiết bị.\n- Tuyên dương tinh thần học tập kỷ luật và an toàn của lớp.",
-        hs: "- Thả lỏng tay chân thoải mái theo nhịp điều hòa.\n- Tự giác cất gậy ngăn nắp, kiểm tra vệ sinh sạch sẽ sân tập.\n- Ghi nhớ bài tập rèn luyện tại nhà; trật tự giải tán: \"KHỎE!\".",
+        gv: "- Hướng dẫn học sinh thả lỏng sâu, điều hòa nhịp tim và hơi thở.\n- GV nêu câu hỏi vận dụng sách giáo khoa; hướng dẫn các tổ trưởng thu dọn gậy thể dục cất vào phòng thiết bị.\n- Tuyên dương tinh thần học tập kỷ luật và an toàn của lớp, phát lệnh xuống lớp.",
+        hs: "- Thả lỏng tay chân thoải mái theo nhịp điều hòa.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Tự giác cất gậy ngăn nắp, kiểm tra vệ sinh sạch sẽ sân tập; trật tự giải tán: \"KHỎE!\".",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Sơ đồ Đội hình hồi tĩnh và cất dụng cụ'
       }

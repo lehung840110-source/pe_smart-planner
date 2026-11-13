@@ -647,7 +647,7 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     category: 'dong_tac_moi',
     cues: ['Chân trái nhịp 1, chân phải nhịp 2', 'Đệm bước chân ngắn khi sai nhịp', 'Khẩu lệnh Đứng lại rơi vào chân phải'],
     commonErrors: ['Đánh tay cùng chiều chân', 'Bước sải quá dài'],
-    svgDataUrl: '/assets/sgk_chuan/k3_on_di_deu_doi_chan.jpg',
+    svgDataUrl: '/assets/sgk_chuan/k3_di_deu_dung_lai.jpg',
     defaultLvd: "7 - 8'",
     gvExplanation: '- Thị phạm kỹ thuật đệm bước chân lướt để lấy lại đúng nhịp.',
     hsTask: '- Luyện tập dậm chân tại chỗ trước khi bước đi đều.'

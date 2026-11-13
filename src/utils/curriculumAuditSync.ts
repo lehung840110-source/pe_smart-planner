@@ -1,7 +1,16 @@
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { masterPlansTuan9 } from '../data/masterTemplateTuan9';
 import { WeeklyMasterScheduleRow, LessonRow, SgkImageItem } from '../types/gdtc';
-import { AUTHENTIC_TEXTBOOK_MAP, resolveAccurateMovement, resolveAccurateGameImage } from './planAutoMatcher';
+import {
+  AUTHENTIC_TEXTBOOK_MAP,
+  resolveAccurateMovement,
+  resolveAccurateGameImage,
+  resolveLessonSlotAssets,
+  sanitizeVanDungRow,
+  sanitizeRowColumn1Media,
+  isInvalidColumn1AttachmentForRow
+} from './planAutoMatcher';
+import { findSgkLessonByTopicOrTitle } from '../data/sgkCurriculumTree';
 import { defaultAllPpctData } from '../data/defaultPpctData';
 
 export const DEFAULT_DISABLED_SPECIAL = 'Giảm nhẹ các yêu cầu về năng lực đặc thù. Tuỳ tình hình của HS mà GV linh hoạt áp dụng với tinh thần học hoà nhập, giảm cường độ vận động, yêu cầu kỹ thuật động tác, thực hiện ở mức độ cơ bản. Giữ vệ sinh cá nhân và sân tập.';
@@ -307,64 +316,83 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
   const resolvedWeek = week || Math.ceil(ppct / 2);
   const ppctItem = defaultAllPpctData.find((p) => p.grade === grade && p.period === ppct);
 
-  const rawTitle = ppctItem?.lessonTitle || `Bài học thể dục Tuần ${resolvedWeek}`;
+  const rawTitle = ppctItem?.lessonTitle || `Bài học giáo dục thể chất Tuần ${resolvedWeek}`;
   const cleanTitle = cleanLessonTitleForHeader(rawTitle).toUpperCase();
-  const rawTopic = ppctItem?.topic || (grade === 1 ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC' : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC');
+  const isAssessment = /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(cleanTitle);
+  const rawTopic =
+    ppctItem?.topic ||
+    (isAssessment
+      ? 'ĐÁNH GIÁ VÀ TỔNG KẾT NĂM HỌC'
+      : grade === 1
+      ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC'
+      : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC');
   const topic = cleanTopicForDisplay(rawTopic, grade);
 
-  const acc = resolveAccurateMovement('', cleanTitle, grade);
-  const movementName = acc.movementName || 'Kỹ thuật động tác chuẩn SGK';
-  const movementKey = cleanTitle.includes('gậy')
+  const acc = resolveAccurateMovement('', rawTitle, grade);
+  const movementName = acc.movementName || (isAssessment ? cleanTitle : 'Kỹ năng vận động bài học');
+  const titleLower = cleanTitle.toLowerCase();
+  const movementKey = isAssessment
+    ? 'danh_gia'
+    : titleLower.includes('gậy')
     ? 'gay'
-    : cleanTitle.includes('vươn thở')
+    : titleLower.includes('vươn thở')
     ? 'vuon_tho'
-    : cleanTitle.includes('tay')
+    : titleLower.includes('tay') && !titleLower.includes('bóng') && !titleLower.includes('đầu, cổ')
     ? 'tay'
-    : cleanTitle.includes('chân')
+    : titleLower.includes('chân') && !titleLower.includes('chạy')
     ? 'chan'
-    : cleanTitle.includes('lườn')
+    : titleLower.includes('lườn')
     ? 'luon'
-    : cleanTitle.includes('bụng')
+    : titleLower.includes('bụng')
     ? 'bung'
-    : cleanTitle.includes('vặn mình')
+    : titleLower.includes('vặn mình')
     ? 'van_minh'
-    : cleanTitle.includes('đi đều')
+    : titleLower.includes('phối hợp') && !titleLower.includes('chạy') && !titleLower.includes('bóng')
+    ? 'phoi_hop'
+    : titleLower.includes('điều hòa') || titleLower.includes('điều hoà')
+    ? 'dieu_hoa'
+    : titleLower.includes('đi đều')
     ? 'di_deu'
-    : 'vuon_tho';
+    : 'ky_nang_khac';
 
-  let warmupGame = 'Làm theo hiệu lệnh';
-  let practiceGame = 'Thỏ nhường hang';
+  const treeLesson = isAssessment ? undefined : findSgkLessonByTopicOrTitle(grade, cleanTitle, topic);
+  let warmupGame = treeLesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName || 'Làm theo hiệu lệnh';
+  let practiceGame = treeLesson?.subFolders?.troChoi?.items?.[0]?.gameName || (isAssessment ? 'Thi đua tiếp sức nhẹ nhàng' : 'Thỏ nhường hang');
 
-  if (grade === 1) {
-    if (movementKey === 'vuon_tho' || movementKey === 'tay') {
-      warmupGame = 'Làm theo hiệu lệnh';
-      practiceGame = 'Thỏ nhường hang';
-    } else if (movementKey === 'chan' || movementKey === 'van_minh' || movementKey === 'bung') {
-      warmupGame = 'Kết bạn';
-      practiceGame = 'Lò cò tiếp sức';
+  if (!treeLesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName) {
+    if (isAssessment) {
+      warmupGame = grade === 5 ? 'Chạy nhẹ theo hiệu lệnh' : 'Làm theo hiệu lệnh';
+      practiceGame = grade === 1 ? 'Thỏ nhường hang' : grade === 3 ? 'Chim về tổ' : 'Tiếp sức đồng đội';
+    } else if (grade === 1) {
+      if (movementKey === 'vuon_tho' || movementKey === 'tay') {
+        warmupGame = 'Làm theo hiệu lệnh';
+        practiceGame = 'Thỏ nhường hang';
+      } else if (movementKey === 'chan' || movementKey === 'van_minh' || movementKey === 'bung') {
+        warmupGame = 'Kết bạn';
+        practiceGame = 'Lò cò tiếp sức';
+      } else {
+        warmupGame = 'Đứng ngồi theo hiệu lệnh';
+        practiceGame = 'Lò cò tiếp sức';
+      }
+    } else if (grade === 3) {
+      if (movementKey === 'di_deu') {
+        warmupGame = 'Đứng ngồi theo hiệu lệnh';
+        practiceGame = 'Chạy theo hình tam giác';
+      } else if (movementKey === 'vuon_tho' || movementKey === 'tay' || movementKey === 'chan') {
+        warmupGame = 'Chui qua hầm';
+        practiceGame = 'Đua ô tô';
+      } else {
+        warmupGame = 'Chim về tổ';
+        practiceGame = 'Đua ô tô';
+      }
     } else {
-      warmupGame = 'Đứng ngồi theo hiệu lệnh';
-      practiceGame = 'Kéo co an toàn';
-    }
-  } else if (grade === 3) {
-    if (movementKey === 'di_deu') {
-      warmupGame = 'Đứng ngồi theo hiệu lệnh';
-      practiceGame = 'Chạy theo hình tam giác';
-    } else if (movementKey === 'vuon_tho' || movementKey === 'tay' || movementKey === 'chan') {
-      warmupGame = 'Chui qua hầm';
-      practiceGame = 'Đua ô tô';
-    } else {
-      warmupGame = 'Chim về tổ';
-      practiceGame = 'Đua ô tô';
-    }
-  } else {
-    // Grade 5
-    if (cleanTitle.includes('gậy') || movementKey === 'gay') {
-      warmupGame = 'Ai nhanh hơn với gậy';
-      practiceGame = 'Chuyền gậy tiếp sức';
-    } else {
-      warmupGame = 'Chạy luồn cọc tiêu';
-      practiceGame = 'Chuyển bóng tiếp sức';
+      if (titleLower.includes('gậy') || movementKey === 'gay') {
+        warmupGame = 'Ai nhanh hơn với gậy';
+        practiceGame = 'Chuyền gậy tiếp sức';
+      } else {
+        warmupGame = 'Chạy luồn cọc tiêu';
+        practiceGame = 'Chuyển bóng tiếp sức';
+      }
     }
   }
 
@@ -405,6 +433,11 @@ export function cleanTopicForDisplay(topic: string, grade?: number): string {
     .replace(/\s*-\s*khối\s*(lớp)?\s*\d+/gi, '')
     .replace(/\s*khối\s*(lớp)?\s*\d+/gi, '')
     .trim();
+
+  // Keep Assessment / Evaluation topics intact (never collapse into Bài thể dục)
+  if (/đánh giá|tổng kết|kiểm tra/i.test(clean)) {
+    return clean.toUpperCase();
+  }
 
   // Fix merged or malformed legacy topics
   if (/đội hình đội ngũ/i.test(clean) && /thể dục/i.test(clean)) {
@@ -537,9 +570,21 @@ export function auditCurriculumSync(
         imgUrl.includes('/assets/aistudio/') ||
         (!imgUrl.startsWith('data:image/svg+xml') && imgUrl.length > 5));
 
-    // 4. Check games in Row 1 (warmup) and Row 6 (practice)
-    const r1 = plan.rows && plan.rows.length >= 1 ? plan.rows[0] : null;
-    const rPractice = plan.rows && plan.rows.length >= 6 ? plan.rows[5] : plan.rows?.[plan.rows.length - 2];
+    // 4. Check games strictly in their dedicated rows (1.3 Warmup game & 3.5/3.4 Practice game)
+    const r1 =
+      plan.rows?.find(
+        (r) =>
+          r.content.includes('1.3.') ||
+          r.content.toLowerCase().includes('trò chơi bổ trợ khởi động') ||
+          r.content.toLowerCase().includes('trò chơi khởi động')
+      ) || (plan.rows && plan.rows.length >= 1 ? plan.rows[0] : null);
+    const rPractice =
+      plan.rows?.find(
+        (r) =>
+          r.content.includes('3.5.') ||
+          r.content.toLowerCase().includes('trò chơi vận động')
+      ) ||
+      (plan.rows && plan.rows.length >= 6 ? plan.rows[5] : plan.rows?.[plan.rows.length - 2]);
     const r1Text = (r1?.content || '').toLowerCase();
     const rPracText = (rPractice?.content || '').toLowerCase();
 
@@ -610,7 +655,7 @@ export function auditCurriculumSync(
       isTitleSynced,
       cleanMasterTitle,
       movementText,
-      movementKey: rule?.movementKey || 'vuon_tho',
+      movementKey: rule?.movementKey || 'ky_nang_khac',
       isMovementCorrect,
       hasAuthenticImage,
       warmupGame,
@@ -682,119 +727,223 @@ export function autoSyncCurriculumAndPlans(
 
     const masterTitle = rule ? rule.cleanTitle : cleanLessonTitleForHeader(plan.title);
     const cleanTopic = cleanTopicForDisplay(rule?.topic || plan.topic, plan.grade);
-    const mKey = rule?.movementKey || 'vuon_tho';
-    const mName = rule?.movementName || 'kỹ thuật động tác';
+    const mKey = rule?.movementKey || 'ky_nang_khac';
+    const mName = rule?.movementName || 'nội dung bài học theo PPCT';
+    const isAssessmentWeek = mKey === 'danh_gia' || /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(masterTitle);
+    const isGranularPlan = plan.rows.length >= 9;
+    const slotAssets = resolveLessonSlotAssets(
+      plan.grade,
+      masterTitle,
+      cleanTopic,
+      images,
+      rule?.warmupGame,
+      rule?.practiceGame
+    );
 
-    // Update Row 1 (Warmup game + image), Row 2 (Movement + image), Row 6 (Practice game + image)
+    // Map every classified image strictly by row section heading (never misplace onto 1.1 Nhận lớp!)
     const newRows: LessonRow[] = plan.rows.map((row, rIdx) => {
-      // Row 1: Mở đầu & Khởi động
-      if (rIdx === 0 && rule) {
+      const cLower = (row.content || '').toLowerCase();
+      const isWarmupGameRow =
+        cLower.includes('1.3.') ||
+        cLower.includes('trò chơi bổ trợ khởi động') ||
+        cLower.includes('trò chơi khởi động') ||
+        (!isGranularPlan && rIdx === 0);
+      const isKhoiDongChungRow =
+        !isWarmupGameRow &&
+        (cLower.includes('1.2.') || (cLower.includes('khởi động') && !cLower.includes('1.1.')));
+      const isKnowledgeRow =
+        cLower.includes('2.1.') ||
+        cLower.includes('khám phá') ||
+        cLower.includes('kiến thức mới') ||
+        cLower.includes('tiêu chuẩn đánh giá') ||
+        (!isGranularPlan && rIdx === 1);
+      const isPracticeGameRow =
+        cLower.includes('3.5.') ||
+        (cLower.includes('3.4.') && cLower.includes('trò chơi')) ||
+        cLower.includes('trò chơi vận động') ||
+        (!isGranularPlan && (rIdx === 5 || rIdx === plan.rows.length - 2));
+      const isPracticeGroupRow =
+        !isPracticeGameRow &&
+        (cLower.includes('3.2.') || cLower.includes('tập theo tổ') || cLower.includes('3.1.') || cLower.includes('3.3.') || cLower.includes('3.4.'));
+      const isVanDungRow = cLower.includes('4.2.') || cLower.includes('vận dụng');
+
+      // 1.2 Khởi động chung
+      if (isKhoiDongChungRow) {
+        if (slotAssets.khoiDongImg?.url) {
+          return {
+            ...row,
+            contentImgUrl: slotAssets.khoiDongImg.url,
+            contentImgTitle: slotAssets.khoiDongImg.title,
+            contentImages: [
+              { id: `sync_kd_${rIdx}`, url: slotAssets.khoiDongImg.url, title: slotAssets.khoiDongImg.title }
+            ]
+          };
+        }
+        return sanitizeRowColumn1Media(row, plan.grade, masterTitle);
+      }
+
+      // 1.3 Trò chơi khởi động (hoặc Hàng 1 trong mẫu 7 dòng)
+      if (isWarmupGameRow && rule) {
         let content = row.content;
-        if (!content.includes(rule.warmupGame)) {
+        if (!content.toLowerCase().includes(slotAssets.warmupGameName.toLowerCase())) {
           if (/1\.3\.\s*Trò chơi[^:\n]*:[^\n]*/i.test(content)) {
-            content = content.replace(/1\.3\.\s*Trò chơi[^:\n]*:[^\n]*/i, `1.3. Trò chơi bổ trợ khởi động: "${rule.warmupGame}".`);
+            content = content.replace(
+              /1\.3\.\s*Trò chơi[^:\n]*:[^\n]*/i,
+              `1.3. Trò chơi bổ trợ khởi động: "${slotAssets.warmupGameName}".`
+            );
           } else {
-            content += `\n1.3. Trò chơi bổ trợ khởi động: "${rule.warmupGame}".`;
+            content += `\n1.3. Trò chơi bổ trợ khởi động: "${slotAssets.warmupGameName}".`;
           }
         }
         let gv = row.gv || '';
         let hs = row.hs || '';
-        if (rule.warmupGame) {
-          gv = gv
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${rule.warmupGame}"`)
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${rule.warmupGame}"`);
-          hs = hs
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${rule.warmupGame}"`)
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${rule.warmupGame}"`);
-        }
-        const wImg = resolveAccurateGameImage(rule.warmupGame, plan.grade, 'tro_choi_kd', images);
+        gv = gv
+          .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${slotAssets.warmupGameName}"`)
+          .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${slotAssets.warmupGameName}"`);
+        hs = hs
+          .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${slotAssets.warmupGameName}"`)
+          .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${slotAssets.warmupGameName}"`);
+        const wImg = slotAssets.warmupGameImg;
         return {
           ...row,
           content,
           gv,
           hs,
-          contentImgUrl: wImg.url,
-          contentImgTitle: wImg.title
+          contentImgUrl: wImg.url || undefined,
+          contentImgTitle: wImg.title || undefined,
+          contentImages: wImg.url ? [{ id: `sync_tckd_${rIdx}`, url: wImg.url, title: wImg.title }] : []
         };
       }
 
-      // Row 2: Khám phá & Làm quen động tác
-      if (rIdx === 1) {
-        const authenticInfo = AUTHENTIC_TEXTBOOK_MAP[mKey];
-        const acc = resolveAccurateMovement(row.content, masterTitle, plan.grade, images);
-        const resolvedImgUrl = authenticInfo ? authenticInfo.url : acc.imgUrl;
-        const resolvedImgTitle = authenticInfo ? authenticInfo.title : acc.imgTitle;
+      // 2.1 Khám phá & Làm quen động tác (hoặc Phổ biến tiêu chuẩn đánh giá)
+      if (isKnowledgeRow) {
+        const acc = slotAssets.movementDetails;
+        const resolvedImgUrl = isAssessmentWeek ? '' : acc.imgUrl || '';
+        const resolvedImgTitle = isAssessmentWeek ? '' : acc.imgTitle || '';
 
-        // Ensure movement steps strictly match the lesson movement name rather than old stale movements
         const isStale =
-          !row.content.toLowerCase().includes(mKey.replace(/_/g, ' ')) &&
-          !row.content.toLowerCase().includes(mName.toLowerCase().slice(0, 8));
+          isAssessmentWeek
+            ? (cLower.includes('vươn thở') || cLower.includes('bài thể dục') || !cLower.includes('đánh giá'))
+            : (!cLower.includes(mKey.replace(/_/g, ' ')) && !cLower.includes(mName.toLowerCase().slice(0, 8)));
+
+        const sectionHeader = isAssessmentWeek
+          ? '2. HOẠT ĐỘNG ÔN TẬP & HƯỚNG DẪN ĐÁNH GIÁ\n2.1. Phổ biến nội dung, tiêu chuẩn đánh giá & kiểm tra:'
+          : '2. HOẠT ĐỘNG HÌNH THÀNH KIẾN THỨC MỚI\n2.1. Khám phá & Làm quen động tác mới:';
 
         const content = isStale
-          ? `2. Kiến thức mới & Khám phá:\n- ${mName}:\n${acc.movementSteps}`
+          ? `${sectionHeader}\n${acc.movementSteps}`
           : row.content;
 
         return {
           ...row,
           content,
-          contentImgUrl: resolvedImgUrl,
-          contentImgTitle: resolvedImgTitle,
+          contentImgUrl: resolvedImgUrl || undefined,
+          contentImgTitle: resolvedImgTitle || undefined,
+          contentImages:
+            !isAssessmentWeek && acc.allImages && acc.allImages.length > 0 && acc.allImages.some((i) => i.url)
+              ? acc.allImages
+              : resolvedImgUrl
+              ? [{ id: `sync_kt_${rIdx}`, url: resolvedImgUrl, title: resolvedImgTitle }]
+              : [],
           gv: acc.gvExplanation || row.gv,
           hs: acc.hsTask || row.hs
         };
       }
 
-      // Row 3: Luyện tập (Ensure no stale "đi đều" if lesson is different)
-      if (rIdx === 2 && row.content.toLowerCase().includes('đi đều') && !masterTitle.toLowerCase().includes('đi đều')) {
-        return {
-          ...row,
-          content: `3. Hoạt động luyện tập:\n3.1. Tập đồng loạt:\n- Toàn lớp tập ${mName} theo nhịp hô GV (1-2 lần).\n3.2. Luyện tập theo tổ nhóm (2-3 lần):\n- 4 tổ về 4 khu vực sân bãi, tổ trưởng điều khiển.\n3.3. Luyện tập cặp đôi sửa sai.`
-        };
+      // 3.1 - 3.4 Luyện tập / Kiểm tra thực hành
+      if (isPracticeGroupRow) {
+        let updatedPracticeRow = sanitizeRowColumn1Media({ ...row }, plan.grade, masterTitle);
+        if (isAssessmentWeek && (cLower.includes('vươn thở') || cLower.includes('bài thể dục') || cLower.includes('đồng loạt'))) {
+          if (cLower.includes('3.1.')) {
+            updatedPracticeRow.content = `3. HOẠT ĐỘNG KIỂM TRA, ĐÁNH GIÁ\n3.1. Ôn tập khởi động chuyên môn & thử sức nhẹ trước kiểm tra:\n- Toàn lớp thực hiện nhẹ nhàng nội dung kiểm tra (${masterTitle}).`;
+          } else if (cLower.includes('3.2.')) {
+            updatedPracticeRow.content = `3.2. Thực hành kiểm tra theo tổ / lượt đánh giá:\n- Lần lượt từng tổ/nhóm lên vạch xuất phát thực hiện kiểm tra theo hiệu lệnh GV.`;
+          } else if (cLower.includes('3.3.')) {
+            updatedPracticeRow.content = `3.3. Quan sát, hỗ trợ kiểm tra chéo & hoàn thiện lượt 2:\n- HS chưa đạt mức quy định hoặc cần nâng thành tích được thực hiện lại lượt 2.`;
+          } else if (cLower.includes('3.4.')) {
+            updatedPracticeRow.content = `3.4. Tổng hợp kết quả đánh giá (TT 27/2020/TT-BGDĐT):\n- Công bố xếp loại Hoàn thành tốt / Hoàn thành / Chưa hoàn thành.`;
+          }
+          updatedPracticeRow.contentImgUrl = undefined;
+          updatedPracticeRow.contentImgTitle = undefined;
+          updatedPracticeRow.contentImages = [];
+        } else if (cLower.includes('đi đều') && !masterTitle.toLowerCase().includes('đi đều')) {
+          updatedPracticeRow.content = `3. HOẠT ĐỘNG LUYỆN TẬP\n3.1. Tập đồng loạt:\n- Toàn lớp tập ${mName} theo nhịp hô GV (1-2 lần).\n3.2. Luyện tập theo tổ nhóm (2-3 lần):\n- 4 tổ về 4 khu vực sân bãi, tổ trưởng điều khiển.\n3.3. Luyện tập cặp đôi sửa sai.`;
+        }
+        if (!isAssessmentWeek && (cLower.includes('3.2.') || !isGranularPlan) && slotAssets.luyenTapImg?.url) {
+          updatedPracticeRow.contentImgUrl = slotAssets.luyenTapImg.url;
+          updatedPracticeRow.contentImgTitle = slotAssets.luyenTapImg.title;
+          updatedPracticeRow.contentImages = [
+            { id: `sync_lt_${rIdx}`, url: slotAssets.luyenTapImg.url, title: slotAssets.luyenTapImg.title }
+          ];
+        }
+        return updatedPracticeRow;
       }
 
-      // Row 6: Thi đua & Trò chơi vận động (hoặc hàng kế cuối)
-      if ((rIdx === 5 || rIdx === plan.rows.length - 2) && rule) {
+      // 3.5 (hoặc 3.4 trong mẫu 7 dòng) Trò chơi vận động
+      if (isPracticeGameRow && rule) {
         let content = row.content;
-        if (!content.includes(rule.practiceGame)) {
+        if (!content.toLowerCase().includes(slotAssets.practiceGameName.toLowerCase())) {
           if (/Trò chơi vận động:[^\n]*/i.test(content)) {
-            content = content.replace(/Trò chơi vận động:[^\n]*/i, `Trò chơi vận động: "${rule.practiceGame}"`);
+            content = content.replace(
+              /Trò chơi vận động:[^\n]*/i,
+              `Trò chơi vận động: "${slotAssets.practiceGameName}"`
+            );
           } else {
-            content += `\n* Trò chơi vận động: "${rule.practiceGame}"`;
+            content += `\n* Trò chơi vận động: "${slotAssets.practiceGameName}"`;
           }
         }
         let gv = row.gv || '';
         let hs = row.hs || '';
-        if (rule.practiceGame) {
-          gv = gv
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${rule.practiceGame}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${rule.practiceGame}"`);
-          hs = hs
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${rule.practiceGame}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${rule.practiceGame}"`);
-        }
+        gv = gv
+          .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${slotAssets.practiceGameName}"`)
+          .replace(/trò chơi "[^"]*"/gi, `trò chơi "${slotAssets.practiceGameName}"`);
+        hs = hs
+          .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${slotAssets.practiceGameName}"`)
+          .replace(/trò chơi "[^"]*"/gi, `trò chơi "${slotAssets.practiceGameName}"`);
+
         if (plan.grade === 1) {
           content = content.replace(/4\s*gậy\/bóng\/cọc tiêu/gi, 'vạch xuất phát, cọc mốc an toàn');
           gv = gv.replace(/cất gậy và\s*/gi, '').replace(/4\s*gậy/gi, 'cọc mốc');
           hs = hs.replace(/cầm gậy/gi, 'chạy tiếp sức');
         }
-        const pImg = resolveAccurateGameImage(rule.practiceGame, plan.grade, 'tro_choi_vd', images);
+        const pImg = slotAssets.practiceGameImg;
         return {
           ...row,
           content,
           gv,
           hs,
-          contentImgUrl: pImg.url,
-          contentImgTitle: pImg.title
+          contentImgUrl: pImg.url || undefined,
+          contentImgTitle: pImg.title || undefined,
+          contentImages: pImg.url ? [{ id: `sync_tcvd_${rIdx}`, url: pImg.url, title: pImg.title }] : []
         };
       }
 
-      return row;
+      // 4.2 Vận dụng thực tế (Chuẩn hóa theo SGK, bỏ gợi ý giải phẫu & dặn dò về nhà; giữ/gắn ảnh Vận dụng)
+      if (isVanDungRow) {
+        const cleanedVd = sanitizeVanDungRow(sanitizeRowColumn1Media(row, plan.grade, masterTitle));
+        return {
+          ...cleanedVd,
+          ...(slotAssets.vanDungImg?.url && !cleanedVd.contentImgUrl
+            ? {
+                contentImgUrl: slotAssets.vanDungImg.url,
+                contentImgTitle: slotAssets.vanDungImg.title,
+                contentImages: [
+                  { id: `sync_vd_${rIdx}`, url: slotAssets.vanDungImg.url, title: slotAssets.vanDungImg.title }
+                ]
+              }
+            : {})
+        };
+      }
+
+      return sanitizeRowColumn1Media(row, plan.grade, masterTitle);
     });
 
-    // Check if competencies mention a mismatched movement (e.g. mentions "đi đều" when teaching "vươn thở, tay")
+    // Check if competencies mention a mismatched movement (e.g. mentions "đi đều" or "vươn thở" when teaching another topic or Assessment week)
     const isCompMismatched =
-      Boolean(plan.specialCompetencies?.basicMovement?.toLowerCase().includes('đi đều')) &&
-      !masterTitle.toLowerCase().includes('đi đều');
+      (Boolean(plan.specialCompetencies?.basicMovement?.toLowerCase().includes('đi đều')) &&
+        !masterTitle.toLowerCase().includes('đi đều')) ||
+      (isAssessmentWeek &&
+        /vươn thở|bài thể dục/i.test(plan.specialCompetencies?.basicMovement || ''));
 
     const specialComp = (!isCompMismatched && plan.specialCompetencies) ? plan.specialCompetencies : {
       healthCare:
@@ -883,7 +1032,7 @@ export function auditPlanAgainstCurriculum(
   rows: LessonRow[]
 ): ComplianceAuditReport {
   let key = `k${grade}_t${lessonNum}`;
-  let rule = AUTHORITATIVE_CURRICULUM_RULES[key];
+  let rule: CurriculumItemRule | undefined = AUTHORITATIVE_CURRICULUM_RULES[key];
   if (!rule) {
     for (let p = 1; p <= 70; p++) {
       const candidate = AUTHORITATIVE_CURRICULUM_RULES[`k${grade}_t${p}`];
@@ -893,34 +1042,53 @@ export function auditPlanAgainstCurriculum(
       }
     }
   }
+  if (!rule) {
+    rule = getCurriculumRule(grade as 1 | 3 | 5, lessonNum, week);
+  }
 
   const expectedTitle = rule?.cleanTitle || title;
-  const expectedMovement = rule?.movementName || (title.includes('phối hợp') ? 'Động tác Phối hợp' : title.includes('điều hòa') ? 'Động tác Điều hòa' : 'Động tác bài học');
-  const expectedGame = rule?.practiceGame || (grade === 1 && week >= 11 ? 'Mèo đuổi chuột' : 'Trò chơi vận động SGK');
+  const expectedMovement = rule?.movementName || 'Nội dung bài học theo PPCT';
+  const expectedGame = rule?.practiceGame || 'Trò chơi vận động SGK';
 
   const titleLower = (title || '').toLowerCase();
   const expMovLower = expectedMovement.toLowerCase();
+  const isAssessment = /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(expectedTitle);
 
   // 1. PPCT & Lesson Title check
-  const titlePassed = Boolean(title && (
-    (rule && titleLower.includes(rule.cleanTitle.toLowerCase().slice(0, 15))) ||
-    (expMovLower.includes('phối hợp') && titleLower.includes('phối hợp')) ||
-    (expMovLower.includes('điều hòa') && titleLower.includes('điều hòa')) ||
-    (expMovLower.includes('nhảy') && titleLower.includes('nhảy')) ||
-    (expMovLower.includes('toàn thân') && titleLower.includes('toàn thân')) ||
-    (expMovLower.includes('bụng') && titleLower.includes('bụng')) ||
-    (expMovLower.includes('chân') && titleLower.includes('chân')) ||
-    (expMovLower.includes('vặn mình') && titleLower.includes('vặn mình')) ||
-    (expMovLower.includes('vươn thở') && titleLower.includes('vươn thở')) ||
-    (expMovLower.includes('tay') && titleLower.includes('tay'))
-  ));
+  const titlePassed = Boolean(
+    title &&
+      (titleLower.includes(expectedTitle.toLowerCase().slice(0, 15)) ||
+        (isAssessment && /kiểm tra|đánh giá|xếp loại|tiêu chuẩn/i.test(titleLower)) ||
+        (expMovLower.includes('phối hợp') && titleLower.includes('phối hợp')) ||
+        (expMovLower.includes('điều hòa') && titleLower.includes('điều hòa')) ||
+        (expMovLower.includes('nhảy') && titleLower.includes('nhảy')) ||
+        (expMovLower.includes('toàn thân') && titleLower.includes('toàn thân')) ||
+        (expMovLower.includes('bụng') && titleLower.includes('bụng')) ||
+        (expMovLower.includes('chân') && titleLower.includes('chân')) ||
+        (expMovLower.includes('vặn mình') && titleLower.includes('vặn mình')) ||
+        (expMovLower.includes('vươn thở') && titleLower.includes('vươn thở')) ||
+        (expMovLower.includes('tay') && titleLower.includes('tay')))
+  );
 
-  // 2. Movement Name in Discovery Row (2.1)
-  const movRow = rows.find(r => r.content.includes('2.1') || r.content.toLowerCase().includes('khám phá') || r.content.toLowerCase().includes('học động tác')) || rows[3] || rows[1];
+  // 2. Movement / Content Name in Discovery Row (2.1)
+  const movRow =
+    rows.find(
+      (r) =>
+        r.content.includes('2.1') ||
+        r.content.toLowerCase().includes('khám phá') ||
+        r.content.toLowerCase().includes('học động tác') ||
+        r.content.toLowerCase().includes('kiểm tra')
+    ) ||
+    rows[3] ||
+    rows[1];
   const movContentLower = (movRow?.content || '').toLowerCase();
 
   let movNamePassed = false;
-  if (expMovLower.includes('phối hợp')) {
+  if (isAssessment) {
+    movNamePassed =
+      (movContentLower.includes('kiểm tra') || movContentLower.includes('đánh giá') || movContentLower.includes('thể lực')) &&
+      !movContentLower.includes('học động tác vươn thở');
+  } else if (expMovLower.includes('phối hợp')) {
     movNamePassed = movContentLower.includes('phối hợp') && !movContentLower.includes('toàn lớp thực hiện động tác bụng');
   } else if (expMovLower.includes('điều hòa')) {
     movNamePassed = movContentLower.includes('điều hòa');
@@ -937,45 +1105,115 @@ export function auditPlanAgainstCurriculum(
   } else if (expMovLower.includes('vươn thở')) {
     movNamePassed = movContentLower.includes('vươn thở');
   } else {
-    movNamePassed = movContentLower.length > 20;
+    movNamePassed = movContentLower.length > 20 && !movContentLower.includes('học động tác vươn thở');
   }
 
-  // 3. Technical Vector Diagram
-  const imgUrl = movRow?.contentImgUrl || '';
+  // 3. Technical Diagram / Authentic Cropped Photo (Inspect BOTH URL AND Title + contentImages!)
+  const movMediaEntries = [
+    movRow?.contentImgUrl || '',
+    movRow?.contentImgTitle || '',
+    ...(movRow?.contentImages || []).map((i) => `${i.url || ''} ${i.title || ''}`)
+  ];
+  const imgCorpus = movMediaEntries.join(' ').toLowerCase();
+  const imgUrl = movRow?.contentImgUrl || movRow?.contentImages?.[0]?.url || '';
+  const imgTitleDisplay = movRow?.contentImgTitle || movRow?.contentImages?.[0]?.title || '';
+
+  const invalidCol1Rows = rows.filter((r) => {
+    const imgs =
+      r.contentImages && r.contentImages.length > 0
+        ? r.contentImages
+        : r.contentImgUrl
+        ? [{ url: r.contentImgUrl, title: r.contentImgTitle || '' }]
+        : [];
+    return imgs.some((im) => isInvalidColumn1AttachmentForRow(r.content, im.url, im.title, grade, title));
+  });
+  const hasInvalidCol1Placement = invalidCol1Rows.length > 0;
+
   let imgPassed = false;
-  if (expMovLower.includes('phối hợp')) {
-    imgPassed = imgUrl.includes('phoi_hop') || (imgUrl.includes('k1_phoi_hop') && !imgUrl.includes('k1_chan') && !imgUrl.includes('k1_bung'));
+  if (hasInvalidCol1Placement) {
+    imgPassed = false;
+  } else if (isAssessment) {
+    imgPassed = !imgCorpus.includes('vươn thở') && !imgCorpus.includes('vuon_tho');
+  } else if (expMovLower.includes('phối hợp')) {
+    imgPassed =
+      (imgCorpus.includes('phối hợp') || imgCorpus.includes('phoi_hop') || imgCorpus.includes('k1_phoi_hop')) &&
+      !imgCorpus.includes('k1_chan') &&
+      !imgCorpus.includes('k1_bung');
   } else if (expMovLower.includes('điều hòa')) {
-    imgPassed = imgUrl.includes('dieu_hoa') || imgUrl.includes('k5') || imgUrl.includes('k1');
+    imgPassed =
+      imgCorpus.includes('điều hòa') ||
+      imgCorpus.includes('điều hoà') ||
+      imgCorpus.includes('dieu_hoa') ||
+      imgCorpus.includes('k5') ||
+      imgCorpus.includes('k1_dieu_hoa');
   } else if (expMovLower.includes('nhảy')) {
-    imgPassed = imgUrl.includes('nhay') || imgUrl.includes('chan') || imgUrl.includes('k5') || imgUrl.includes('toan_than');
+    imgPassed =
+      imgCorpus.includes('nhảy') ||
+      imgCorpus.includes('nhay') ||
+      imgCorpus.includes('chan_voi_gay') ||
+      imgCorpus.includes('toan_than');
   } else if (expMovLower.includes('toàn thân')) {
-    imgPassed = imgUrl.includes('toan_than');
+    imgPassed = imgCorpus.includes('toàn thân') || imgCorpus.includes('toan_than');
   } else if (expMovLower.includes('bụng')) {
-    imgPassed = imgUrl.includes('bung') || imgUrl.includes('k1_bung');
+    imgPassed = imgCorpus.includes('bụng') || imgCorpus.includes('bung');
+  } else if (expMovLower.includes('lườn')) {
+    imgPassed = imgCorpus.includes('lườn') || imgCorpus.includes('luon');
+  } else if (expMovLower.includes('vặn mình')) {
+    imgPassed = imgCorpus.includes('vặn mình') || imgCorpus.includes('van_minh');
   } else if (expMovLower.includes('chân')) {
-    imgPassed = imgUrl.includes('chan') || imgUrl.includes('k1_chan');
+    imgPassed = imgCorpus.includes('chân') || imgCorpus.includes('chan');
+  } else if (expMovLower.includes('vươn thở')) {
+    imgPassed = imgCorpus.includes('vươn thở') || imgCorpus.includes('vuon_tho');
+  } else if (expMovLower.includes('tay')) {
+    imgPassed = imgCorpus.includes('động tác tay') || imgCorpus.includes('k1_tay') || imgCorpus.includes('vuon_tho_tay');
   } else {
-    imgPassed = Boolean(imgUrl);
+    imgPassed = Boolean(imgUrl) && !isInvalidColumn1AttachmentForRow(movRow?.content || '', imgUrl, imgTitleDisplay, grade, title);
   }
 
   // 4. Practice Sequence (3.1 - 3.4)
   const practiceRows = rows.filter(r => r.content.includes('3.1') || r.content.includes('3.2') || r.content.includes('3.3') || r.content.includes('3.4'));
   const practicePassed = practiceRows.length >= 3 && practiceRows.every(r => {
     const cLower = r.content.toLowerCase();
+    if (isAssessment) return !cLower.includes('động tác vươn thở') && !cLower.includes('học động tác mới');
     if (expMovLower.includes('phối hợp')) return !cLower.includes('động tác bụng') && !cLower.includes('động tác chân');
     if (expMovLower.includes('điều hòa')) return !cLower.includes('động tác vươn thở');
     return true;
   });
 
-  // 5. Lesson-Specific Vận dụng (4.2)
+  // 5. Standardized SGK Vận dụng (4.2): No fabricated question, no anatomy answer guide, no Dặn dò về nhà
   const vanDungRow = rows.find(r => r.content.includes('4.2') || r.content.toLowerCase().includes('vận dụng')) || rows[rows.length - 1];
   const vdContentLower = (vanDungRow?.content || '').toLowerCase();
+  const vdFullLower = `${vanDungRow?.content || ''} ${vanDungRow?.gv || ''} ${vanDungRow?.hs || ''}`.toLowerCase();
+  const hasForbiddenVanDungTerms =
+    /vận dụng & dặn dò|gợi ý trả lời|nhiệm vụ rèn luyện|dặn dò về nhà|tự tập ở nhà|cơ liên sườn|tứ đầu|cơ đùi|gân kheo|đốt sống cổ|nhóm cơ nào/.test(
+      vdFullLower
+    );
   const vdPassed = Boolean(
     vanDungRow &&
-    (vdContentLower.includes('câu hỏi vận dụng sgk') || vdContentLower.includes('vận dụng & dặn dò')) &&
-    !vdContentLower.includes('em nên tập động tác này vào thời điểm nào trong ngày để rèn luyện sức khỏe?')
+    (vdContentLower.includes('câu hỏi vận dụng sách giáo khoa') ||
+      vdContentLower.includes('4.2. vận dụng')) &&
+    !hasForbiddenVanDungTerms
   );
+
+  const resolvedImgLabel = hasInvalidCol1Placement
+    ? `Đặt nhầm ảnh/sơ đồ (${invalidCol1Rows.length} mục Cột 1)`
+    : isAssessment
+    ? imgPassed
+      ? 'Phiếu / Sơ đồ đánh giá thể lực'
+      : 'Đang gắn nhầm ảnh Vươn thở'
+    : imgTitleDisplay
+    ? imgTitleDisplay
+    : imgCorpus.includes('phoi_hop') || imgCorpus.includes('phối hợp')
+    ? 'Tranh ĐT Phối hợp'
+    : imgCorpus.includes('dieu_hoa') || imgCorpus.includes('điều hòa')
+    ? 'Tranh ĐT Điều hòa'
+    : imgCorpus.includes('chan') || imgCorpus.includes('chân')
+    ? 'Tranh ĐT Chân'
+    : imgCorpus.includes('bung') || imgCorpus.includes('bụng')
+    ? 'Tranh ĐT Bụng'
+    : imgUrl
+    ? 'Ảnh kỹ thuật đính kèm'
+    : `Chưa có ảnh SGK Khối ${grade} (Cần trích xuất ở Tab 1)`;
 
   const checks = [
     {
@@ -988,19 +1226,37 @@ export function auditPlanAgainstCurriculum(
     },
     {
       id: 'movement',
-      title: 'Tên kỹ thuật động tác mới',
+      title: isAssessment ? 'Nội dung kiểm tra & đánh giá' : 'Tên kỹ thuật động tác mới',
       passed: movNamePassed,
-      currentValue: movRow ? (movContentLower.includes('phối hợp') ? 'Động tác Phối hợp' : movContentLower.includes('điều hòa') ? 'Động tác Điều hòa' : movContentLower.includes('bụng') ? 'Động tác Bụng' : 'Động tác khác') : 'Chưa có',
+      currentValue: movRow
+        ? isAssessment
+          ? movContentLower.includes('vươn thở')
+            ? 'Đang lẫn nội dung Vươn thở / Bài thể dục'
+            : 'Kiểm tra, đánh giá thể lực & năng lực'
+          : movContentLower.includes('phối hợp')
+          ? 'Động tác Phối hợp'
+          : movContentLower.includes('điều hòa')
+          ? 'Động tác Điều hòa'
+          : movContentLower.includes('bụng')
+          ? 'Động tác Bụng'
+          : 'Động tác theo bài học'
+        : 'Chưa có',
       expectedValue: expectedMovement,
-      description: movNamePassed ? 'Đúng kỹ thuật động tác theo phân phối tuần' : 'Nội dung đang ghi sai tên động tác của tuần khác'
+      description: movNamePassed ? 'Đúng nội dung bài học theo phân phối tuần' : 'Nội dung đang ghi sai tên động tác của tuần khác'
     },
     {
       id: 'image',
-      title: 'Tranh kỹ thuật chuẩn SGK',
+      title: isAssessment ? 'Học liệu / Không lẫn tranh Bài thể dục' : 'Tranh kỹ thuật & Phân loại ảnh Cột 1',
       passed: imgPassed,
-      currentValue: imgUrl ? (imgUrl.includes('phoi_hop') ? 'Tranh ĐT Phối hợp' : imgUrl.includes('dieu_hoa') ? 'Tranh ĐT Điều hòa' : imgUrl.includes('chan') ? 'Tranh ĐT Chân' : imgUrl.includes('bung') ? 'Tranh ĐT Bụng' : 'Ảnh khác') : 'Chưa có ảnh',
-      expectedValue: `Tranh ${expectedMovement} chuẩn SGK`,
-      description: imgPassed ? 'Đã gắn tranh kỹ thuật vector chuẩn SGK' : 'Ảnh kỹ thuật đang bị lệch động tác, cần chuẩn hóa'
+      currentValue: resolvedImgLabel,
+      expectedValue: isAssessment ? 'Không gắn nhầm tranh Bài thể dục' : `Ảnh SGK Khối ${grade} khớp đúng mục`,
+      description: hasInvalidCol1Placement
+        ? 'Phát hiện ảnh đặt sai mục (ví dụ: trò chơi đặt vào 1.2 Khởi động chung hoặc sơ đồ đặt vào Cột 1) — cần loại bỏ hoặc trích xuất ảnh SGK đúng.'
+        : imgPassed
+        ? isAssessment
+          ? 'Sạch nội dung kiểm tra cuối năm, không lẫn tranh Bài thể dục'
+          : 'Đã gắn tranh kỹ thuật / ảnh bóc tách chuẩn SGK đúng mục và đúng Khối'
+        : `Chưa tìm được ảnh SGK Khối ${grade} phù hợp cho ${expectedMovement} — cần trích xuất từ trang sách tương ứng ở Tab 1.`
     },
     {
       id: 'practice',
@@ -1012,11 +1268,13 @@ export function auditPlanAgainstCurriculum(
     },
     {
       id: 'application',
-      title: 'Vận dụng thực tế & Trò chơi',
+      title: 'Vận dụng thực tế (SGK)',
       passed: vdPassed,
-      currentValue: vdPassed ? 'Câu hỏi vận dụng chuẩn theo bài học' : 'Câu hỏi chung hoặc chưa chuẩn',
-      expectedValue: `Vận dụng thực tế cho ${expectedMovement}`,
-      description: vdPassed ? 'Câu hỏi và bài tập vận dụng riêng biệt theo đúng động tác' : 'Cần đổi câu hỏi thực tế bám sát động tác bài học'
+      currentValue: vdPassed ? 'Câu hỏi vận dụng sách giáo khoa' : 'Còn gợi ý giải phẫu / dặn dò về nhà / câu hỏi không khớp',
+      expectedValue: 'Ghi "Câu hỏi vận dụng sách giáo khoa" + ảnh SGK (không gợi ý giải phẫu, không dặn dò về nhà)',
+      description: vdPassed
+        ? 'Đúng chuẩn mục 4.2: ghi "Câu hỏi vận dụng sách giáo khoa", sạch thuật ngữ giải phẫu và phần dặn dò về nhà.'
+        : 'Cần chuẩn hóa mục 4.2 thành "Câu hỏi vận dụng sách giáo khoa", bỏ phần Gợi ý trả lời và Dặn dò về nhà.'
     }
   ];
 

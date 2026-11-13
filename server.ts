@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -60,13 +60,28 @@ function extractBase64Data(imageInput: string): { data: string; mimeType: string
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+app.get('/favicon.ico', (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.status(200).send(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#2563eb"/><path d="M12 34h10l6-14 8 24 6-10h10" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  );
+});
+
 app.use(express.json({ limit: '25mb' }));
 
 // Initialize Gemini SDK if key exists
 const apiKey = process.env.GEMINI_API_KEY;
 let aiClient: GoogleGenAI | null = null;
 if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
-  aiClient = new GoogleGenAI({ apiKey });
+  aiClient = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build'
+      }
+    }
+  });
 }
 
 // API: Sinh kế hoạch bài dạy GDTC thông minh bằng Gemini AI
@@ -860,6 +875,444 @@ Hãy trả về duy nhất chuỗi JSON hợp lệ theo format:
     success: true,
     source: 'heuristic',
     ...result
+  });
+});
+
+// API: Phân tích ảnh trò chơi tham chiếu -> sinh danh sách đối tượng Studio (FormationElement[]) có thể kéo thả chỉnh sửa
+app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) => {
+  const { imageBase64 = '', gameTitle = '', caption = '', grade = 1 } = req.body || {};
+
+  const ALLOWED_TYPES = new Set([
+    'hs',
+    'gv',
+    'cs',
+    'tt',
+    'shape_rect',
+    'shape_circle',
+    'line_solid',
+    'line_dashed',
+    'arrow_straight',
+    'arrow_curved',
+    'ball',
+    'marker',
+    'cone',
+    'hoop',
+    'stick',
+    'flag',
+    'text',
+    'sgk_board'
+  ]);
+
+  const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(val)));
+
+  const sanitizeElements = (rawElements: any[]): any[] => {
+    if (!Array.isArray(rawElements)) return [];
+    const cleaned: any[] = [];
+    rawElements.slice(0, 70).forEach((el, idx) => {
+      if (!el || typeof el !== 'object') return;
+      const type = ALLOWED_TYPES.has(el.type) ? el.type : 'hs';
+      const item: any = {
+        id: typeof el.id === 'string' && el.id.trim() ? el.id.trim() : `ref_${type}_${idx}_${Date.now()}`,
+        type,
+        x: clamp(Number(el.x) || 320, 30, 610),
+        y: clamp(Number(el.y) || 220, 68, 405),
+        color: typeof el.color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(el.color) ? el.color : '#2563eb'
+      };
+      if (el.label !== undefined && el.label !== null) item.label = String(el.label).slice(0, 60);
+      if (el.radius !== undefined) item.radius = clamp(Number(el.radius) || 12, 6, 150);
+      if (el.width !== undefined) item.width = clamp(Number(el.width) || 120, 20, 560);
+      if (el.height !== undefined) item.height = clamp(Number(el.height) || 70, 6, 320);
+      if (el.fontSize !== undefined) item.fontSize = clamp(Number(el.fontSize) || 12, 9, 22);
+      if (type === 'line_solid' || type === 'line_dashed' || type === 'arrow_straight' || type === 'arrow_curved') {
+        item.endX = clamp(Number(el.endX) || item.x + 100, 30, 610);
+        item.endY = clamp(Number(el.endY) || item.y, 68, 405);
+      }
+      cleaned.push(item);
+    });
+    return cleaned;
+  };
+
+  const synthesizeGameElementsFromMeta = (rawTitle: string, rawCaption: string, gradeVal: number) => {
+    const cleanTitle = (rawTitle || 'Trò chơi vận động').replace(/\s*-\s*SGK.*$/i, '').trim();
+    const corpus = `${rawTitle} ${rawCaption}`.toLowerCase();
+    const gNum = Number(gradeVal) || 1;
+    const baseGv = { id: 'gv_main', type: 'gv', x: 320, y: 82, color: '#dc2626', label: 'GV Điều Hành' };
+
+    // 1. Mèo đuổi chuột / Vòng tròn làm hang
+    if (corpus.includes('mèo đuổi chuột') || (corpus.includes('mèo') && corpus.includes('chuột'))) {
+      const circlePts = Array.from({ length: 12 }, (_, i) => {
+        const ang = (i * 2 * Math.PI) / 12;
+        return {
+          id: `ring_hs_${i}`,
+          type: 'hs',
+          x: Math.round(320 + 115 * Math.cos(ang)),
+          y: Math.round(238 + 95 * Math.sin(ang)),
+          color: '#0284c7',
+          radius: 11
+        };
+      });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: 'Vòng tròn giơ tay làm hang · Mèo đuổi Chuột',
+        description: 'HS nắm tay xếp vòng tròn giơ cao làm hang, Mèo và Chuột luồn lách qua các hang theo hiệu lệnh GV.',
+        phase: 'tro_choi',
+        elements: [
+          baseGv,
+          { id: 'ring_area', type: 'shape_circle', x: 320, y: 238, radius: 115, color: '#0284c7', label: 'Vòng tròn làm hang' },
+          ...circlePts,
+          { id: 'mouse', type: 'hs', x: 320, y: 238, radius: 13, color: '#16a34a', label: 'Chuột' },
+          { id: 'cat', type: 'hs', x: 145, y: 185, radius: 13, color: '#ea580c', label: 'Mèo' },
+          { id: 'chase_arrow', type: 'arrow_curved', x: 162, y: 190, endX: 300, endY: 232, color: '#ea580c', label: 'Đuổi bắt' },
+          { id: 'txt_note', type: 'text', x: 320, y: 392, color: '#475569', label: 'Cả lớp đọc vè/vỗ tay · Đổi vai Mèo & Chuột sau mỗi lượt', fontSize: 11.5 }
+        ]
+      };
+    }
+
+    // 2. Chui qua hầm / Chui qua cổng
+    if (corpus.includes('chui qua hầm') || corpus.includes('qua hầm') || corpus.includes('qua cổng')) {
+      const elements: any[] = [
+        baseGv,
+        { id: 'xp_line', type: 'line_solid', x: 105, y: 125, endX: 105, endY: 355, color: '#dc2626', label: 'Vạch XP' },
+        { id: 'dich_flag_1', type: 'flag', x: 545, y: 165, color: '#16a34a', label: 'Cờ 1' },
+        { id: 'dich_flag_2', type: 'flag', x: 545, y: 285, color: '#16a34a', label: 'Cờ 2' }
+      ];
+      // 2 đường hầm (hàng đôi giơ tay tạo hầm)
+      [165, 285].forEach((laneY, lIdx) => {
+        for (let k = 0; k < 5; k++) {
+          const hx = 195 + k * 65;
+          elements.push({ id: `tunnel_top_${lIdx}_${k}`, type: 'hs', x: hx, y: laneY - 22, color: '#2563eb', radius: 10 });
+          elements.push({ id: `tunnel_bot_${lIdx}_${k}`, type: 'hs', x: hx, y: laneY + 22, color: '#0284c7', radius: 10 });
+        }
+        elements.push({ id: `runner_${lIdx}`, type: 'hs', x: 132, y: laneY, color: '#ea580c', radius: 11, label: 'Chui' });
+        elements.push({ id: `arrow_${lIdx}`, type: 'arrow_straight', x: 148, y: laneY, endX: 525, endY: laneY, color: '#16a34a' });
+        elements.push({ id: `wait_${lIdx}_1`, type: 'hs', x: 75, y: laneY, color: '#1e293b', radius: 10 });
+        elements.push({ id: `wait_${lIdx}_2`, type: 'hs', x: 48, y: laneY, color: '#1e293b', radius: 10 });
+      });
+      elements.push({ id: 'txt_ham', type: 'text', x: 320, y: 392, color: '#475569', label: 'Hai hàng nắm tay giơ cao tạo đường hầm · Chui khéo léo qua hầm về cờ đích', fontSize: 11.5 });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: '2 đường hầm song song · Khéo léo & nhanh nhẹn',
+        description: 'Các bạn xếp 2 hàng nắm tay giơ cao tạo thành hầm, lần lượt từng bạn cúi chui khéo léo qua hầm về đích.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 3. Kéo co / Ai kéo khỏe hơn
+    if (corpus.includes('kéo co') || corpus.includes('kéo khỏe') || corpus.includes('kéo khoẻ')) {
+      const elements: any[] = [
+        baseGv,
+        { id: 'center_circle', type: 'shape_circle', x: 320, y: 235, radius: 34, color: '#dc2626', label: 'Vùng tâm' },
+        { id: 'line_left', type: 'line_dashed', x: 255, y: 145, endX: 255, endY: 330, color: '#2563eb', label: 'Giới hạn A' },
+        { id: 'line_mid', type: 'line_solid', x: 320, y: 135, endX: 320, endY: 340, color: '#dc2626', label: 'Vạch Giữa' },
+        { id: 'line_right', type: 'line_dashed', x: 385, y: 145, endX: 385, endY: 330, color: '#16a34a', label: 'Giới hạn B' },
+        { id: 'rope', type: 'line_solid', x: 105, y: 235, endX: 535, endY: 235, color: '#b45309', label: 'Dây thừng' },
+        { id: 'ribbon', type: 'flag', x: 320, y: 220, color: '#dc2626', label: 'Dải đỏ' }
+      ];
+      [225, 190, 155, 120].forEach((x, i) => {
+        elements.push({ id: `teamA_${i}`, type: 'hs', x, y: i % 2 === 0 ? 216 : 254, color: '#2563eb', radius: 11, label: `A${i + 1}` });
+      });
+      [415, 450, 485, 520].forEach((x, i) => {
+        elements.push({ id: `teamB_${i}`, type: 'hs', x, y: i % 2 === 0 ? 216 : 254, color: '#16a34a', radius: 11, label: `B${i + 1}` });
+      });
+      elements.push({ id: 'txt_kc', type: 'text', x: 320, y: 392, color: '#475569', label: 'Hai đội bám chắc dây · Kéo dải đỏ qua vạch giới hạn sẽ thắng', fontSize: 11.5 });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: '2 đội đối kháng qua vạch giới hạn',
+        description: 'Hai đội lực lượng cân bằng đứng so le hai bên dây thừng, kéo theo hiệu lệnh còi của GV.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 4. Cướp cờ
+    if (corpus.includes('cướp cờ')) {
+      const elements: any[] = [
+        baseGv,
+        { id: 'line_a', type: 'line_solid', x: 95, y: 125, endX: 95, endY: 350, color: '#2563eb', label: 'Đội A' },
+        { id: 'line_b', type: 'line_solid', x: 545, y: 125, endX: 545, endY: 350, color: '#16a34a', label: 'Đội B' },
+        { id: 'center_ring', type: 'shape_circle', x: 320, y: 238, radius: 36, color: '#dc2626', label: 'Vòng Cờ' },
+        { id: 'center_flag', type: 'flag', x: 320, y: 238, color: '#dc2626', label: 'Cờ Đích' },
+        { id: 'arr_a', type: 'arrow_straight', x: 115, y: 222, endX: 295, endY: 235, color: '#2563eb' },
+        { id: 'arr_b', type: 'arrow_straight', x: 525, y: 254, endX: 345, endY: 241, color: '#16a34a' }
+      ];
+      [145, 195, 245, 295, 340].forEach((y, i) => {
+        elements.push({ id: `a_${i}`, type: 'hs', x: 70, y, color: '#2563eb', radius: 11, label: String(i + 1) });
+        elements.push({ id: `b_${i}`, type: 'hs', x: 570, y, color: '#16a34a', radius: 11, label: String(i + 1) });
+      });
+      elements.push({ id: 'txt_cc', type: 'text', x: 320, y: 392, color: '#475569', label: 'GV gọi số nào hai bạn số đó chạy vào vòng tròn tranh cờ về vạch đội mình', fontSize: 11.5 });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: '2 đội đối diện đánh số 1-5 · Cờ trung tâm',
+        description: 'Hai đội đứng đối diện sau vạch xuất phát, nghe gọi số nhanh chóng lao vào vòng trung tâm lấy cờ.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 5. Ném bóng trúng đích
+    if (corpus.includes('ném bóng') || corpus.includes('trúng đích')) {
+      const elements: any[] = [
+        baseGv,
+        { id: 'throw_line', type: 'line_solid', x: 165, y: 115, endX: 165, endY: 360, color: '#dc2626', label: 'Vạch Ném (3-4m)' }
+      ];
+      [155, 235, 315].forEach((y, idx) => {
+        elements.push({ id: `q_${idx}_1`, type: 'hs', x: 138, y, color: '#2563eb', radius: 11 });
+        elements.push({ id: `q_${idx}_2`, type: 'hs', x: 96, y, color: '#1e293b', radius: 10 });
+        elements.push({ id: `ball_${idx}`, type: 'ball', x: 154, y: y - 10, color: '#ea580c', radius: 9 });
+        elements.push({ id: `hoop_${idx}`, type: 'hoop', x: 515, y, color: '#d97706', radius: 22, label: `Đích ${idx + 1}` });
+        elements.push({ id: `traj_${idx}`, type: 'arrow_curved', x: 175, y, endX: 488, endY: y, color: '#ea580c' });
+      });
+      elements.push({ id: 'txt_nb', type: 'text', x: 320, y: 392, color: '#475569', label: 'Đứng sau vạch giới hạn ngắm chuẩn ném bóng lọt vòng/rổ đích', fontSize: 11.5 });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: 'Vạch giới hạn 3-4m · Quỹ đạo ném đích',
+        description: 'Các tổ xếp hàng dọc sau vạch ném, lần lượt ngắm ném bóng vào rổ/vòng tròn đích để tính điểm.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 6. Thỏ nhường hang / Kết bạn / Vòng tròn / Làm theo hiệu lệnh
+    if (corpus.includes('thỏ') || corpus.includes('kết bạn') || corpus.includes('vòng tròn') || corpus.includes('hiệu lệnh') || corpus.includes('chim về tổ')) {
+      const elements: any[] = [baseGv];
+      if (corpus.includes('thỏ') || corpus.includes('chim')) {
+        const nests = [
+          { x: 175, y: 170 },
+          { x: 465, y: 170 },
+          { x: 175, y: 305 },
+          { x: 465, y: 305 },
+          { x: 320, y: 238 }
+        ];
+        nests.forEach((n, idx) => {
+          elements.push({ id: `hoop_${idx}`, type: 'hoop', x: n.x, y: n.y, color: '#06b6d4', radius: 34, label: `Hang ${idx + 1}` });
+          elements.push({ id: `wall1_${idx}`, type: 'hs', x: n.x - 16, y: n.y + 4, color: '#2563eb', radius: 9 });
+          elements.push({ id: `wall2_${idx}`, type: 'hs', x: n.x + 16, y: n.y + 4, color: '#16a34a', radius: 9 });
+        });
+        elements.push({ id: 'move_1', type: 'arrow_curved', x: 215, y: 185, endX: 285, endY: 225, color: '#ea580c' });
+        elements.push({ id: 'move_2', type: 'arrow_curved', x: 355, y: 255, endX: 430, endY: 295, color: '#ea580c' });
+        elements.push({ id: 'txt_tho', type: 'text', x: 320, y: 392, color: '#475569', label: 'Nghe hiệu lệnh nhanh chóng di chuyển đổi hang/tổ an toàn', fontSize: 11.5 });
+      } else {
+        elements.push({ id: 'circle_main', type: 'shape_circle', x: 320, y: 240, radius: 110, color: '#3b82f6', label: 'Vòng tròn' });
+        for (let i = 0; i < 12; i++) {
+          const ang = (i * 2 * Math.PI) / 12;
+          elements.push({
+            id: `c_hs_${i}`,
+            type: 'hs',
+            x: Math.round(320 + 110 * Math.cos(ang)),
+            y: Math.round(240 + 92 * Math.sin(ang)),
+            color: i % 2 === 0 ? '#2563eb' : '#0284c7',
+            radius: 10.5
+          });
+        }
+        elements.push({ id: 'dir_arr', type: 'arrow_curved', x: 365, y: 138, endX: 432, endY: 192, color: '#16a34a', label: 'Chạy vòng' });
+        elements.push({ id: 'txt_vc', type: 'text', x: 320, y: 392, color: '#475569', label: 'Cả lớp di chuyển vòng tròn, phản xạ nhanh theo hiệu lệnh / số lượng kết nhóm', fontSize: 11.5 });
+      }
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: 'Đội hình vòng tròn / Cụm hang phản xạ',
+        description: 'Học sinh di chuyển theo vòng tròn hoặc cụm ô mốc, lắng nghe hiệu lệnh của GV để phản xạ nhanh.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 7. Tam giác
+    if (corpus.includes('tam giác')) {
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: '3 cọc mốc A - B - C hình tam giác',
+        description: 'Học sinh chạy nối tiếp vòng qua 3 cọc mốc hình tam giác theo chiều mũi tên chỉ dẫn.',
+        phase: 'tro_choi',
+        elements: [
+          baseGv,
+          { id: 'cone_a', type: 'cone', x: 320, y: 145, color: '#ea580c', label: 'Mốc A' },
+          { id: 'cone_b', type: 'cone', x: 485, y: 320, color: '#ea580c', label: 'Mốc B' },
+          { id: 'cone_c', type: 'cone', x: 155, y: 320, color: '#ea580c', label: 'Mốc C' },
+          { id: 'arr_ab', type: 'arrow_straight', x: 340, y: 162, endX: 468, endY: 300, color: '#16a34a' },
+          { id: 'arr_bc', type: 'arrow_straight', x: 460, y: 320, endX: 180, endY: 320, color: '#16a34a' },
+          { id: 'arr_ca', type: 'arrow_straight', x: 170, y: 300, endX: 300, endY: 162, color: '#16a34a' },
+          { id: 'runner_1', type: 'hs', x: 295, y: 175, color: '#2563eb', radius: 11 },
+          { id: 'runner_2', type: 'hs', x: 120, y: 320, color: '#1e293b', radius: 10 },
+          { id: 'runner_3', type: 'hs', x: 92, y: 320, color: '#1e293b', radius: 10 },
+          { id: 'txt_tg', type: 'text', x: 320, y: 392, color: '#475569', label: 'Chạy vòng quanh 3 cọc mốc A → B → C · Chạm tay tiếp sức', fontSize: 11.5 }
+        ]
+      };
+    }
+
+    // 8. Lò cò tiếp sức / Nhảy ô tiếp sức
+    if (corpus.includes('lò cò') || corpus.includes('nhảy ô') || corpus.includes('nhảy bao bố')) {
+      const elements: any[] = [
+        baseGv,
+        { id: 'xp_line', type: 'line_solid', x: 115, y: 115, endX: 115, endY: 365, color: '#dc2626', label: 'Vạch XP' }
+      ];
+      const lanes = [150, 215, 280, 345];
+      lanes.forEach((ly, lIdx) => {
+        for (let q = 0; q < 3; q++) {
+          elements.push({ id: `q_${lIdx}_${q}`, type: 'hs', x: 45 + q * 24, y: ly, color: '#1e293b', radius: 9.5 });
+        }
+        [185, 250, 315, 380].forEach((hx, hIdx) => {
+          elements.push({ id: `hoop_${lIdx}_${hIdx}`, type: 'hoop', x: hx, y: ly, color: '#06b6d4', radius: 16 });
+        });
+        elements.push({ id: `cone_${lIdx}`, type: 'cone', x: 525, y: ly, color: '#ea580c', label: `Mốc ${lIdx + 1}` });
+        elements.push({ id: `arr_go_${lIdx}`, type: 'arrow_straight', x: 405, y: ly - 6, endX: 505, endY: ly - 6, color: '#16a34a' });
+        elements.push({ id: `arr_back_${lIdx}`, type: 'arrow_curved', x: 505, y: ly + 10, endX: 128, endY: ly + 12, color: '#2563eb' });
+      });
+      elements.push({ id: 'txt_lc', type: 'text', x: 320, y: 396, color: '#475569', label: 'Nhảy qua các vòng tròn đích, vòng qua cọc mốc rồi chạy về vỗ tay bạn tiếp theo', fontSize: 11.5 });
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: '4 làn tiếp sức · Vòng đích & Cọc tiêu quay đầu',
+        description: '4 tổ xếp hàng dọc sau vạch xuất phát, bật nhảy vào từng ô vòng, vòng qua cọc tiêu chạy về tiếp sức.',
+        phase: 'tro_choi',
+        elements
+      };
+    }
+
+    // 9. Mặc định thông minh: Đua ô tô / Trao gậy / Tiếp sức 4 làn chuẩn
+    const useStick = corpus.includes('gậy') || gNum === 5;
+    const useBall = corpus.includes('bóng') || corpus.includes('đua ô tô') || corpus.includes('ô tô');
+    const elements: any[] = [
+      baseGv,
+      { id: 'xp_line', type: 'line_solid', x: 125, y: 115, endX: 125, endY: 365, color: '#dc2626', label: 'Vạch XP' }
+    ];
+    [150, 215, 280, 345].forEach((ly, lIdx) => {
+      elements.push({ id: `lane_sep_${lIdx}`, type: 'line_dashed', x: 125, y: ly + 28, endX: 540, endY: ly + 28, color: '#cbd5e1' });
+      for (let q = 0; q < 3; q++) {
+        elements.push({
+          id: `wait_${lIdx}_${q}`,
+          type: q === 2 ? 'tt' : 'hs',
+          x: 50 + q * 26,
+          y: ly,
+          color: q === 2 ? '#ea580c' : '#1e293b',
+          radius: 10,
+          label: q === 2 ? `T${lIdx + 1}` : undefined
+        });
+      }
+      elements.push({ id: `runner_${lIdx}`, type: 'hs', x: 245 + (lIdx % 2) * 45, y: ly, color: '#2563eb', radius: 11 });
+      if (useStick) {
+        elements.push({ id: `stick_${lIdx}`, type: 'stick', x: 262 + (lIdx % 2) * 45, y: ly - 10, width: 28, height: 6, color: '#d97706' });
+      } else if (useBall) {
+        elements.push({ id: `ball_${lIdx}`, type: 'ball', x: 262 + (lIdx % 2) * 45, y: ly - 10, radius: 8, color: '#ea580c' });
+      }
+      elements.push({ id: `cone_${lIdx}`, type: 'cone', x: 525, y: ly, color: '#ea580c', label: `Đích ${lIdx + 1}` });
+      elements.push({ id: `arr_go_${lIdx}`, type: 'arrow_straight', x: 135, y: ly - 8, endX: 500, endY: ly - 8, color: '#16a34a' });
+      elements.push({ id: `arr_ret_${lIdx}`, type: 'arrow_curved', x: 505, y: ly + 10, endX: 138, endY: ly + 12, color: '#2563eb' });
+    });
+    elements.push({
+      id: 'txt_default_tc',
+      type: 'text',
+      x: 320,
+      y: 396,
+      color: '#475569',
+      label: useStick
+        ? '4 làn tiếp sức · Vòng qua cọc mốc chạy về trao gậy an toàn cho đồng đội'
+        : '4 làn chạy tiếp sức · Vòng qua cọc tiêu quay về chạm tay bạn kế tiếp',
+      fontSize: 11.5
+    });
+
+    return {
+      name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+      subtitle: useStick ? '4 làn tiếp sức trao gậy & cọc mốc' : '4 làn tiếp sức & cọc mốc quay đầu',
+      description: 'Bố trí 4 hàng dọc sau vạch xuất phát, lần lượt di chuyển qua mốc quay đầu về tiếp sức đồng đội.',
+      phase: 'tro_choi',
+      elements
+    };
+  };
+
+  const fallbackResult = synthesizeGameElementsFromMeta(gameTitle, caption, Number(grade) || 1);
+  const resolvedImage = extractBase64Data(imageBase64);
+
+  if (aiClient && resolvedImage) {
+    try {
+      const visionPrompt = `Bạn là chuyên gia Giáo dục Thể chất Tiểu học (GDPT 2018). Hãy quan sát thật kỹ BỨC ẢNH TRÒ CHƠI VẬN ĐỘNG này và dựng lại thành SƠ ĐỒ ĐỘI HÌNH TRÊN SÂN BÃI kích thước chuẩn SVG 640x430.
+Thông tin gợi ý:
+- Tên trò chơi: "${gameTitle || 'Chưa rõ'}"
+- Mô tả thêm: "${caption || 'Không có'}"
+- Khối lớp: Lớp ${grade}
+
+YÊU CẦU TỌA ĐỘ TRÊN SÂN BÃI (Rất quan trọng):
+- Toàn bộ các đối tượng PHẢI nằm gọn trong khung sân: x từ 45 đến 595, y từ 78 đến 392.
+- Đặt Giáo viên ("gv") quan sát ở phía trên (y khoảng 78-95) nếu phù hợp.
+- Nếu trò chơi xếp vòng tròn: dùng "shape_circle" ở tâm (320, 238) + nhiều "hs" xếp quanh chu vi + người chạy/bắt ở trong hoặc ngoài + "arrow_curved" chỉ hướng di chuyển.
+- Nếu trò chơi xếp hàng dọc/tiếp sức/chui hầm/nhảy ô: vẽ "line_solid" (vạch xuất phát), các hàng "hs" sau vạch, dụng cụ ("cone" cọc tiêu, "hoop" vòng tròn, "ball" bóng, "stick" gậy, "flag" cờ đích), và "arrow_straight"/"arrow_curved" chỉ hướng chạy đi và quay về.
+- Nếu trò chơi đối kháng (kéo co, cướp cờ): vẽ hai đội đối xứng trái-phải qua vạch ranh giới giữa sân.
+- Chỉ dùng các type hợp lệ: "gv", "hs", "cs", "tt", "cone", "hoop", "ball", "flag", "stick", "marker", "line_solid", "line_dashed", "arrow_straight", "arrow_curved", "shape_rect", "shape_circle", "text".
+- Thêm 1 phần tử "text" hướng dẫn ngắn ở đáy sân (x=320, y=392).`;
+
+      const aiResponse = await aiClient.models.generateContent({
+        model: 'gemini-4-hydrogen',
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              {
+                inlineData: {
+                  mimeType: resolvedImage.mimeType,
+                  data: resolvedImage.data
+                }
+              },
+              { text: visionPrompt }
+            ]
+          }
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              subtitle: { type: Type.STRING },
+              description: { type: Type.STRING },
+              phase: { type: Type.STRING },
+              elements: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    id: { type: Type.STRING },
+                    type: { type: Type.STRING },
+                    x: { type: Type.NUMBER },
+                    y: { type: Type.NUMBER },
+                    endX: { type: Type.NUMBER },
+                    endY: { type: Type.NUMBER },
+                    width: { type: Type.NUMBER },
+                    height: { type: Type.NUMBER },
+                    radius: { type: Type.NUMBER },
+                    fontSize: { type: Type.NUMBER },
+                    color: { type: Type.STRING },
+                    label: { type: Type.STRING }
+                  },
+                  required: ['type', 'x', 'y', 'color']
+                }
+              }
+            },
+            required: ['name', 'subtitle', 'description', 'elements']
+          }
+        }
+      });
+
+      const parsed = JSON.parse(aiResponse.text || '{}');
+      const cleanedElements = sanitizeElements(parsed.elements);
+      if (cleanedElements.length >= 4) {
+        return res.json({
+          success: true,
+          source: 'gemini-4-hydrogen-vision',
+          name: parsed.name || fallbackResult.name,
+          subtitle: parsed.subtitle || fallbackResult.subtitle,
+          description: parsed.description || fallbackResult.description,
+          phase: parsed.phase === 'khoi_dong' ? 'khoi_dong' : 'tro_choi',
+          elements: cleanedElements
+        });
+      }
+    } catch (err: any) {
+      console.warn('Gemini game-image-to-diagram fallback notice:', err?.message);
+    }
+  }
+
+  return res.json({
+    success: true,
+    source: 'heuristic-game-layout',
+    ...fallbackResult
   });
 });
 

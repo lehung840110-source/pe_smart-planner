@@ -22,10 +22,25 @@ import {
   Palette,
   Edit3,
   PlusCircle,
-  Compass
+  Compass,
+  History,
+  Save,
+  Star,
+  AlertCircle
 } from 'lucide-react';
 import { LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment } from '../types/gdtc';
-import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8 } from '../data/masterTemplateTuan8';
+import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
+import { PlanVersionHistoryModal } from './PlanVersionHistoryModal';
+import {
+  PlanVersionStore,
+  LessonPlanVersion,
+  formatRelativeTimeVi,
+  getBestVersionForPlan,
+  getPlanVersionKey,
+  getPreferredVersionForPlan,
+  getUnfinishedDraftForPlan,
+  getVersionsForPlan
+} from '../utils/planVersionHistory';
 import {
   generateNextWeekPlan,
   AutoMatchResult,
@@ -36,7 +51,8 @@ import {
   createBalancedGranularLessonRows,
   splitAndAlignRows1to1,
   splitAndBalanceExistingRows,
-  resolveAccurateMovement
+  resolveAccurateMovement,
+  isInvalidColumn1AttachmentForRow
 } from '../utils/planAutoMatcher';
 import { auditPlanAgainstCurriculum, ComplianceAuditReport } from '../utils/curriculumAuditSync';
 import {
@@ -48,6 +64,8 @@ import {
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationStudioModal } from './FormationStudioModal';
+import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { resolveSlotMissingImageNotice } from '../utils/imageProvenance';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { getSgkPageForLesson } from '../data/sgkCurriculumTree';
@@ -68,6 +86,17 @@ interface TabGeneratorProps {
   scenarios: ScenarioItem[];
   images: SgkImageItem[];
   currentMasterPlan: MasterPlanItem;
+  onChangeLessonContext?: (nextWeek: number, nextGrade: number, nextLessonNum: number) => void;
+  planVersionStore?: PlanVersionStore;
+  onSaveOfficialVersion?: (
+    plan: MasterPlanItem,
+    customLabel?: string,
+    markAsBest?: boolean,
+    baselinePlan?: MasterPlanItem | null
+  ) => LessonPlanVersion | void;
+  onLoadPlanVersion?: (planKey: string, versionId: string) => void;
+  onToggleBestVersion?: (planKey: string, versionId: string) => void;
+  onDeletePlanVersion?: (planKey: string, versionId: string) => void;
   onSwitchToExport: () => void;
   onSwitchToMasterTemplate: () => void;
   onOpenImport?: () => void;
@@ -91,6 +120,12 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   scenarios,
   images,
   currentMasterPlan,
+  onChangeLessonContext,
+  planVersionStore,
+  onSaveOfficialVersion,
+  onLoadPlanVersion,
+  onToggleBestVersion,
+  onDeletePlanVersion,
   onSwitchToExport,
   onSwitchToMasterTemplate,
   onNavigateToScan,
@@ -99,6 +134,44 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
   const [lastAutoMatch, setLastAutoMatch] = useState<AutoMatchResult | null>(null);
   const [isEditMode, setIsEditMode] = useState<boolean>(true);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
+
+  const activePlanKey = useMemo(() => getPlanVersionKey(week, grade, lessonNum), [week, grade, lessonNum]);
+
+  const versionsForCurrent = useMemo(() => {
+    if (!planVersionStore) return [];
+    return getVersionsForPlan(planVersionStore, week, grade, lessonNum);
+  }, [planVersionStore, week, grade, lessonNum]);
+
+  const preferredVersion = useMemo(() => {
+    if (!planVersionStore) return null;
+    return getPreferredVersionForPlan(planVersionStore, week, grade, lessonNum);
+  }, [planVersionStore, week, grade, lessonNum]);
+
+  const bestVersion = useMemo(() => {
+    if (!planVersionStore) return null;
+    return getBestVersionForPlan(planVersionStore, week, grade, lessonNum);
+  }, [planVersionStore, week, grade, lessonNum]);
+
+  const unfinishedDraft = useMemo(() => {
+    if (!planVersionStore) return null;
+    return getUnfinishedDraftForPlan(planVersionStore, week, grade, lessonNum);
+  }, [planVersionStore, week, grade, lessonNum]);
+
+  const currentPlanSnapshot: MasterPlanItem = useMemo(
+    () =>
+      normalizeMasterPlan({
+        ...currentMasterPlan,
+        id: `plan_k${grade}_t${lessonNum}_w${week}`,
+        grade: grade as 1 | 3 | 5,
+        week,
+        lessonNum,
+        topic,
+        title,
+        rows: lessonRows
+      }),
+    [currentMasterPlan, grade, lessonNum, week, topic, title, lessonRows]
+  );
 
   // Compute textbook PDF page for current lesson
   const sgkInfo = useMemo(() => getSgkPageForLesson(grade, title, topic), [grade, title, topic]);
@@ -571,10 +644,15 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             </label>
             <select
               value={week}
-              onChange={(e) => setWeek(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const nw = parseInt(e.target.value, 10);
+                const nl = (nw - 1) * 2 + (lessonNum % 2 === 0 ? 2 : 1);
+                if (onChangeLessonContext) onChangeLessonContext(nw, grade, nl);
+                else setWeek(nw);
+              }}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-none"
             >
-              {Array.from({ length: 27 }, (_, i) => i + 9).map((w) => (
+              {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
                 <option key={w} value={w}>
                   Tuần {w}
                 </option>
@@ -589,7 +667,11 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             </label>
             <select
               value={grade}
-              onChange={(e) => setGrade(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const ng = parseInt(e.target.value, 10);
+                if (onChangeLessonContext) onChangeLessonContext(week, ng, lessonNum);
+                else setGrade(ng);
+              }}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-none"
             >
               <option value={1}>Khối 1</option>
@@ -606,7 +688,11 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             <input
               type="number"
               value={lessonNum}
-              onChange={(e) => setLessonNum(parseInt(e.target.value, 10) || 1)}
+              onChange={(e) => {
+                const nl = parseInt(e.target.value, 10) || 1;
+                if (onChangeLessonContext) onChangeLessonContext(week, grade, nl);
+                else setLessonNum(nl);
+              }}
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-none"
             />
           </div>
@@ -844,12 +930,85 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         </div>
       </div>
 
+      {/* Version History & Auto-Draft Status Strip */}
+      <div className="bg-white rounded-xl border border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-xs font-bold text-slate-900 flex items-center gap-2 flex-wrap tabular-nums">
+            <History className="w-4 h-4 text-blue-600 shrink-0" />
+            {preferredVersion ? (
+              <span>
+                Đang hiển thị: Phiên bản #{preferredVersion.versionNumber}
+                {preferredVersion.isStarredBest || preferredVersion.status === 'best'
+                  ? ' · Hoàn hảo nhất'
+                  : preferredVersion.status === 'draft'
+                  ? ' · Bản nháp đang sửa dở'
+                  : ' · Đã lưu chính thức'}
+              </span>
+            ) : (
+              <span>Chưa có lịch sử chỉnh sửa · Tự động lưu bản nháp khi Thầy/Cô gõ sửa</span>
+            )}
+            {preferredVersion && (
+              <span className="text-slate-500 font-normal">
+                · Cập nhật {formatRelativeTimeVi(preferredVersion.updatedAt)}
+              </span>
+            )}
+          </div>
+          {preferredVersion?.changeSummary && preferredVersion.changeSummary.length > 0 && (
+            <p className="text-[11px] text-slate-600 mt-0.5 truncate max-w-2xl">
+              Thay đổi gần nhất: {preferredVersion.changeSummary.slice(0, 3).join(' · ')}
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {unfinishedDraft && preferredVersion?.versionId !== unfinishedDraft.versionId && onLoadPlanVersion && (
+            <button
+              type="button"
+              onClick={() => onLoadPlanVersion(activePlanKey, unfinishedDraft.versionId)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-300 hover:bg-blue-100 whitespace-nowrap shrink-0 transition"
+            >
+              Tiếp tục bản nháp dở (v{unfinishedDraft.versionNumber})
+            </button>
+          )}
+
+          {bestVersion && preferredVersion?.versionId !== bestVersion.versionId && onLoadPlanVersion && (
+            <button
+              type="button"
+              onClick={() => onLoadPlanVersion(activePlanKey, bestVersion.versionId)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+              <span>Tải bản hoàn hảo nhất</span>
+            </button>
+          )}
+
+          {onSaveOfficialVersion && (
+            <button
+              type="button"
+              onClick={() => onSaveOfficialVersion(currentPlanSnapshot)}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 whitespace-nowrap shrink-0 transition"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>Lưu phiên bản mới</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsVersionModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5 whitespace-nowrap shrink-0 transition tabular-nums"
+          >
+            <History className="w-3.5 h-3.5" />
+            <span>Lịch sử sửa & Phiên bản ({versionsForCurrent.length})</span>
+          </button>
+        </div>
+      </div>
+
       {/* 4-Column Table Direct Editor (Đã chuyển toàn bộ tính năng chỉnh sửa từ Tab Xem Trước sang đây) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
           <div>
             <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
               Bảng Tiến Trình Giảng Dạy Đã Sinh (Chỉnh Sửa Trực Tiếp Toàn Diện)
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
@@ -1067,11 +1226,25 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       )}
 
                       {/* Column 1 Image Gallery */}
-                      {contentImgs.length > 0 && (
+                      {contentImgs.length > 0 && (() => {
+                        const rLower = (row.content || '').toLowerCase();
+                        const inferredFolder: 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung' =
+                          rLower.includes('1.3') || (rLower.includes('trò chơi') && rLower.includes('khởi động'))
+                            ? 'troChoiKhoiDong'
+                            : rLower.includes('1.2') || (rLower.includes('khởi động') && !rLower.includes('1.1'))
+                            ? 'khoiDong'
+                            : rLower.includes('3.5') || rLower.includes('trò chơi vận động')
+                            ? 'troChoi'
+                            : rLower.includes('3.1') || rLower.includes('3.2') || rLower.includes('3.3') || rLower.includes('luyện tập')
+                            ? 'luyenTap'
+                            : rLower.includes('4.2') || rLower.includes('vận dụng')
+                            ? 'vanDung'
+                            : 'kyThuat';
+                        return (
                         <div className="space-y-1.5">
                           <div className={`grid ${contentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
-                            {contentImgs.map((cImg, cIdx) => (
-                              <div key={cImg.id || cIdx} className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group text-center">
+                            {contentImgs.filter((cImg) => Boolean(cImg?.url && cImg.url.trim())).map((cImg, cIdx) => (
+                              <div key={cImg.id || cIdx} className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group group/imgtip text-center">
                                 <img
                                   src={cImg.url}
                                   alt={cImg.title}
@@ -1080,6 +1253,16 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                 <p className="text-[10px] text-slate-600 font-medium text-center mt-1 truncate" title={cImg.title}>
                                   {cImg.title}
                                 </p>
+                                <ImageProvenanceTooltip
+                                  image={{
+                                    title: cImg.title || row.contentImgTitle,
+                                    grade: String(grade),
+                                    lessonTitle: title,
+                                    folder: inferredFolder,
+                                    imgUrl: cImg.url
+                                  }}
+                                  position="bottom"
+                                />
                                 <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
                                   <button
                                     type="button"
@@ -1115,7 +1298,47 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                             ))}
                           </div>
                         </div>
+                        );
+                      })()}
+
+                      {/* Misplaced attachment warning OR Missing-image guidance */}
+                      {contentImgs.some((im) =>
+                        isInvalidColumn1AttachmentForRow(row.content, im.url, im.title, grade, title)
+                      ) && (
+                        <div className="p-2 bg-red-50 border border-red-300 rounded-lg text-[10.5px] leading-snug text-red-900 flex items-start gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-bold">Cảnh báo: Hình đang gắn chưa khớp mục này</p>
+                            <p className="mt-0.5">
+                              Ảnh trò chơi không được đặt vào 1.2 Khởi động chung, và Sơ đồ đội hình thuộc Cột 4 (không thay cho ảnh SGK ở Cột 1). Bấm <strong>"Rà soát & Chuẩn hóa sư phạm"</strong> hoặc xóa để chọn lại đúng ảnh.
+                            </p>
+                          </div>
+                        </div>
                       )}
+
+                      {contentImgs.length === 0 && !hasInlineMedia(row.content) && (() => {
+                        const missingNotice = resolveSlotMissingImageNotice(grade, row.content, title, topic);
+                        if (!missingNotice) return null;
+                        return (
+                          <div className="p-2 bg-amber-50 border border-amber-300 rounded-lg text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-bold text-amber-900">Chưa tìm được hình phù hợp cho mục này</p>
+                              <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
+                              {onNavigateToScan && missingNotice.suggestedPage && (
+                                <button
+                                  type="button"
+                                  onClick={() => onNavigateToScan(grade as 1 | 3 | 5, missingNotice.suggestedPage)}
+                                  className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
+                                >
+                                  <BookOpen className="w-3 h-3" />
+                                  <span>Mở Tab 1 trích xuất SGK Lớp {grade} (Trang {missingNotice.suggestedPage})</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Add column-level image to Column 1 */}
                       <button
@@ -1217,7 +1440,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       {gvImgs.length > 0 && (
                         <div className="space-y-1.5">
                           <div className={`grid ${gvImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
-                            {gvImgs.map((gImg, gIdx) => (
+                            {gvImgs.filter((gImg) => Boolean(gImg?.url && gImg.url.trim())).map((gImg, gIdx) => (
                               <div key={gImg.id || gIdx} className="p-1 bg-slate-50 rounded-lg border border-slate-200 relative group text-center">
                                 <img
                                   src={gImg.url}
@@ -1369,7 +1592,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                         {hsImgs.length > 0 ? (
                           <div className="space-y-2">
                             <div className={`grid ${hsImgs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
-                              {hsImgs.map((diag, diagIdx) => (
+                              {hsImgs.filter((diag) => Boolean(diag?.url && diag.url.trim())).map((diag, diagIdx) => (
                                 <div
                                   key={diag.id || diagIdx}
                                   className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group text-center"
@@ -1495,6 +1718,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             setTargetInlinePicker(null);
           }}
           targetRowIndex={targetRowForFormation ?? targetColAttachment?.rowIndex ?? targetInlinePicker?.rowIndex ?? 0}
+          grade={grade}
+          libraryImages={images}
           onSelectFormation={onConfirmFormationSelection}
         />
       )}
@@ -1521,6 +1746,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           onClose={() => setTargetRowForStudio(null)}
           targetRowIndex={targetRowForStudio}
           initialFormation={studioInitialDiagram}
+          libraryImages={images}
+          grade={grade}
           onApplyFormationToRow={(rowIdx, customFormation) => {
             handleSelectFormation(rowIdx, customFormation);
             saveCustomFormationToStorage(customFormation);
@@ -1530,6 +1757,41 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           onSaveToLibrary={(customFormation) => {
             saveCustomFormationToStorage(customFormation);
             showToast(`💾 Đã lưu sơ đồ "${customFormation.name}" vào thư viện đội hình!`);
+          }}
+        />
+      )}
+
+      {/* Version History & Draft Resume Modal */}
+      {isVersionModalOpen && planVersionStore && onSaveOfficialVersion && onLoadPlanVersion && onToggleBestVersion && onDeletePlanVersion && (
+        <PlanVersionHistoryModal
+          isOpen={isVersionModalOpen}
+          onClose={() => setIsVersionModalOpen(false)}
+          store={planVersionStore}
+          initialTargetKey={activePlanKey}
+          targets={[
+            {
+              week,
+              grade: grade as 1 | 3 | 5,
+              lessonNum,
+              title,
+              currentPlan: currentPlanSnapshot,
+              defaultBaselinePlan: {
+                ...currentPlanSnapshot,
+                rows: createBalancedGranularLessonRows(grade, title, images)
+              }
+            }
+          ]}
+          onSaveNewVersion={(plan, customLabel, markAsBest, baseline) =>
+            onSaveOfficialVersion(plan, customLabel, markAsBest, baseline)
+          }
+          onLoadVersion={onLoadPlanVersion}
+          onToggleBest={onToggleBestVersion}
+          onDeleteVersion={onDeletePlanVersion}
+          onResetToDefaultBaseline={(target) => {
+            if (target.defaultBaselinePlan) {
+              setLessonRows(JSON.parse(JSON.stringify(target.defaultBaselinePlan.rows)));
+              showToast('Đã khôi phục nội dung về bản chuẩn gốc (lịch sử các bản đã sửa vẫn được giữ nguyên).');
+            }
           }}
         />
       )}

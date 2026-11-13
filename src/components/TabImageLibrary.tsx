@@ -25,17 +25,27 @@ import {
   Tag,
   Move,
   X,
-  Edit3
+  Edit3,
+  Compass
 } from 'lucide-react';
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
 import { removeBackgroundCanvas, autoCropCanvas, enhanceContrastCanvas } from '../utils/imageProcessing';
 import { Database, Wand2, Eraser } from 'lucide-react';
-import { sgkCurriculumTree, SgkLessonFolder } from '../data/sgkCurriculumTree';
+import {
+  SgkLessonFolder,
+  getEffectiveSgkCurriculumTree,
+  doesImageBelongToSgkLesson,
+  findSgkLessonByPage
+} from '../data/sgkCurriculumTree';
 import { deleteImageDB, saveImagesDB } from '../utils/db';
 import { ImageToImageModal } from './ImageToImageModal';
 import { BatchImageUploadModal } from './BatchImageUploadModal';
 import { EditImageModal } from './EditImageModal';
+import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { resolveImageUsageProvenance } from '../utils/imageProvenance';
+import { FormationStudioModal } from './FormationStudioModal';
+import { saveCustomFormationToStorage } from '../data/formationDiagrams';
 
 interface TabImageLibraryProps {
   images: SgkImageItem[];
@@ -58,9 +68,12 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const [filterGrade, setFilterGrade] = useState<string>('all'); // 'all' | '1' | '3' | '5'
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
   const [selectedLessonId, setSelectedLessonId] = useState<string>('all');
-  const [selectedSubFolder, setSelectedSubFolder] = useState<string>('all'); // 'all' | 'kyThuat' | 'luyenTap' | 'vanDung' | 'troChoi' | 'khoiDong'
+  const [selectedSubFolder, setSelectedSubFolder] = useState<string>('all'); // 'all' | 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung'
   const [imageToImageModalItem, setImageToImageModalItem] = useState<SgkImageItem | null>(null);
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState<boolean>(false);
+  const [studioRefImage, setStudioRefImage] = useState<SgkImageItem | null>(null);
+
+  const effectiveTree = useMemo(() => getEffectiveSgkCurriculumTree(), [images]);
 
   // Tree expanded state
   const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({
@@ -186,16 +199,19 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     let newCat: ImageCategory = 'dong_tac';
     if (targetFolder === 'luyenTap') newCat = 'tap_luyen';
     else if (targetFolder === 'vanDung') newCat = 'van_dung';
+    else if (targetFolder === 'troChoiKhoiDong') newCat = 'tro_choi_khoi_dong';
     else if (targetFolder === 'troChoi') newCat = 'tro_choi';
     else if (targetFolder === 'khoiDong') newCat = 'khoi_dong';
 
-    setImages((prev) =>
-      prev.map((img) =>
+    setImages((prev) => {
+      const updated = prev.map((img) =>
         img.selected
           ? { ...img, folder: targetFolder, category: newCat }
           : img
-      )
-    );
+      );
+      saveImagesDB(updated).catch(() => {});
+      return updated;
+    });
     showToast(`Đã chuyển ${selectedCount} ảnh sang thư mục mới!`);
   };
 
@@ -281,90 +297,138 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     showToast('Đã xuất thành công file JSON thư viện!');
   };
 
-  // Tự động quét và phân loại toàn bộ thư viện: Phân biệt Động tác mới vs Luyện tập vs Khởi động vs Vận dụng
+  // Tự động quét và phân loại toàn bộ thư viện thành 6 thư mục chuẩn SGK:
+  // Khởi động chung | Trò chơi khởi động | Kỹ thuật động tác | Luyện tập | Trò chơi vận động | Vận dụng
   const handleAutoClassifyAllImages = async () => {
     if (images.length === 0) return alert('Thư viện chưa có hình ảnh nào!');
     setIsProcessing(true);
-    showToast('Đang phân tích và tự động phân loại toàn bộ thư viện...');
+    showToast('Đang phân tích và chuẩn hóa phân loại 6 thư mục cho toàn bộ thư viện...');
 
+    const currentTree = getEffectiveSgkCurriculumTree();
     let countUpdated = 0;
+
     const updatedImages = images.map((img) => {
       let newFolder: SubFolderType = img.folder || 'kyThuat';
       let newCat: ImageCategory = img.category || 'dong_tac';
       let newTitle = img.title || '';
+      let nextTopicId = img.topicId;
+      let nextTopicTitle = img.topicTitle;
+      let nextLessonId = img.lessonId;
+      let nextLessonTitle = img.lessonTitle;
+
+      // Đồng bộ lại metadata Bài học từ số trang & Khối lớp nếu còn thiếu
+      if (img.page && img.page > 0) {
+        const matchedLesson = findSgkLessonByPage(Number(img.grade || 1), img.page, currentTree);
+        if (matchedLesson) {
+          if (!nextTopicId) nextTopicId = matchedLesson.topicId;
+          if (!nextTopicTitle) nextTopicTitle = matchedLesson.topicName;
+          if (!nextLessonId) nextLessonId = matchedLesson.id;
+          if (!nextLessonTitle) nextLessonTitle = matchedLesson.lessonName;
+        }
+      }
 
       const lowerTitle = (img.title || '').toLowerCase();
-      const lowerCaption = (img.caption || '').toLowerCase();
-      const text = `${lowerTitle} ${lowerCaption}`;
+      // Chỉ dùng phần mô tả riêng trước dấu '•' để không bị tên bài học gộp nhiều động tác làm nhiễu
+      const leadCaption = (img.caption || '').split('•')[0].toLowerCase();
+      const ownText = `${lowerTitle} ${leadCaption}`;
 
-      // 1. Phân loại Thư mục Luyện tập
+      // Ưu tiên kiểm tra theo thứ tự cụ thể -> tổng quát (tránh "trò chơi khởi động" bị rơi vào "khởi động")
       if (
-        text.includes('luyện tập') ||
-        text.includes('tập luyện') ||
-        text.includes('cặp đôi') ||
-        text.includes('tổ nhóm') ||
-        text.includes('theo tổ') ||
-        text.includes('4 khu vực') ||
-        text.includes('sửa sai') ||
-        text.includes('cá nhân')
+        ownText.includes('trò chơi khởi động') ||
+        ownText.includes('bổ trợ khởi động') ||
+        img.category === 'tro_choi_khoi_dong' ||
+        img.folder === 'troChoiKhoiDong'
+      ) {
+        newFolder = 'troChoiKhoiDong';
+        newCat = 'tro_choi_khoi_dong';
+      } else if (
+        ownText.includes('trò chơi vận động') ||
+        ownText.includes('mèo đuổi chuột') ||
+        ownText.includes('nhanh lên bạn ơi') ||
+        ownText.includes('đua ô tô') ||
+        ownText.includes('lò cò tiếp sức') ||
+        ownText.includes('chạy theo hình tam giác') ||
+        ownText.includes('về đúng nhà') ||
+        ownText.includes('chuyển bóng tiếp sức') ||
+        ownText.includes('trò chơi') ||
+        ownText.includes('tiếp sức') ||
+        img.category === 'tro_choi' ||
+        img.folder === 'troChoi'
+      ) {
+        newFolder = 'troChoi';
+        newCat = 'tro_choi';
+      } else if (
+        ownText.includes('luyện tập') ||
+        ownText.includes('tập luyện') ||
+        ownText.includes('cặp đôi') ||
+        ownText.includes('tổ nhóm') ||
+        ownText.includes('theo tổ') ||
+        ownText.includes('4 khu vực') ||
+        ownText.includes('sửa sai') ||
+        ownText.includes('cá nhân') ||
+        img.category === 'tap_luyen' ||
+        img.folder === 'luyenTap'
       ) {
         newFolder = 'luyenTap';
         newCat = 'tap_luyen';
-        countUpdated++;
-      }
-      // 2. Phân loại Khởi động
-      else if (
-        text.includes('khởi động') ||
-        text.includes('xoay khớp') ||
-        text.includes('làm nóng')
-      ) {
-        newFolder = 'khoiDong';
-        newCat = 'khoi_dong';
-        countUpdated++;
-      }
-      // 3. Phân loại Vận dụng
-      else if (
-        text.includes('vận dụng') ||
-        text.includes('thả lỏng') ||
-        text.includes('hồi tĩnh') ||
-        text.includes('buổi sáng')
+      } else if (
+        ownText.includes('vận dụng') ||
+        ownText.includes('thả lỏng') ||
+        ownText.includes('hồi tĩnh') ||
+        ownText.includes('câu hỏi vận dụng') ||
+        img.category === 'van_dung' ||
+        img.folder === 'vanDung'
       ) {
         newFolder = 'vanDung';
         newCat = 'van_dung';
-        countUpdated++;
-      }
-      // 4. Phân loại Trò chơi
-      else if (text.includes('trò chơi') || text.includes('tiếp sức') || text.includes('con thỏ')) {
-        newFolder = 'troChoi';
-        newCat = 'tro_choi';
-        countUpdated++;
-      }
-      // 5. Động tác kỹ thuật mới
-      else {
+      } else if (
+        ownText.includes('khởi động') ||
+        ownText.includes('xoay khớp') ||
+        ownText.includes('làm nóng') ||
+        img.category === 'khoi_dong' ||
+        img.folder === 'khoiDong'
+      ) {
+        newFolder = 'khoiDong';
+        newCat = 'khoi_dong';
+      } else {
         newFolder = 'kyThuat';
         newCat = 'dong_tac';
       }
 
-      // 6. Sửa tên mặc định chung chung (nếu dính "Thư mục ảnh Kỹ thuật động tác - Động tác vươn thở")
-      if (lowerTitle.includes('thư mục ảnh') || (lowerTitle.includes('động tác vươn thở') && !lowerCaption.includes('vươn thở'))) {
-        if (text.includes('tay')) {
+      if (newFolder !== img.folder || newCat !== img.category || nextLessonId !== img.lessonId) {
+        countUpdated++;
+      }
+
+      // Làm sạch tiêu đề mặc định quá chung chung dựa theo leadTitle + leadCaption
+      if (lowerTitle.includes('thư mục ảnh') || (lowerTitle.includes('động tác vươn thở') && !ownText.includes('vươn thở'))) {
+        if (ownText.includes('tay')) {
           newTitle = `Động tác Tay - SGK Lớp ${img.grade || 1}`;
-        } else if (text.includes('chân')) {
+        } else if (ownText.includes('chân')) {
           newTitle = `Động tác Chân - SGK Lớp ${img.grade || 1}`;
-        } else if (text.includes('lườn')) {
+        } else if (ownText.includes('lườn')) {
           newTitle = `Động tác Lườn - SGK Lớp ${img.grade || 1}`;
-        } else if (text.includes('bụng')) {
+        } else if (ownText.includes('bụng')) {
           newTitle = `Động tác Bụng - SGK Lớp ${img.grade || 1}`;
-        } else if (text.includes('đi đều')) {
+        } else if (ownText.includes('phối hợp')) {
+          newTitle = `Động tác Phối hợp - SGK Lớp ${img.grade || 1}`;
+        } else if (ownText.includes('nhảy')) {
+          newTitle = `Động tác Nhảy - SGK Lớp ${img.grade || 1}`;
+        } else if (ownText.includes('điều hòa') || ownText.includes('điều hoà')) {
+          newTitle = `Động tác Điều hòa - SGK Lớp ${img.grade || 1}`;
+        } else if (ownText.includes('đi đều')) {
           newTitle = `Động tác Đi đều, Đứng lại - SGK Lớp ${img.grade || 3}`;
-        } else if (text.includes('gậy')) {
+        } else if (ownText.includes('gậy')) {
           newTitle = `Động tác với gậy - SGK Lớp ${img.grade || 5}`;
-        } else if (text.includes('thăng bằng')) {
+        } else if (ownText.includes('thăng bằng')) {
           newTitle = `Động tác Thăng bằng - SGK Lớp ${img.grade || 1}`;
         } else if (newFolder === 'luyenTap') {
           newTitle = `Luyện tập bài học - SGK Lớp ${img.grade || 1}`;
+        } else if (newFolder === 'troChoiKhoiDong') {
+          newTitle = `Trò chơi khởi động - SGK Lớp ${img.grade || 1}`;
+        } else if (newFolder === 'troChoi') {
+          newTitle = `Trò chơi vận động - SGK Lớp ${img.grade || 1}`;
         } else if (newFolder === 'khoiDong') {
-          newTitle = `Khởi động bài học - SGK Lớp ${img.grade || 1}`;
+          newTitle = `Khởi động chung - SGK Lớp ${img.grade || 1}`;
         } else if (newFolder === 'vanDung') {
           newTitle = `Vận dụng thực tế - SGK Lớp ${img.grade || 1}`;
         }
@@ -372,6 +436,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
       return {
         ...img,
+        topicId: nextTopicId,
+        topicTitle: nextTopicTitle,
+        lessonId: nextLessonId,
+        lessonTitle: nextLessonTitle,
         folder: newFolder,
         category: newCat,
         title: newTitle
@@ -381,7 +449,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     setImages(updatedImages);
     await saveImagesDB(updatedImages);
     setIsProcessing(false);
-    showToast(`⚡ Đã tự động phân loại thành công ${updatedImages.length} ảnh vào đúng thư mục Kỹ thuật mới & Luyện tập!`);
+    showToast(`⚡ Đã chuẩn hóa phân loại ${updatedImages.length} ảnh (cập nhật ${countUpdated} mục) vào 6 thư mục SGK!`);
   };
 
   const handleUploadSingleImage = (file: File) => {
@@ -472,79 +540,34 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     }
   };
 
-  // Kiểm tra ảnh khớp chuẩn xác với thư mục bài học trong cây SGK
+  // Kiểm tra ảnh khớp chuẩn xác với thư mục bài học trong cây SGK (ưu tiên ID & trang, tránh nhầm tên bài)
   const checkImageMatchesFolder = (img: SgkImageItem, folder: SgkLessonFolder): boolean => {
-    // 1. Khối lớp bắt buộc khớp
-    if (String(img.grade) !== String(folder.grade)) return false;
-
-    // 2. Nếu cả 2 đều có topicId, nếu khác nhau thì KHÔNG khớp (tránh lẫn giữa Chủ đề 1 và Chủ đề 2 cùng khối)
-    if (img.topicId && folder.topicId && img.topicId !== folder.topicId && img.topicId !== folder.id) {
-      if (!(img.page && img.page >= folder.startPage && img.page <= folder.endPage)) {
-        return false;
-      }
-    }
-
-    // 3. Khớp chính xác ID bài học hoặc ID thư mục
-    if (img.lessonId === folder.id || (img.topicId === folder.topicId && img.lessonId === folder.lessonId)) {
-      return true;
-    }
-
-    // 4. Khớp theo khoảng trang SGK đã cấu hình
-    if (img.page && img.page >= folder.startPage && img.page <= folder.endPage) {
-      return true;
-    }
-
-    // 5. Khớp theo tên các động tác trọng tâm trong bài
-    const textCorpus = `${img.title} ${img.caption || ''} ${img.lessonTitle || ''}`.toLowerCase();
-    const hasMovementMatch = folder.movements.some((m) => {
-      const cleanM = m.toLowerCase().trim();
-      return cleanM.length > 3 && textCorpus.includes(cleanM);
-    });
-    if (hasMovementMatch) return true;
-
-    // 6. Khớp theo tên bài học (đã loại bỏ phần phụ lục như Tuần 8)
-    const cleanLessonName = folder.lessonName.toLowerCase().replace(/\s*\(.*?\)\s*/g, '').trim();
-    if (cleanLessonName.length > 5 && textCorpus.includes(cleanLessonName)) {
-      return true;
-    }
-
-    return false;
+    return doesImageBelongToSgkLesson(img, folder);
   };
 
-  // Kiểm tra ảnh khớp với thư mục con (Kỹ thuật / Luyện tập / Vận dụng / Trò chơi / Khởi động / Trò chơi khởi động)
+  // Kiểm tra ảnh khớp với thư mục con (6 nhánh chuẩn SGK)
   const checkImageMatchesSubFolder = (img: SgkImageItem, subFolder: string): boolean => {
     if (subFolder === 'all') return true;
-    if (img.folder) {
-      if (img.folder === subFolder) return true;
-      if (subFolder === 'kyThuat' && (img.folder === 'kyThuat' || img.category === 'dong_tac')) return true;
-      if (subFolder === 'luyenTap' && (img.folder === 'luyenTap' || img.category === 'tap_luyen')) return true;
-      if (subFolder === 'vanDung' && (img.folder === 'vanDung' || img.category === 'van_dung')) return true;
-      if (subFolder === 'troChoiKhoiDong' && (img.folder === 'troChoiKhoiDong' || img.category === 'tro_choi_khoi_dong')) return true;
-      if (subFolder === 'troChoi' && (img.folder === 'troChoi' || img.category === 'tro_choi')) return true;
-      if (subFolder === 'khoiDong' && (img.folder === 'khoiDong' || img.category === 'khoi_dong')) return true;
-    }
-
-    // Fallback theo category
-    if (subFolder === 'kyThuat') return img.category === 'dong_tac';
-    if (subFolder === 'luyenTap') return img.category === 'tap_luyen';
-    if (subFolder === 'vanDung') return img.category === 'van_dung';
-    if (subFolder === 'troChoiKhoiDong') return img.category === 'tro_choi_khoi_dong';
-    if (subFolder === 'troChoi') return img.category === 'tro_choi';
-    if (subFolder === 'khoiDong') return img.category === 'khoi_dong';
-
+    if (img.folder === subFolder) return true;
+    if (subFolder === 'kyThuat' && (img.folder === 'kyThuat' || img.category === 'dong_tac')) return true;
+    if (subFolder === 'luyenTap' && (img.folder === 'luyenTap' || img.category === 'tap_luyen')) return true;
+    if (subFolder === 'vanDung' && (img.folder === 'vanDung' || img.category === 'van_dung')) return true;
+    if (subFolder === 'troChoiKhoiDong' && (img.folder === 'troChoiKhoiDong' || img.category === 'tro_choi_khoi_dong')) return true;
+    if (subFolder === 'troChoi' && (img.folder === 'troChoi' || img.category === 'tro_choi')) return true;
+    if (subFolder === 'khoiDong' && (img.folder === 'khoiDong' || img.category === 'khoi_dong')) return true;
     return false;
   };
 
   // Helper counts
   const countByGrade = (g: string) => images.filter((img) => img.grade === g).length;
   const countByLesson = (lessonId: string) => {
-    const folder = sgkCurriculumTree.find((f) => f.id === lessonId);
+    const folder = effectiveTree.find((f) => f.id === lessonId);
     if (!folder) return 0;
     return images.filter((img) => checkImageMatchesFolder(img, folder)).length;
   };
 
   const countBySubFolder = (lessonId: string, subFolder: string) => {
-    const folder = sgkCurriculumTree.find((f) => f.id === lessonId);
+    const folder = effectiveTree.find((f) => f.id === lessonId);
     if (!folder) return 0;
     return images.filter((img) => checkImageMatchesFolder(img, folder) && checkImageMatchesSubFolder(img, subFolder)).length;
   };
@@ -566,7 +589,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
       // 3. Lesson / Tree filter
       let matchLesson = true;
       if (selectedLessonId !== 'all') {
-        const folder = sgkCurriculumTree.find((f) => f.id === selectedLessonId);
+        const folder = effectiveTree.find((f) => f.id === selectedLessonId);
         if (folder) {
           matchLesson = checkImageMatchesFolder(img, folder);
         }
@@ -580,7 +603,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
       return matchSearch && matchGrade && matchLesson && matchSubFolder;
     });
-  }, [images, searchTerm, filterGrade, selectedLessonId, selectedSubFolder]);
+  }, [images, searchTerm, filterGrade, selectedLessonId, selectedSubFolder, effectiveTree]);
 
   const folderBadge = (folder?: SubFolderType, cat?: ImageCategory) => {
     if (folder === 'kyThuat' || cat === 'dong_tac') {
@@ -596,7 +619,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
       return { label: '🎮 TRÒ CHƠI KHỞI ĐỘNG', color: 'bg-purple-100 text-purple-900 border-purple-300' };
     }
     if (folder === 'troChoi' || cat === 'tro_choi') {
-      return { label: '🎮 TRÒ CHƠI VẬN ĐỘNG', color: 'bg-purple-50 text-purple-800 border-purple-200' };
+      return { label: '🎮 TRÒ CHƠI VẬN ĐỘNG', color: 'bg-rose-50 text-rose-800 border-rose-200' };
     }
     return { label: '⚡ KHỞI ĐỘNG CHUNG', color: 'bg-sky-50 text-sky-800 border-sky-200' };
   };
@@ -605,19 +628,19 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     const parts = [];
     if (filterGrade !== 'all') parts.push(`Khối ${filterGrade}`);
     if (selectedLessonId !== 'all') {
-      const folder = sgkCurriculumTree.find((f) => f.id === selectedLessonId);
+      const folder = effectiveTree.find((f) => f.id === selectedLessonId);
       if (folder) parts.push(folder.lessonName);
     }
     if (selectedSubFolder !== 'all') {
-      if (selectedSubFolder === 'kyThuat') parts.push('🏃 Kỹ thuật động tác');
+      if (selectedSubFolder === 'kyThuat') parts.push('🏃 Động tác kỹ thuật');
       else if (selectedSubFolder === 'luyenTap') parts.push('👥 Luyện tập');
       else if (selectedSubFolder === 'vanDung') parts.push('🎯 Vận dụng');
       else if (selectedSubFolder === 'troChoiKhoiDong') parts.push('🎮 Trò chơi khởi động');
       else if (selectedSubFolder === 'troChoi') parts.push('🎮 Trò chơi vận động');
-      else if (selectedSubFolder === 'khoiDong') parts.push('⚡ Khởi động');
+      else if (selectedSubFolder === 'khoiDong') parts.push('⚡ Khởi động chung');
     }
     return parts.length > 0 ? parts.join(' > ') : 'Tất cả hình ảnh SGK';
-  }, [filterGrade, selectedLessonId, selectedSubFolder]);
+  }, [filterGrade, selectedLessonId, selectedSubFolder, effectiveTree]);
 
   return (
     <div className="space-y-6">
@@ -758,21 +781,43 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           </button>
         </div>
 
-        {/* Sub-folder Quick Filter Buttons */}
+        {/* Sub-folder Quick Filter Buttons (6 chuẩn SGK) */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
           <span className="text-slate-500 font-semibold mr-1 flex items-center gap-1">
-            <Tag className="w-3.5 h-3.5 text-purple-600" /> Thư Mục Con:
+            <Tag className="w-3.5 h-3.5 text-purple-600" /> 6 Thư Mục Con:
           </span>
 
           <button
             onClick={() => setSelectedSubFolder('all')}
             className={`px-2.5 py-1 rounded-lg font-semibold transition border text-[11px] ${
               selectedSubFolder === 'all'
-                ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                ? 'bg-slate-800 text-white border-slate-800 shadow-2xs'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
             }`}
           >
             Tất cả thư mục
+          </button>
+
+          <button
+            onClick={() => setSelectedSubFolder('khoiDong')}
+            className={`px-2.5 py-1 rounded-lg font-semibold transition border text-[11px] ${
+              selectedSubFolder === 'khoiDong'
+                ? 'bg-sky-600 text-white border-sky-600 shadow-2xs'
+                : 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100'
+            }`}
+          >
+            ⚡ Khởi Động Chung
+          </button>
+
+          <button
+            onClick={() => setSelectedSubFolder('troChoiKhoiDong')}
+            className={`px-2.5 py-1 rounded-lg font-semibold transition border text-[11px] ${
+              selectedSubFolder === 'troChoiKhoiDong'
+                ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                : 'bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            🔥 Trò Chơi Khởi Động
           </button>
 
           <button
@@ -794,7 +839,18 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                 : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
             }`}
           >
-            👥 Luyện Tập (Tổ / Nhóm / Cặp đôi)
+            👥 Luyện Tập (Nhóm / Tổ)
+          </button>
+
+          <button
+            onClick={() => setSelectedSubFolder('troChoi')}
+            className={`px-2.5 py-1 rounded-lg font-semibold transition border text-[11px] ${
+              selectedSubFolder === 'troChoi'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-2xs'
+                : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+            }`}
+          >
+            🎮 Trò Chơi Vận Động
           </button>
 
           <button
@@ -806,17 +862,6 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
             }`}
           >
             🎯 Vận Dụng Thực Tế
-          </button>
-
-          <button
-            onClick={() => setSelectedSubFolder('troChoi')}
-            className={`px-2.5 py-1 rounded-lg font-semibold transition border text-[11px] ${
-              selectedSubFolder === 'troChoi'
-                ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
-                : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
-            }`}
-          >
-            🎮 Trò Chơi Vận Động
           </button>
         </div>
 
@@ -949,7 +994,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                 <FolderOpen className="w-4 h-4" />
                 <span>Tất cả hình ảnh thư viện</span>
               </div>
-              <span className="text-[10px] opacity-80 bg-white/20 px-1.5 py-0.5 rounded-full font-bold">
+              <span className="text-[10px] opacity-85 bg-white/20 px-1.5 py-0.5 rounded font-bold tabular-nums">
                 {images.length}
               </span>
             </div>
@@ -959,7 +1004,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               const gradeStr = String(g);
               const isGradeExpanded = !!expandedGrades[gradeStr];
               const isGradeActive = filterGrade === gradeStr && selectedLessonId === 'all';
-              const gradeLessons = sgkCurriculumTree.filter((f) => f.grade === g);
+              const gradeLessons = effectiveTree.filter((f) => f.grade === g);
               const gCount = countByGrade(gradeStr);
 
               return (
@@ -984,7 +1029,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-bold">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-bold tabular-nums">
                         {gCount} ảnh
                       </span>
                       <button
@@ -1053,10 +1098,48 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                               </div>
                             </div>
 
-                            {/* 4 Standard Sub-folders inside each Lesson */}
+                            {/* 6 Standard Sub-folders inside each Lesson */}
                             {isLessonExpanded && (
                               <div className="pl-4 space-y-0.5 text-[10.5px]">
-                                {/* 1. Kỹ thuật động tác */}
+                                {/* 1. Khởi động chung */}
+                                <div
+                                  onClick={() => {
+                                    setFilterGrade(gradeStr);
+                                    setSelectedLessonId(lesson.id);
+                                    setSelectedSubFolder('khoiDong');
+                                  }}
+                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
+                                    selectedLessonId === lesson.id && selectedSubFolder === 'khoiDong'
+                                      ? 'bg-sky-600 text-white font-bold'
+                                      : 'hover:bg-sky-50 text-slate-600'
+                                  }`}
+                                >
+                                  <span>⚡ Khởi động chung</span>
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
+                                    {countBySubFolder(lesson.id, 'khoiDong')}
+                                  </span>
+                                </div>
+
+                                {/* 2. Trò chơi khởi động */}
+                                <div
+                                  onClick={() => {
+                                    setFilterGrade(gradeStr);
+                                    setSelectedLessonId(lesson.id);
+                                    setSelectedSubFolder('troChoiKhoiDong');
+                                  }}
+                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
+                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoiKhoiDong'
+                                      ? 'bg-purple-600 text-white font-bold'
+                                      : 'hover:bg-purple-50 text-slate-600'
+                                  }`}
+                                >
+                                  <span>🔥 Trò chơi khởi động</span>
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
+                                    {countBySubFolder(lesson.id, 'troChoiKhoiDong')}
+                                  </span>
+                                </div>
+
+                                {/* 3. Kỹ thuật động tác */}
                                 <div
                                   onClick={() => {
                                     setFilterGrade(gradeStr);
@@ -1070,12 +1153,12 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                                   }`}
                                 >
                                   <span>🏃 Động tác kỹ thuật</span>
-                                  <span className="text-[9px] opacity-75 font-semibold">
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
                                     {countBySubFolder(lesson.id, 'kyThuat')}
                                   </span>
                                 </div>
 
-                                {/* 2. Luyện tập */}
+                                {/* 4. Luyện tập */}
                                 <div
                                   onClick={() => {
                                     setFilterGrade(gradeStr);
@@ -1088,13 +1171,32 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                                       : 'hover:bg-amber-50 text-slate-600'
                                   }`}
                                 >
-                                  <span>👥 Luyện tập (Nhóm/Cặp)</span>
-                                  <span className="text-[9px] opacity-75 font-semibold">
+                                  <span>👥 Luyện tập (Nhóm/Tổ)</span>
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
                                     {countBySubFolder(lesson.id, 'luyenTap')}
                                   </span>
                                 </div>
 
-                                {/* 3. Vận dụng */}
+                                {/* 5. Trò chơi vận động */}
+                                <div
+                                  onClick={() => {
+                                    setFilterGrade(gradeStr);
+                                    setSelectedLessonId(lesson.id);
+                                    setSelectedSubFolder('troChoi');
+                                  }}
+                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
+                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoi'
+                                      ? 'bg-rose-600 text-white font-bold'
+                                      : 'hover:bg-rose-50 text-slate-600'
+                                  }`}
+                                >
+                                  <span>🎮 Trò chơi vận động</span>
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
+                                    {countBySubFolder(lesson.id, 'troChoi')}
+                                  </span>
+                                </div>
+
+                                {/* 6. Vận dụng */}
                                 <div
                                   onClick={() => {
                                     setFilterGrade(gradeStr);
@@ -1108,46 +1210,8 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                                   }`}
                                 >
                                   <span>🎯 Vận dụng thực tế</span>
-                                  <span className="text-[9px] opacity-75 font-semibold">
+                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
                                     {countBySubFolder(lesson.id, 'vanDung')}
-                                  </span>
-                                </div>
-
-                                 {/* 4. Trò chơi khởi động */}
-                                <div
-                                  onClick={() => {
-                                    setFilterGrade(gradeStr);
-                                    setSelectedLessonId(lesson.id);
-                                    setSelectedSubFolder('troChoiKhoiDong');
-                                  }}
-                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
-                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoiKhoiDong'
-                                      ? 'bg-purple-600 text-white font-bold'
-                                      : 'hover:bg-purple-50 text-slate-600'
-                                  }`}
-                                >
-                                  <span>🎮 Trò chơi khởi động</span>
-                                  <span className="text-[9px] opacity-75 font-semibold">
-                                    {countBySubFolder(lesson.id, 'troChoiKhoiDong')}
-                                  </span>
-                                </div>
-
-                                {/* 5. Trò chơi vận động */}
-                                <div
-                                  onClick={() => {
-                                    setFilterGrade(gradeStr);
-                                    setSelectedLessonId(lesson.id);
-                                    setSelectedSubFolder('troChoi');
-                                  }}
-                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
-                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoi'
-                                      ? 'bg-purple-600 text-white font-bold'
-                                      : 'hover:bg-purple-50 text-slate-600'
-                                  }`}
-                                >
-                                  <span>🏃 Trò chơi vận động</span>
-                                  <span className="text-[9px] opacity-75 font-semibold">
-                                    {countBySubFolder(lesson.id, 'troChoi')}
                                   </span>
                                 </div>
                               </div>
@@ -1201,6 +1265,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredImages.map((img) => {
                 const badge = folderBadge(img.folder, img.category);
+                const prov = resolveImageUsageProvenance(img);
                 return (
                   <div
                     key={img.id}
@@ -1218,32 +1283,39 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                             onChange={(e) => handleToggleSelectOne(img.id, e.target.checked)}
                             className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                           />
-                          <span className="text-[10px] font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded tabular-nums">
                             Khối Lớp {img.grade}
                           </span>
                         </label>
 
                         <span
-                          className={`text-[9.5px] font-bold px-2.5 py-0.5 rounded-full border ${badge.color}`}
+                          className={`text-[9.5px] font-bold px-2 py-0.5 rounded border ${badge.color}`}
                         >
                           {badge.label}
                         </span>
                       </div>
 
-                      {/* Image Preview Box */}
-                      <div className="relative group rounded-xl overflow-hidden bg-slate-50 border border-slate-100 h-44 flex items-center justify-center p-2">
-                        <img
-                          src={img.imgUrl}
-                          alt={img.title}
-                          className="max-h-full max-w-full object-contain rounded"
-                        />
-                        <button
-                          onClick={() => handleDeleteSingleImage(img.id)}
-                          className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition shadow-xs"
-                          title="Xóa ảnh khỏi thư viện"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      {/* Image Preview Box + Hover Usage Provenance Tooltip */}
+                      <div className="relative group group/imgtip">
+                        <div className="rounded-xl overflow-hidden bg-slate-50 border border-slate-100 h-44 flex items-center justify-center p-2">
+                          {img.imgUrl ? (
+                            <img
+                              src={img.imgUrl}
+                              alt={img.title}
+                              className="max-h-full max-w-full object-contain rounded"
+                            />
+                          ) : (
+                            <span className="text-[11px] text-slate-400">Chưa có ảnh</span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteSingleImage(img.id)}
+                            className="absolute top-2 right-2 bg-red-600 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition shadow-xs z-10"
+                            title="Xóa ảnh khỏi thư viện"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <ImageProvenanceTooltip image={img} position="bottom" />
                       </div>
 
                       {/* Image Info & Hierarchy Tags */}
@@ -1261,8 +1333,11 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                             <Edit3 className="w-3.5 h-3.5 text-amber-600" />
                           </button>
                         </div>
+                        <p className="text-[10px] font-semibold text-emerald-700 mt-1 tabular-nums truncate">
+                          {prov.weekLabel} · Chèn Mục {prov.slotCode}
+                        </p>
                         {img.lessonTitle && (
-                          <p className="text-[10px] font-semibold text-blue-700 mt-1 line-clamp-1">
+                          <p className="text-[10px] font-semibold text-blue-700 mt-0.5 line-clamp-1">
                             {img.lessonTitle}
                           </p>
                         )}
@@ -1369,12 +1444,26 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                           )}
                         </div>
 
-                        <button
-                          onClick={() => onOpenSelectCellModal(img)}
-                          className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
-                        >
-                          <PlusCircle className="w-3.5 h-3.5" /> Gắn Vào Kế Hoạch Bài Dạy
-                        </button>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setStudioRefImage(img)}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-2xs"
+                            title="Phân tích ảnh này để dựng sơ đồ trò chơi đội hình tương tác và lưu vào Kho"
+                          >
+                            <Compass className="w-3.5 h-3.5 text-amber-200" />
+                            <span>Tạo Sơ Đồ Trò Chơi</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => onOpenSelectCellModal(img)}
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-2xs"
+                          >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            <span>Gắn Vào Giáo Án</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1461,6 +1550,30 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
         onSave={handleSaveEditedImage}
         showToast={showToast}
       />
+
+      {/* Formation Studio from Reference Game Photo Modal */}
+      {studioRefImage && (
+        <FormationStudioModal
+          isOpen={true}
+          onClose={() => setStudioRefImage(null)}
+          targetRowIndex={studioRefImage.folder === 'troChoiKhoiDong' ? 0 : 3}
+          libraryImages={images}
+          grade={Number(studioRefImage.grade) || 1}
+          initialReferenceImage={studioRefImage}
+          openReferencePanelInitially={true}
+          onSaveToLibrary={(customFormation) => {
+            saveCustomFormationToStorage(customFormation);
+            showToast(`💾 Đã lưu sơ đồ "${customFormation.name}" vào Kho Sơ Đồ!`);
+          }}
+          onApplyFormationToRow={(rowIdx, customFormation) => {
+            saveCustomFormationToStorage(customFormation);
+            setStudioRefImage(null);
+            showToast(
+              `✨ Đã lưu sơ đồ "${customFormation.name}" vào Kho Sơ Đồ (Dòng ${rowIdx + 1})! Mở Kho Sơ Đồ ở giáo án để chèn vào Cột 4.`
+            );
+          }}
+        />
+      )}
     </div>
   );
 };

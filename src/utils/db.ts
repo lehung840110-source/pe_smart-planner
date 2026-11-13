@@ -43,6 +43,75 @@ function openDatabase(): Promise<IDBDatabase> {
   });
 }
 
+const MAX_LS_MIRROR_CHARS = 350_000;
+
+export function pruneDisposableLocalStorageCaches(): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    localStorage.removeItem('gdtc_user_custom_images');
+    localStorage.removeItem('gdtc_sgk_images');
+    const draftIdxRaw = localStorage.getItem('gdtc_draft_index');
+    if (draftIdxRaw) {
+      const keys: string[] = JSON.parse(draftIdxRaw);
+      if (Array.isArray(keys)) {
+        // Keep only the 3 smallest/most recent draft keys when reclaiming quota
+        while (keys.length > 3) {
+          const oldKey = keys.pop();
+          if (oldKey) localStorage.removeItem(`gdtc_v1_draft_${oldKey}`);
+        }
+        localStorage.setItem('gdtc_draft_index', JSON.stringify(keys));
+      }
+    }
+  } catch {
+    // ignore storage access errors
+  }
+}
+
+export function safeLocalStorageSet(key: string, value: string): boolean {
+  if (typeof window === 'undefined' || !window.localStorage) return false;
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    pruneDisposableLocalStorageCaches();
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function mirrorLightweightCustomImages(images: SgkImageItem[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const customImages = images.filter(isUserCustomImage);
+    if (customImages.length === 0) return;
+
+    // Only keep lightweight entries in localStorage mirror; IndexedDB holds full high-res base64 images
+    const compact: SgkImageItem[] = [];
+    let approxBytes = 2;
+    for (const img of customImages.slice(0, 40)) {
+      const urlLen = img.imgUrl?.length || 0;
+      if (urlLen > 80_000) continue;
+      const serialized = JSON.stringify(img);
+      if (approxBytes + serialized.length + 1 > MAX_LS_MIRROR_CHARS) break;
+      compact.push(img);
+      approxBytes += serialized.length + 1;
+    }
+
+    if (compact.length > 0) {
+      safeLocalStorageSet('gdtc_user_custom_images', JSON.stringify(compact));
+    } else {
+      // Remove stale bloated mirror key so small settings never hit QuotaExceededError
+      localStorage.removeItem('gdtc_user_custom_images');
+    }
+  } catch {
+    // IndexedDB already persisted all images cleanly
+  }
+}
+
 // --- Images Store Operations ---
 export async function getAllImagesDB(): Promise<SgkImageItem[]> {
   let idbImages: SgkImageItem[] = [];
@@ -55,8 +124,8 @@ export async function getAllImagesDB(): Promise<SgkImageItem[]> {
       req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
-  } catch (err) {
-    console.warn('Fallback to localStorage mirror due to IndexedDB read notice:', err);
+  } catch {
+    // Fallback to localStorage mirror silently
   }
 
   // Also check localStorage mirror for any user custom / scanned images
@@ -65,6 +134,10 @@ export async function getAllImagesDB(): Promise<SgkImageItem[]> {
     const raw = localStorage.getItem('gdtc_user_custom_images');
     if (raw) {
       customMirror = JSON.parse(raw);
+      // Clean up legacy multi-megabyte mirror key once IndexedDB already holds images
+      if (idbImages.length > 0 && raw.length > MAX_LS_MIRROR_CHARS) {
+        localStorage.removeItem('gdtc_user_custom_images');
+      }
     }
   } catch {
     // ignore JSON error
@@ -110,16 +183,14 @@ export async function saveImageDB(image: SgkImageItem): Promise<void> {
     tx.onabort = () => reject(new Error('Transaction aborted'));
   });
 
-  // Mirror custom images in localStorage for fail-safe persistence on Vercel
-  if (isUserCustomImage(image)) {
+  if (isUserCustomImage(image) && (image.imgUrl?.length || 0) <= 80_000) {
     try {
       const raw = localStorage.getItem('gdtc_user_custom_images');
       const list: SgkImageItem[] = raw ? JSON.parse(raw) : [];
       const updated = [image, ...list.filter((it) => it.id !== image.id)];
-      // Keep up to 60 most recent custom images in localStorage mirror
-      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(updated.slice(0, 60)));
-    } catch (e) {
-      console.warn('LocalStorage custom image mirror notice (IndexedDB preserved):', e);
+      mirrorLightweightCustomImages(updated);
+    } catch {
+      // IndexedDB preserved
     }
   }
 }
@@ -154,15 +225,7 @@ export async function saveImagesDB(images: SgkImageItem[]): Promise<void> {
     tx.onabort = () => reject(new Error('Transaction aborted'));
   });
 
-  // Sync ONLY user custom images to localStorage mirror (never bloat with factory defaults)
-  try {
-    const customImages = images.filter(isUserCustomImage);
-    if (customImages.length > 0) {
-      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(customImages.slice(0, 60)));
-    }
-  } catch (e) {
-    console.warn('LocalStorage custom images batch notice:', e);
-  }
+  mirrorLightweightCustomImages(images);
 }
 
 export async function deleteImageDB(id: string): Promise<void> {
@@ -181,7 +244,7 @@ export async function deleteImageDB(id: string): Promise<void> {
     if (raw) {
       const list: SgkImageItem[] = JSON.parse(raw);
       const filtered = list.filter((item) => item.id !== id);
-      localStorage.setItem('gdtc_user_custom_images', JSON.stringify(filtered));
+      safeLocalStorageSet('gdtc_user_custom_images', JSON.stringify(filtered));
     }
   } catch {}
 }

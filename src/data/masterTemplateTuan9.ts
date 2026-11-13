@@ -91,10 +91,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ trò chơi Lò cò tiếp sức'
       },
       {
-        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh:\n- Thả lỏng cơ toàn thân.\n4.2. Vận dụng:\n- Bài tập vận dụng SGK.\n4.3 Nhận xét ưu điểm, hạn chế và hướng dẫn tập luyện ngoài giờ.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh:\n- Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "5 - 6'\n2x8n",
-        gv: "- GV điều hành lớp thả lỏng cơ toàn thân, trả lời câu hỏi của HS.\n- Hướng dẫn học sinh làm bài tập và vận dụng động tác chân, vặn mình vào tập luyện ngoài giờ.\n- Nhận xét đánh giá chung và phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Thả lỏng tay, chân, điều hòa nhịp thở.\n- Đội hình nhận xét và kết thúc giờ học, lắng nghe dặn dò.",
+        gv: "- GV điều hành lớp thả lỏng toàn thân, hít thở sâu.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Nhận xét đánh giá chung và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Thả lỏng tay, chân, điều hòa nhịp thở.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Đội hình nhận xét và kết thúc giờ học.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }
@@ -183,10 +183,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ trò chơi Lò cò tiếp sức'
       },
       {
-        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng cơ toàn thân.\n4.2 Vận dụng: Nhận xét ưu điểm, hạn chế; hướng dẫn tập luyện ngoài giờ.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "5 - 6'\n2x8n",
-        gv: "- Điều hành lớp thả lỏng cơ toàn thân.\n- Hướng dẫn học sinh làm bài tập và vận dụng động tác bụng vào tập luyện ngoài giờ.\n- Trả lời các câu hỏi của học sinh; phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Thả lỏng tay chân, điều hòa cơ thể.\n- Tiếp thu, khắc phục nhược điểm khi tập luyện; nêu câu hỏi với GV.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- Nhận xét ưu điểm, hạn chế của tiết học và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Thả lỏng tay chân, điều hòa cơ thể.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Lắng nghe nhận xét chung và trật tự về lớp.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }
@@ -275,10 +275,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ trò chơi Đua ô tô & Chạy tiếp sức'
       },
       {
-        content: "4. Hoạt động vận dụng:\n4.1 Hồi tĩnh: Thả lỏng cơ toàn thân.\n4.2 Vận dụng:\n- Qua bài học HS vận dụng bài tập thể dục vào buổi sáng để rèn luyện sức khỏe và chơi trò chơi cùng các bạn trong giờ ra chơi.\n4.3 Nhận xét, đánh giá chung của buổi học; hướng dẫn tập luyện ở nhà.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng:\n4.1 Hồi tĩnh: Thả lỏng toàn thân.\n4.2 Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3 Nhận xét & Xuống lớp.",
         lvd: "4 - 6'\n2x8n",
-        gv: "- Điều hành lớp thả lỏng cơ toàn thân.\n- GV nhận xét kết quả, ý thức, thái độ của HS.\n- Hướng dẫn HS tập luyện ở nhà, phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Rũ tay, thả lỏng chân, hít thở sâu.\n- Đội hình nhận xét kết thúc giờ học; ghi nhớ bài tập về nhà.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), tổ chức cho học sinh quan sát và trả lời.\n- GV nhận xét kết quả, ý thức, thái độ của HS và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Rũ tay, thả lỏng chân, hít thở sâu.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa.\n- Đội hình nhận xét kết thúc giờ học.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }
@@ -367,10 +367,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ trò chơi Đua ô tô'
       },
       {
-        content: "4. Hoạt động vận dụng\n4.1 Hồi tĩnh: Thả lỏng cơ toàn thân.\n4.2. Vận dụng:\n- Qua bài học vận dụng bài tập thể dục vào buổi sáng để rèn luyện sức khỏe.\n4.3 Nhận xét, đánh giá chung của buổi học; hướng dẫn tự tập luyện ở nhà.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng\n4.1 Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3 Nhận xét & Xuống lớp.",
         lvd: "4 - 6'\n2x8n",
-        gv: "- Điều hành lớp thả lỏng cơ toàn thân.\n- Nêu câu hỏi vận dụng và tích hợp BVMT thu dọn dụng cụ để đúng nơi quy định.\n- Hỏi HS về cảm nhận giờ học, tuyên dương tổ tập tốt; dặn dò tập luyện ở nhà; phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Thả lỏng toàn thân, hít thở sâu.\n- Kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, cất dụng cụ.\n- Trình bày ý kiến và cảm nhận của mình về giờ học; đi thẳng hàng về lớp.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có) và tích hợp BVMT thu dọn dụng cụ để đúng nơi quy định.\n- Hỏi HS về cảm nhận giờ học, tuyên dương tổ tập tốt và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Thả lỏng toàn thân, hít thở sâu.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa; kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm, cất dụng cụ.\n- Trình bày ý kiến và cảm nhận của mình về giờ học; đi thẳng hàng về lớp.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }
@@ -459,10 +459,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Sơ đồ trò chơi Trao gậy tiếp sức'
       },
       {
-        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng cơ toàn thân.\n4.2. Vận dụng: Thực tế cuộc sống; tích hợp BVMT thu dọn dụng cụ gậy đúng nơi quy định.\n4.3. Nhận xét và hướng dẫn tự tập luyện ở nhà.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT thu dọn dụng cụ gậy đúng nơi quy định.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Điều hành lớp thả lỏng cơ toàn thân.\n- Nêu câu hỏi vận dụng kiến thức vào thực tế cuộc sống; nhắc HS nhặt rác, thu dọn gậy gọn gàng.\n- Hỏi HS về cảm nhận giờ học, nắm bắt và điều chỉnh; dặn dò tập luyện ở nhà; phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Rũ tay, thả lỏng chân, hít thở sâu.\n- Trả lời câu hỏi vận dụng vào thực tế đời sống; kiểm tra vệ sinh sân tập, thu dọn dụng cụ đúng nơi quy định.\n- Trả lời cảm nhận về giờ học; đi theo hàng về lớp.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có); nhắc HS nhặt rác, thu dọn gậy gọn gàng.\n- Hỏi HS về cảm nhận giờ học, nhận xét chung và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Rũ tay, thả lỏng chân, hít thở sâu.\n- Quan sát hình ảnh, trả lời câu hỏi vận dụng sách giáo khoa; kiểm tra vệ sinh sân tập, thu dọn dụng cụ đúng nơi quy định.\n- Trả lời cảm nhận về giờ học; đi theo hàng về lớp.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }
@@ -551,10 +551,10 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
         hsImgTitle: 'Đội hình chơi trò chơi Trao gậy tiếp sức'
       },
       {
-        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng cơ toàn thân.\n4.2. Vận dụng: Thực tế cuộc sống; tích hợp BVMT thu dọn dụng cụ đúng nơi quy định.\n4.4. Nhận xét và hướng dẫn tự tập luyện ở nhà.\nXuống lớp.",
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT thu dọn dụng cụ đúng nơi quy định.\n4.3. Nhận xét & Xuống lớp.",
         lvd: "4 - 5'",
-        gv: "- Điều hành lớp thả lỏng cơ toàn thân.\n- Nêu câu hỏi vận dụng kiến thức vào thực tế cuộc sống; nhắc HS nhặt vật nguy hiểm, cất gậy thể dục.\n- Trao đổi ngắn về cảm nhận giờ học, mức độ khó của động tác; dặn dò tập luyện ở nhà; phát lệnh xuống lớp.",
-        hs: "- Đội hình hồi tĩnh: Thả lỏng cơ bắp, điều hòa nhịp tim.\n- Trả lời câu hỏi vận dụng; kiểm tra vệ sinh sân tập và thu dọn dụng cụ sạch sẽ.\n- Trả lời cảm nhận về giờ học; đi theo hàng về lớp.",
+        gv: "- Điều hành lớp thả lỏng toàn thân.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có); nhắc HS nhặt vật nguy hiểm, cất gậy thể dục.\n- Trao đổi ngắn về cảm nhận giờ học, nhận xét chung và phát lệnh xuống lớp.",
+        hs: "- Đội hình hồi tĩnh: Thả lỏng chân tay, điều hòa nhịp tim.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa; kiểm tra vệ sinh sân tập và thu dọn dụng cụ sạch sẽ.\n- Trả lời cảm nhận về giờ học; đi theo hàng về lớp.",
         hsImgUrl: standardFormationDiagrams[15].svgDataUrl,
         hsImgTitle: 'Đội hình hồi tĩnh và kết thúc giờ học'
       }

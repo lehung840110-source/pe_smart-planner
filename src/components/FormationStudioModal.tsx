@@ -26,7 +26,15 @@ import {
   CheckCircle2,
   BoxSelect,
   AlignHorizontalDistributeCenter,
-  AlignVerticalDistributeCenter
+  AlignVerticalDistributeCenter,
+  Image as ImageIcon,
+  Upload,
+  Wand2,
+  FolderOpen,
+  Search,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import {
   FormationElement,
@@ -38,6 +46,7 @@ import {
 } from '../utils/formationStudioUtils';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
+import { SgkImageItem } from '../types/gdtc';
 
 interface FormationStudioModalProps {
   isOpen: boolean;
@@ -46,6 +55,10 @@ interface FormationStudioModalProps {
   initialFormation?: FormationDiagram | null;
   onApplyFormationToRow: (rowIndex: number, formation: FormationDiagram) => void;
   onSaveToLibrary?: (formation: FormationDiagram) => void;
+  libraryImages?: SgkImageItem[];
+  grade?: number;
+  initialReferenceImage?: SgkImageItem | null;
+  openReferencePanelInitially?: boolean;
 }
 
 export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
@@ -54,7 +67,11 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   targetRowIndex,
   initialFormation,
   onApplyFormationToRow,
-  onSaveToLibrary
+  onSaveToLibrary,
+  libraryImages = [],
+  grade,
+  initialReferenceImage = null,
+  openReferencePanelInitially = false
 }) => {
   // Theme & Canvas Metadata
   const [theme, setTheme] = useState<CourtTheme>('clean');
@@ -94,6 +111,35 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   // Toast notification inside modal
   const [toastNotice, setToastNotice] = useState<string | null>(null);
 
+  // Phase & Grade classification for created diagrams
+  const [diagramPhase, setDiagramPhase] = useState<FormationDiagram['phase']>(
+    initialFormation?.phase || 'dong_loat'
+  );
+  const [diagramGrade, setDiagramGrade] = useState<1 | 3 | 5 | 'all'>(() => {
+    if (initialFormation?.grade) return initialFormation.grade;
+    if (grade === 1 || grade === 3 || grade === 5) return grade;
+    return 'all';
+  });
+
+  // Reference Game Photo -> Editable Diagram state
+  const [isRefPanelOpen, setIsRefPanelOpen] = useState<boolean>(
+    Boolean(initialReferenceImage || openReferencePanelInitially)
+  );
+  const [refImageUrl, setRefImageUrl] = useState<string>(initialReferenceImage?.imgUrl || '');
+  const [refGameTitle, setRefGameTitle] = useState<string>(initialReferenceImage?.title || '');
+  const [refCaption, setRefCaption] = useState<string>(initialReferenceImage?.caption || '');
+  const [refGrade, setRefGrade] = useState<number>(() => {
+    const imgGrade = Number(initialReferenceImage?.grade);
+    if (imgGrade === 1 || imgGrade === 3 || imgGrade === 5) return imgGrade;
+    return grade === 1 || grade === 3 || grade === 5 ? grade : 1;
+  });
+  const [isAnalyzingRefImage, setIsAnalyzingRefImage] = useState<boolean>(false);
+  const [isLibraryRefPickerOpen, setIsLibraryRefPickerOpen] = useState<boolean>(false);
+  const [libSearch, setLibSearch] = useState<string>('');
+  const [libGradeFilter, setLibGradeFilter] = useState<string>(() => (grade ? String(grade) : 'all'));
+  const [libGameOnly, setLibGameOnly] = useState<boolean>(true);
+  const refFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const showToast = (msg: string) => {
@@ -110,17 +156,44 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     }
   }, [targetRowIndex]);
 
-  // Load initial formation if provided
+  // Load initial formation if provided (prioritize saved elements!)
   useEffect(() => {
     if (initialFormation) {
       setTitle(initialFormation.name);
       setSubtitle(initialFormation.description);
-      const matchPreset = formationStudioPresets.find((p) => p.name === initialFormation.name);
-      if (matchPreset) {
-        setElements(JSON.parse(JSON.stringify(matchPreset.elements)));
+      setDiagramPhase(initialFormation.phase || 'dong_loat');
+      setDiagramGrade(
+        initialFormation.grade ||
+          (grade === 1 || grade === 3 || grade === 5 ? grade : 'all')
+      );
+      if (initialFormation.elements && initialFormation.elements.length > 0) {
+        setElements(JSON.parse(JSON.stringify(initialFormation.elements)));
+      } else {
+        const matchPreset = formationStudioPresets.find((p) => p.name === initialFormation.name);
+        if (matchPreset) {
+          setElements(JSON.parse(JSON.stringify(matchPreset.elements)));
+        }
       }
     }
-  }, [initialFormation]);
+  }, [initialFormation, grade]);
+
+  // Load initial reference game image if passed (e.g. from Tab 2 Thư viện ảnh)
+  useEffect(() => {
+    if (initialReferenceImage) {
+      setIsRefPanelOpen(true);
+      setRefImageUrl(initialReferenceImage.imgUrl || '');
+      setRefGameTitle(initialReferenceImage.title || '');
+      setRefCaption(initialReferenceImage.caption || '');
+      const imgG = Number(initialReferenceImage.grade);
+      if (imgG === 1 || imgG === 3 || imgG === 5) {
+        setRefGrade(imgG);
+        setDiagramGrade(imgG);
+      }
+      setDiagramPhase(
+        initialReferenceImage.folder === 'troChoiKhoiDong' ? 'khoi_dong' : 'tro_choi'
+      );
+    }
+  }, [initialReferenceImage]);
 
   // Push to history before state changes
   const recordHistory = (newElements: FormationElement[]) => {
@@ -590,6 +663,106 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     }
   };
 
+  // Filtered library images for Game Reference Picker
+  const filteredRefLibraryImages = useMemo(() => {
+    return libraryImages.filter((img) => {
+      const matchesGrade = libGradeFilter === 'all' || String(img.grade) === libGradeFilter;
+      const isGame =
+        img.folder === 'troChoi' ||
+        img.folder === 'troChoiKhoiDong' ||
+        img.category === 'tro_choi' ||
+        img.category === 'tro_choi_khoi_dong' ||
+        /trò chơi/i.test(`${img.title} ${img.caption}`);
+      const matchesGame = !libGameOnly || isGame;
+      const q = libSearch.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        (img.title || '').toLowerCase().includes(q) ||
+        (img.caption || '').toLowerCase().includes(q) ||
+        (img.lessonTitle || '').toLowerCase().includes(q);
+      return matchesGrade && matchesGame && matchesSearch;
+    });
+  }, [libraryImages, libGradeFilter, libGameOnly, libSearch]);
+
+  // Upload or paste local game photo
+  const handleRefFileSelected = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setRefImageUrl(reader.result);
+        if (!refGameTitle.trim()) {
+          setRefGameTitle(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '));
+        }
+        showToast('Đã nạp ảnh trò chơi tham chiếu! Nhấn "AI Phân Tích & Dựng Sơ Đồ" để tạo sơ đồ.');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handlePasteRefImage = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.startsWith('image/')) {
+        const blob = items[i].getAsFile();
+        if (blob) {
+          e.preventDefault();
+          handleRefFileSelected(blob);
+          break;
+        }
+      }
+    }
+  };
+
+  // Analyze Reference Game Image -> Editable FormationElement[] Diagram
+  const handleAnalyzeGameReferenceImage = async () => {
+    if (!refImageUrl) {
+      showToast('Vui lòng chọn ảnh trò chơi từ Thư viện hoặc tải ảnh lên trước.');
+      return;
+    }
+    setIsAnalyzingRefImage(true);
+    try {
+      const res = await fetch('/api/ai/game-image-to-diagram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: refImageUrl,
+          gameTitle: refGameTitle.trim(),
+          caption: refCaption.trim(),
+          grade: refGrade
+        })
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.elements) && data.elements.length > 0) {
+        recordHistory(data.elements);
+        setTitle(data.name || (refGameTitle ? `SƠ ĐỒ TRÒ CHƠI: ${refGameTitle.toUpperCase()}` : 'SƠ ĐỒ TRÒ CHƠI VẬN ĐỘNG'));
+        setSubtitle(data.subtitle || data.description || `Khối ${refGrade} · Tham chiếu ảnh SGK`);
+        const nextPhase: FormationDiagram['phase'] =
+          data.phase === 'khoi_dong' ? 'khoi_dong' : 'tro_choi';
+        setDiagramPhase(nextPhase);
+        if (refGrade === 1 || refGrade === 3 || refGrade === 5) {
+          setDiagramGrade(refGrade);
+        }
+        setSelectedIds([]);
+        if (nextPhase === 'tro_choi' && currentRowIndex === 2) {
+          setCurrentRowIndex(3);
+        }
+        showToast(
+          data.usedFallback
+            ? 'Đã dựng sơ đồ trò chơi mẫu chuẩn theo tên & nội dung ảnh! Thầy/Cô có thể kéo thả chỉnh sửa.'
+            : '✨ AI đã phân tích bố cục ảnh trò chơi & dựng sơ đồ vector tương tác! Có thể kéo thả chỉnh sửa.'
+        );
+      } else {
+        showToast('Không thể phân tích ảnh trò chơi này, vui lòng thử lại.');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Lỗi kết nối khi phân tích ảnh trò chơi.');
+    } finally {
+      setIsAnalyzingRefImage(false);
+    }
+  };
+
   // Current Generated SVG Data URL
   const currentSvgDataUrl = useMemo(() => {
     return renderFormationSvgString(elements, theme, title, subtitle);
@@ -616,10 +789,12 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     const diagram: FormationDiagram = {
       id: `dh_custom_${Date.now()}`,
       name: title,
-      code: 'DH_CUSTOM',
-      phase: 'dong_loat',
+      code: diagramPhase === 'tro_choi' ? 'DH_TC_CUSTOM' : 'DH_CUSTOM',
+      phase: diagramPhase,
+      grade: diagramGrade,
       description: subtitle,
-      svgDataUrl: currentSvgDataUrl
+      svgDataUrl: currentSvgDataUrl,
+      elements: JSON.parse(JSON.stringify(elements))
     };
 
     saveCustomFormationToStorage(diagram);
@@ -638,10 +813,12 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     const diagram: FormationDiagram = {
       id: `dh_custom_${Date.now()}`,
       name: title,
-      code: 'DH_CUSTOM',
-      phase: 'dong_loat',
+      code: diagramPhase === 'tro_choi' ? 'DH_TC_CUSTOM' : 'DH_CUSTOM',
+      phase: diagramPhase,
+      grade: diagramGrade,
       description: subtitle,
-      svgDataUrl: currentSvgDataUrl
+      svgDataUrl: currentSvgDataUrl,
+      elements: JSON.parse(JSON.stringify(elements))
     };
 
     saveCustomFormationToStorage(diagram);
@@ -791,6 +968,22 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
             </button>
           </div>
 
+          {/* Toggle Reference Game Image -> Diagram Drawer */}
+          <button
+            type="button"
+            onClick={() => setIsRefPanelOpen((v) => !v)}
+            className={`px-2.5 py-1 rounded-lg font-bold text-xs flex items-center gap-1.5 border transition whitespace-nowrap cursor-pointer ${
+              isRefPanelOpen || refImageUrl
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'
+            }`}
+            title="Chọn ảnh trò chơi từ thư viện hoặc tải ảnh lên để AI phân tích dựng thành sơ đồ trò chơi"
+          >
+            <ImageIcon className="w-3.5 h-3.5" />
+            <span>Tạo Từ Ảnh Trò Chơi</span>
+            {isRefPanelOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
           {/* Theme Switcher */}
           <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-300">
             <button
@@ -819,6 +1012,101 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Collapsible Reference Game Photo -> Diagram Bar */}
+        {isRefPanelOpen && (
+          <div
+            onPaste={handlePasteRefImage}
+            className="bg-emerald-50/80 border-b border-emerald-200 px-3 py-2 flex flex-wrap items-center gap-3 text-xs shrink-0"
+          >
+            <input
+              ref={refFileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files[0]) {
+                  handleRefFileSelected(e.target.files[0]);
+                }
+              }}
+            />
+
+            {/* Preview Thumbnail */}
+            <div className="w-24 h-16 rounded-lg border border-emerald-300 bg-white flex items-center justify-center overflow-hidden shrink-0">
+              {refImageUrl ? (
+                <img src={refImageUrl} alt="Ảnh trò chơi tham chiếu" className="w-full h-full object-contain" />
+              ) : (
+                <span className="text-[10px] text-slate-400 text-center px-1">Chưa có ảnh</span>
+              )}
+            </div>
+
+            {/* Source Buttons & Game Metadata */}
+            <div className="flex-1 min-w-[240px] space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsLibraryRefPickerOpen(true)}
+                  className="bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition"
+                >
+                  <FolderOpen className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Chọn từ Thư Viện ({libraryImages.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => refFileInputRef.current?.click()}
+                  className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition"
+                >
+                  <Upload className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Tải ảnh / Dán (Ctrl+V)</span>
+                </button>
+                <select
+                  value={refGrade}
+                  onChange={(e) => setRefGrade(Number(e.target.value))}
+                  className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-bold text-slate-700"
+                >
+                  <option value={1}>Khối 1</option>
+                  <option value={3}>Khối 3</option>
+                  <option value={5}>Khối 5</option>
+                </select>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <input
+                  type="text"
+                  value={refGameTitle}
+                  onChange={(e) => setRefGameTitle(e.target.value)}
+                  placeholder="Tên trò chơi (VD: Đua ô tô, Mèo đuổi chuột, Chui qua hầm...)"
+                  className="flex-1 min-w-[180px] bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-800"
+                />
+                <input
+                  type="text"
+                  value={refCaption}
+                  onChange={(e) => setRefCaption(e.target.value)}
+                  placeholder="Ghi chú đội hình / dụng cụ (tuỳ chọn)"
+                  className="w-48 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-700"
+                />
+                <button
+                  type="button"
+                  disabled={!refImageUrl || isAnalyzingRefImage}
+                  onClick={handleAnalyzeGameReferenceImage}
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 text-white font-bold px-3 py-1 rounded-lg flex items-center gap-1.5 shadow-sm cursor-pointer transition whitespace-nowrap"
+                >
+                  {isAnalyzingRefImage ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Đang phân tích ảnh...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-3.5 h-3.5 text-amber-300" />
+                      <span>Phân Tích & Dựng Sơ Đồ</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Workspace Body - Flex-1 and min-h-0 so it NEVER overflows */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col lg:flex-row bg-slate-50">
@@ -985,22 +1273,52 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
           {/* Center Canvas Area - Auto scales to fit without overflowing */}
           <div className="flex-1 min-h-0 p-2 sm:p-3 flex flex-col items-center justify-center overflow-hidden bg-slate-100/70">
             
-            {/* Inline Title / Subtitle editors */}
-            <div className="w-full max-w-[620px] flex gap-2 mb-1.5 text-xs shrink-0">
+            {/* Inline Title / Subtitle / Grade / Phase editors */}
+            <div className="w-full max-w-[640px] flex flex-wrap gap-1.5 mb-1.5 text-xs shrink-0">
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Tiêu đề sơ đồ (VD: SƠ ĐỒ ĐỘI HÌNH 4 HÀNG DỌC)"
-                className="flex-1 bg-white border border-slate-300 rounded-lg px-2.5 py-1 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                placeholder="Tiêu đề sơ đồ (VD: SƠ ĐỒ TRÒ CHƠI ĐUA Ô TÔ)"
+                className="flex-1 min-w-[190px] bg-white border border-slate-300 rounded-lg px-2.5 py-1 font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
               />
               <input
                 type="text"
                 value={subtitle}
                 onChange={(e) => setSubtitle(e.target.value)}
-                placeholder="Ghi chú phụ (VD: Cự ly 1 cánh tay)"
-                className="w-44 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
+                placeholder="Ghi chú phụ"
+                className="w-36 bg-white border border-slate-300 rounded-lg px-2 py-1 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-2xs"
               />
+              <select
+                value={String(diagramGrade)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setDiagramGrade(v === 'all' ? 'all' : (Number(v) as 1 | 3 | 5));
+                }}
+                className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-bold text-slate-700"
+                title="Gắn thẻ Khối lớp cho sơ đồ trong Kho"
+              >
+                <option value="all">Chung (Tất cả khối)</option>
+                <option value="1">Khối 1</option>
+                <option value="3">Khối 3</option>
+                <option value="5">Khối 5</option>
+              </select>
+              <select
+                value={diagramPhase}
+                onChange={(e) => setDiagramPhase(e.target.value as FormationDiagram['phase'])}
+                className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-semibold text-slate-700"
+                title="Phân loại mục hoạt động của sơ đồ"
+              >
+                <option value="tro_choi">🎮 Trò chơi vận động</option>
+                <option value="khoi_dong">⚡ Khởi động / TC KĐ</option>
+                <option value="nhan_lop">📋 Nhận lớp</option>
+                <option value="tap_mau">👀 Quan sát mẫu</option>
+                <option value="dong_loat">🏃 Tập đồng loạt</option>
+                <option value="to_nhom">👥 Tập theo tổ</option>
+                <option value="cap_doi">🤝 Cặp đôi</option>
+                <option value="thi_dua">⭐ Thi đua</option>
+                <option value="hoi_tinh">🍃 Hồi tĩnh & Xuống lớp</option>
+              </select>
             </div>
 
             {/* Quick Canvas Toolbar: Marquee hints & Select all */}
@@ -1832,6 +2150,103 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Inline Reference Image Picker Modal (from Thư Viện Ảnh) */}
+        {isLibraryRefPickerOpen && (
+          <div
+            className="fixed inset-0 z-70 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3"
+            onClick={() => setIsLibraryRefPickerOpen(false)}
+          >
+            <div
+              className="bg-white rounded-2xl max-w-4xl w-full max-h-[82vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-3 bg-slate-900 text-white flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-emerald-400" />
+                  <h4 className="font-bold text-sm">Chọn Ảnh Trò Chơi Tham Chiếu Từ Thư Viện</h4>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsLibraryRefPickerOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-2 text-xs">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
+                  <input
+                    type="text"
+                    value={libSearch}
+                    onChange={(e) => setLibSearch(e.target.value)}
+                    placeholder="Tìm tên trò chơi hoặc bài học..."
+                    className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-1.5 text-xs"
+                  />
+                </div>
+                <select
+                  value={libGradeFilter}
+                  onChange={(e) => setLibGradeFilter(e.target.value)}
+                  className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 font-bold"
+                >
+                  <option value="all">Tất cả khối</option>
+                  <option value="1">Khối 1</option>
+                  <option value="3">Khối 3</option>
+                  <option value="5">Khối 5</option>
+                </select>
+                <label className="flex items-center gap-1.5 font-semibold text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={libGameOnly}
+                    onChange={(e) => setLibGameOnly(e.target.checked)}
+                    className="rounded text-emerald-600"
+                  />
+                  <span>Chỉ ảnh Trò chơi</span>
+                </label>
+              </div>
+
+              <div className="p-3 overflow-y-auto flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-100/60">
+                {filteredRefLibraryImages.length === 0 ? (
+                  <div className="col-span-full py-12 text-center text-xs text-slate-500">
+                    Chưa tìm thấy ảnh phù hợp. Thử bỏ chọn "Chỉ ảnh Trò chơi" hoặc tải ảnh trực tiếp từ máy tính.
+                  </div>
+                ) : (
+                  filteredRefLibraryImages.map((img) => (
+                    <button
+                      type="button"
+                      key={img.id}
+                      onClick={() => {
+                        setRefImageUrl(img.imgUrl);
+                        setRefGameTitle(img.title);
+                        setRefCaption(img.caption || '');
+                        const imgG = Number(img.grade);
+                        if (imgG === 1 || imgG === 3 || imgG === 5) {
+                          setRefGrade(imgG);
+                          setDiagramGrade(imgG);
+                        }
+                        setDiagramPhase(img.folder === 'troChoiKhoiDong' ? 'khoi_dong' : 'tro_choi');
+                        setIsLibraryRefPickerOpen(false);
+                        showToast(`Đã chọn ảnh "${img.title}"! Nhấn "Phân Tích & Dựng Sơ Đồ" để tạo sơ đồ.`);
+                      }}
+                      className="text-left bg-white rounded-xl border border-slate-200 hover:border-emerald-500 p-2 flex flex-col gap-1.5 transition shadow-2xs cursor-pointer"
+                    >
+                      <div className="h-28 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden p-1">
+                        <img src={img.imgUrl} alt={img.title} className="max-h-full max-w-full object-contain" />
+                      </div>
+                      <div className="flex items-center justify-between gap-1 text-[10px] font-bold">
+                        <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">Khối {img.grade}</span>
+                        <span className="text-emerald-700 truncate">{img.folder === 'troChoiKhoiDong' ? 'TC Khởi động' : img.folder === 'troChoi' ? 'TC Vận động' : img.folder}</span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-800 line-clamp-2">{img.title}</p>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

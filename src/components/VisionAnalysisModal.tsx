@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Check, ArrowRight, Activity, BookOpen, Users, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Sparkles, Check, Activity, BookOpen, Users, Calendar, MapPin, FileText } from 'lucide-react';
 import { SgkImageItem, LessonRow, ImageCategory } from '../types/gdtc';
+import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 
 export interface VisionAnalysisResult {
   name: string;
@@ -47,134 +48,172 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
   const [gvScript, setGvScript] = useState<string>('');
   const [hsScript, setHsScript] = useState<string>('');
 
-  // Find optimal row index based on category and title keywords
+  const provenance = useMemo(
+    () => (imageItem ? resolveImageUsageProvenance(imageItem) : null),
+    [imageItem]
+  );
+
+  // Find optimal row index based strictly on category and specific row markers (never match 1.3 for Trò chơi vận động!)
   const findOptimalRow = (cat: ImageCategory, movementTitle: string) => {
-    const raw = `${movementTitle} ${imageItem?.title || ''} ${imageItem?.caption || ''}`.toLowerCase();
+    const capHead = (imageItem?.caption || '').split('•')[0] || '';
+    const raw = `${movementTitle} ${imageItem?.title || ''} ${capHead}`.toLowerCase();
     let idx = -1;
 
-    if (raw.includes('cặp đôi') || raw.includes('cap doi') || raw.includes('đối diện')) {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('cặp đôi') || r.content.includes('3.3')
-      );
+    if (cat === 'khoi_dong') {
+      idx = lessonRows.findIndex((r) => r.content.includes('1.2'));
       if (idx === -1) {
         idx = lessonRows.findIndex(
-          (r) => r.content.toLowerCase().includes('luyện tập') || r.content.includes('3.')
+          (r) =>
+            r.content.toLowerCase().includes('khởi động') &&
+            !r.content.includes('1.1') &&
+            !r.content.includes('1.3')
         );
       }
-    } else if (raw.includes('theo tổ') || raw.includes('tổ nhóm') || raw.includes('to nhom') || raw.includes('4 góc')) {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('theo tổ') || r.content.toLowerCase().includes('tổ nhóm') || r.content.includes('3.2')
-      );
+    } else if (cat === 'tro_choi_khoi_dong') {
+      idx = lessonRows.findIndex((r) => r.content.includes('1.3'));
       if (idx === -1) {
-        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.toLowerCase().includes('trò chơi') &&
+            r.content.toLowerCase().includes('khởi động')
+        );
       }
-    } else if (raw.includes('đồng loạt') || raw.includes('dong loat') || raw.includes('cả lớp')) {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('đồng loạt') || r.content.includes('3.1')
-      );
+    } else if (cat === 'tro_choi') {
+      idx = lessonRows.findIndex((r) => r.content.includes('3.5'));
       if (idx === -1) {
-        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.toLowerCase().includes('trò chơi vận động') ||
+            (r.content.includes('3.4') && r.content.toLowerCase().includes('trò chơi'))
+        );
+      }
+      if (idx === -1) {
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.toLowerCase().includes('trò chơi') &&
+            !r.content.includes('1.3') &&
+            !r.content.toLowerCase().includes('khởi động')
+        );
       }
     } else if (cat === 'tap_luyen') {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('luyện tập') || r.content.includes('3.')
-      );
-    } else if (cat === 'tro_choi' || cat === 'tro_choi_khoi_dong') {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('trò chơi') || r.content.includes('3.5') || r.content.includes('3.4')
-      );
+      if (raw.includes('cặp đôi') || raw.includes('cap doi') || raw.includes('đối diện')) {
+        idx = lessonRows.findIndex(
+          (r) => r.content.includes('3.3') || r.content.toLowerCase().includes('cặp đôi')
+        );
+      } else if (raw.includes('đồng loạt') || raw.includes('dong loat') || raw.includes('cả lớp')) {
+        idx = lessonRows.findIndex(
+          (r) => r.content.includes('3.1') || r.content.toLowerCase().includes('đồng loạt')
+        );
+      } else {
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.includes('3.2') ||
+            r.content.toLowerCase().includes('theo tổ') ||
+            r.content.toLowerCase().includes('tổ nhóm')
+        );
+      }
       if (idx === -1) {
-        idx = lessonRows.findIndex((r) => r.content.toLowerCase().includes('luyện tập'));
+        idx = lessonRows.findIndex(
+          (r) =>
+            (r.content.toLowerCase().includes('luyện tập') || r.content.includes('3.')) &&
+            !r.content.includes('3.5')
+        );
       }
     } else if (cat === 'van_dung') {
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('vận dụng') || r.content.toLowerCase().includes('hồi tĩnh') || r.content.includes('4.')
-      );
+      idx = lessonRows.findIndex((r) => r.content.includes('4.2'));
+      if (idx === -1) {
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.toLowerCase().includes('vận dụng') ||
+            r.content.toLowerCase().includes('hồi tĩnh') ||
+            r.content.includes('4.')
+        );
+      }
     } else {
-      // dong_tac: Mục 2 Hình thành kiến thức
-      idx = lessonRows.findIndex(
-        (r) => r.content.toLowerCase().includes('hình thành kiến thức') || r.content.toLowerCase().includes('khám phá') || r.content.includes('2.')
-      );
+      // dong_tac: Mục 2.1 Hình thành kiến thức mới
+      idx = lessonRows.findIndex((r) => r.content.includes('2.1'));
+      if (idx === -1) {
+        idx = lessonRows.findIndex(
+          (r) =>
+            r.content.toLowerCase().includes('hình thành kiến thức') ||
+            r.content.toLowerCase().includes('khám phá') ||
+            r.content.includes('2.')
+        );
+      }
     }
 
     if (idx !== -1) return idx;
-    if (cat === 'tro_choi') return Math.min(3, lessonRows.length - 1);
-    if (cat === 'tap_luyen') return Math.min(2, lessonRows.length - 1);
+    if (cat === 'khoi_dong') return Math.min(1, lessonRows.length - 1);
+    if (cat === 'tro_choi_khoi_dong') return Math.min(2, lessonRows.length - 1);
+    if (cat === 'tap_luyen') return Math.min(4, lessonRows.length - 1);
+    if (cat === 'tro_choi') return Math.max(0, lessonRows.length - 2);
     if (cat === 'van_dung') return Math.max(0, lessonRows.length - 1);
-    return Math.min(1, lessonRows.length - 1);
+    return Math.min(3, lessonRows.length - 1);
   };
 
   useEffect(() => {
     if (analysis) {
       let effCat: ImageCategory = analysis.category;
-      let effCol: 'content' | 'hs' = analysis.targetColumn;
+      let effCol: 'content' | 'hs' = 'content';
       let effName = analysis.name || 'Động tác kỹ thuật SGK';
       let effLvd = analysis.lvd || "5 - 7'";
-      let effGv = analysis.gvScript || '';
-      let effHs = analysis.hsScript || '';
+      const effGv = analysis.gvScript || '';
+      const effHs = analysis.hsScript || '';
 
-      const combinedText = `${effName} ${imageItem?.title || ''} ${imageItem?.caption || ''} ${imageItem?.folder || ''}`.toLowerCase();
-
-      const isPairPractice =
-        combinedText.includes('cặp đôi') ||
-        combinedText.includes('cap doi') ||
-        combinedText.includes('đối diện') ||
-        combinedText.includes('doi dien');
-
-      const isGroupPractice =
-        combinedText.includes('theo tổ') ||
-        combinedText.includes('tổ nhóm') ||
-        combinedText.includes('to nhom') ||
-        combinedText.includes('4 góc');
-
-      const isMassPractice =
-        combinedText.includes('đồng loạt') ||
-        combinedText.includes('dong loat') ||
-        combinedText.includes('cả lớp');
-
-      const isGame =
-        effCat === 'tro_choi' ||
-        effCat === 'tro_choi_khoi_dong' ||
-        combinedText.includes('trò chơi') ||
-        combinedText.includes('tiếp sức') ||
-        combinedText.includes('kéo co') ||
-        combinedText.includes('con sâu');
-
-      const isVanDung =
-        effCat === 'van_dung' ||
-        combinedText.includes('vận dụng') ||
-        combinedText.includes('hồi tĩnh') ||
-        combinedText.includes('chào cờ');
-
-      if (isPairPractice) {
-        effCat = 'tap_luyen';
-        effCol = 'hs';
-        if (!effName || effName.includes('Động tác')) {
-          effName = 'Luyện tập cặp đôi sửa sai cho nhau';
-        }
-        effLvd = "3 - 5' (2 - 3 lượt đổi vai)";
-      } else if (isGroupPractice) {
-        effCat = 'tap_luyen';
-        effCol = 'hs';
-        if (!effName || effName.includes('Động tác')) {
-          effName = 'Luyện tập theo tổ nhóm 4 góc sân';
-        }
-        effLvd = "4 - 6' (3 - 4 lần)";
-      } else if (isMassPractice) {
-        effCat = 'tap_luyen';
-        effCol = 'hs';
-        if (!effName || effName.includes('Động tác')) {
-          effName = 'Luyện tập đồng loạt cả lớp 4 hàng ngang';
-        }
-        effLvd = "5 - 7' (2x8 nhịp/động tác)";
-      } else if (isGame) {
+      // 1. Always honor explicit folder/category stored on imageItem FIRST
+      if (imageItem?.folder === 'khoiDong' || imageItem?.category === 'khoi_dong') {
+        effCat = 'khoi_dong';
+        effCol = 'content';
+      } else if (imageItem?.folder === 'troChoiKhoiDong' || imageItem?.category === 'tro_choi_khoi_dong') {
+        effCat = 'tro_choi_khoi_dong';
+        effCol = 'content';
+      } else if (imageItem?.folder === 'troChoi' || imageItem?.category === 'tro_choi') {
         effCat = 'tro_choi';
-        effCol = 'hs';
+        effCol = 'content';
         effLvd = "4 - 6' (2 - 3 lượt chơi)";
-      } else if (isVanDung) {
+      } else if (imageItem?.folder === 'luyenTap' || imageItem?.category === 'tap_luyen') {
+        effCat = 'tap_luyen';
+        effCol = 'content';
+      } else if (imageItem?.folder === 'vanDung' || imageItem?.category === 'van_dung') {
         effCat = 'van_dung';
-        effCol = 'hs';
+        effCol = 'content';
         effLvd = "2 - 3'";
+      } else if (imageItem?.folder === 'kyThuat' || imageItem?.category === 'dong_tac') {
+        effCat = 'dong_tac';
+        effCol = 'content';
+      } else {
+        // 2. Fallback keyword classification strictly on title + first sentence of caption
+        const capHead = (imageItem?.caption || '').split('•')[0] || '';
+        const combinedText = `${effName} ${imageItem?.title || ''} ${capHead}`.toLowerCase();
+
+        if (combinedText.includes('trò chơi') && combinedText.includes('khởi động')) {
+          effCat = 'tro_choi_khoi_dong';
+          effLvd = "3 - 4'";
+        } else if (combinedText.includes('khởi động') || combinedText.includes('xoay khớp')) {
+          effCat = 'khoi_dong';
+          effLvd = "3 - 4'";
+        } else if (
+          combinedText.includes('cặp đôi') ||
+          combinedText.includes('theo tổ') ||
+          combinedText.includes('tổ nhóm') ||
+          combinedText.includes('đồng loạt') ||
+          combinedText.includes('luyện tập')
+        ) {
+          effCat = 'tap_luyen';
+          effLvd = "4 - 6'";
+        } else if (
+          combinedText.includes('trò chơi') ||
+          combinedText.includes('tiếp sức') ||
+          combinedText.includes('kéo co') ||
+          combinedText.includes('lò cò')
+        ) {
+          effCat = 'tro_choi';
+          effLvd = "4 - 6' (2 - 3 lượt chơi)";
+        } else if (combinedText.includes('vận dụng') || combinedText.includes('hồi tĩnh')) {
+          effCat = 'van_dung';
+          effLvd = "2 - 3'";
+        }
+        effCol = 'content';
       }
 
       setCurrentCategory(effCat);
@@ -187,32 +226,32 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
       const matchedIdx = findOptimalRow(effCat, effName);
       setSelectedRowIndex(matchedIdx);
     }
-  }, [analysis, imageItem]);
+  }, [analysis, imageItem, lessonRows]);
 
   if (!isOpen || !imageItem || !analysis) return null;
 
   const handleCategoryChange = (newCat: ImageCategory) => {
     setCurrentCategory(newCat);
-    if (newCat === 'dong_tac') {
-      setTargetColumn('content');
-    } else {
-      setTargetColumn('hs');
-    }
+    // All 6 SGK picture types align cleanly in Column 1 (Nội dung & Hình ảnh) unless user switches to Column 4
+    setTargetColumn('content');
     const matchedIdx = findOptimalRow(newCat, name);
     setSelectedRowIndex(matchedIdx);
   };
 
   const getCategoryBadge = (cat?: ImageCategory) => {
     switch (cat) {
-      case 'dong_tac':
-        return { label: '🎯 Hình ảnh động tác kỹ thuật mới (Cột 1)', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
-      case 'tap_luyen':
-        return { label: '👥 Hình ảnh tập luyện động tác (Cột 4)', bg: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
-      case 'tro_choi':
+      case 'khoi_dong':
+        return { label: '🔥 Khởi động chung (Mục 1.2 - Cột 1)', bg: 'bg-orange-100 text-orange-800 border-orange-200' };
       case 'tro_choi_khoi_dong':
-        return { label: '🏆 Hình ảnh trò chơi vận động (Cột 4)', bg: 'bg-amber-100 text-amber-800 border-amber-200' };
+        return { label: '⚡ Trò chơi khởi động (Mục 1.3 - Cột 1)', bg: 'bg-yellow-100 text-yellow-800 border-yellow-200' };
+      case 'dong_tac':
+        return { label: '🎯 Động tác kỹ thuật mới (Mục 2.1 - Cột 1)', bg: 'bg-blue-100 text-blue-800 border-blue-200' };
+      case 'tap_luyen':
+        return { label: '👥 Hình ảnh tập luyện (Mục 3.2 - Cột 1)', bg: 'bg-indigo-100 text-indigo-800 border-indigo-200' };
+      case 'tro_choi':
+        return { label: '🏆 Trò chơi vận động (Mục 3.5 - Cột 1)', bg: 'bg-amber-100 text-amber-800 border-amber-200' };
       case 'van_dung':
-        return { label: '🌱 Hình ảnh vận dụng thực tế (Cột 4)', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+        return { label: '🌱 Hình ảnh vận dụng thực tế (Mục 4.2 - Cột 1)', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
       default:
         return { label: '📷 Tư liệu minh họa GDTC', bg: 'bg-slate-100 text-slate-800 border-slate-200' };
     }
@@ -247,7 +286,7 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
                 Kết Quả AI Vision Phân Tích & Phân Loại Hình Ảnh SGK
               </h3>
               <p className="text-[11px] text-slate-500">
-                Tự động nhận diện động tác, tập luyện, trò chơi, vận dụng kèm chú thích chuẩn
+                Tự động đối chiếu Khối · Trang SGK · Tuần học · Tiết PPCT và Mục chèn chuẩn xác
               </p>
             </div>
           </div>
@@ -270,7 +309,7 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
             <div className="sm:col-span-2 space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <label className="text-[10px] font-bold uppercase text-slate-400">Tên Nhận Diện Được</label>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badge.bg}`}>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.bg}`}>
                   {badge.label}
                 </span>
               </div>
@@ -283,53 +322,30 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
                 />
               </div>
 
-              {/* Fast Category Selector Pills */}
-              <div className="flex items-center gap-1.5 pt-1">
-                <span className="text-[10px] font-semibold text-slate-500">Phân loại nhanh:</span>
-                <button
-                  type="button"
-                  onClick={() => handleCategoryChange('dong_tac')}
-                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
-                    currentCategory === 'dong_tac'
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  Động tác mới
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCategoryChange('tap_luyen')}
-                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
-                    currentCategory === 'tap_luyen'
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  Luyện tập
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCategoryChange('tro_choi')}
-                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
-                    currentCategory === 'tro_choi'
-                      ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  Trò chơi
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCategoryChange('van_dung')}
-                  className={`px-2 py-0.5 rounded-md text-[10.5px] font-medium border transition ${
-                    currentCategory === 'van_dung'
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  Vận dụng
-                </button>
+              {/* All 6 Fast Category Selector Buttons */}
+              <div className="flex flex-wrap items-center gap-1 pt-1">
+                <span className="text-[10px] font-semibold text-slate-500 mr-0.5">Phân loại:</span>
+                {([
+                  { id: 'khoi_dong', label: 'Khởi động', activeCls: 'bg-orange-600 text-white border-orange-600' },
+                  { id: 'tro_choi_khoi_dong', label: 'TC Khởi động', activeCls: 'bg-yellow-600 text-white border-yellow-600' },
+                  { id: 'dong_tac', label: 'Động tác mới', activeCls: 'bg-blue-600 text-white border-blue-600' },
+                  { id: 'tap_luyen', label: 'Luyện tập', activeCls: 'bg-indigo-600 text-white border-indigo-600' },
+                  { id: 'tro_choi', label: 'TC Vận động', activeCls: 'bg-amber-600 text-white border-amber-600' },
+                  { id: 'van_dung', label: 'Vận dụng', activeCls: 'bg-emerald-600 text-white border-emerald-600' }
+                ] as { id: ImageCategory; label: string; activeCls: string }[]).map((catBtn) => (
+                  <button
+                    key={catBtn.id}
+                    type="button"
+                    onClick={() => handleCategoryChange(catBtn.id)}
+                    className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition ${
+                      currentCategory === catBtn.id
+                        ? `${catBtn.activeCls} shadow-2xs`
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {catBtn.label}
+                  </button>
+                ))}
               </div>
 
               <p className="text-[11px] text-slate-600 leading-relaxed italic bg-white/80 p-1.5 rounded-md border border-slate-200/60">
@@ -343,6 +359,35 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* Provenance Week & Target Section Card */}
+          {provenance && (
+            <div className="bg-sky-50/90 border border-sky-200 rounded-xl p-3 space-y-1.5 text-[11px]">
+              <div className="font-bold text-sky-900 flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-sky-600 shrink-0" />
+                  Định Vị Giáo Án Tuần & Vị Trí Chèn Chính Xác
+                </span>
+                <span className="px-2 py-0.5 rounded bg-white border border-sky-200 text-sky-800 text-[10px] font-bold tabular-nums">
+                  Khối {provenance.grade}{provenance.page ? ` · Trang ${provenance.page} SGK` : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-slate-700">
+                <div className="flex items-start gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span><strong>Bài học:</strong> {provenance.lessonName}</span>
+                </div>
+                <div className="flex items-start gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Dùng cho giáo án:</strong> <span className="font-bold text-emerald-700 tabular-nums">{provenance.weekLabel}</span></span>
+                </div>
+              </div>
+              <div className="flex items-start gap-1.5 text-slate-800">
+                <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                <span>{provenance.summaryNotice}</span>
+              </div>
+            </div>
+          )}
 
           {/* Form to insert into Table */}
           <div className="grid grid-cols-2 gap-3">
@@ -377,7 +422,7 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <Activity className="w-3.5 h-3.5" /> Cột Nội Dung
+                  <Activity className="w-3.5 h-3.5" /> Cột Nội Dung (1)
                 </button>
                 <button
                   type="button"
@@ -388,7 +433,7 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
                       : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
                   }`}
                 >
-                  <Users className="w-3.5 h-3.5" /> Cột Hoạt Động HS
+                  <Users className="w-3.5 h-3.5" /> Cột Hoạt Động HS (4)
                 </button>
               </div>
             </div>
@@ -398,12 +443,12 @@ export const VisionAnalysisModal: React.FC<VisionAnalysisModalProps> = ({
           {targetColumn === 'hs' ? (
             <div className="text-[11px] text-emerald-800 bg-emerald-50/90 border border-emerald-200 rounded-lg p-2 flex items-start gap-1.5">
               <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <span><strong>Đúng chuẩn Công văn 2345/BGDĐT:</strong> Hình ảnh luyện tập (cặp đôi, tổ nhóm, đồng loạt) hoặc sơ đồ trò chơi được gắn vào <strong>Cột 4 (Hoạt động của HS)</strong> để thể hiện đội hình và cách thức học sinh thực hiện.</span>
+              <span><strong>Cột 4 (Hoạt động của HS):</strong> Thường dùng để gắn <strong>sơ đồ đội hình tập luyện / đội hình chơi</strong> tương ứng với mục đã chọn.</span>
             </div>
           ) : (
             <div className="text-[11px] text-blue-800 bg-blue-50/90 border border-blue-200 rounded-lg p-2 flex items-start gap-1.5">
               <BookOpen className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <span><strong>Đúng chuẩn Công văn 2345/BGDĐT:</strong> Cột 1 (Nội dung) chỉ dành riêng cho <strong>tranh phân thế động tác kỹ thuật mới</strong> ở Mục 2 (Khám phá & Hình thành kiến thức mới).</span>
+              <span><strong>Cột 1 (Nội dung & Hình ảnh):</strong> Quy chuẩn gán ảnh minh họa SGK (Khởi động 1.2, TC Khởi động 1.3, Động tác mới 2.1, Luyện tập 3.2, TC Vận động 3.5, Vận dụng 4.2) vào đúng hàng tương ứng.</span>
             </div>
           )}
 

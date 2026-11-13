@@ -28,7 +28,11 @@ import {
   RotateCcw,
   HardDrive,
   Activity,
-  Users
+  Users,
+  History,
+  Star,
+  Clock,
+  FileEdit
 } from 'lucide-react';
 import mammoth from 'mammoth';
 import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem } from '../types/gdtc';
@@ -42,7 +46,15 @@ import {
 } from '../utils/inlineImageHelper';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { masterPlansTuan9 } from '../data/masterTemplateTuan9';
-import { standardFormationDiagrams, FormationDiagram } from '../data/formationDiagrams';
+import {
+  standardFormationDiagrams,
+  FormationDiagram,
+  GRADE_FORMATION_STYLE_OPTIONS,
+  getGradeFormationStyles,
+  saveGradeFormationStyles,
+  GradeFormationStyleMap,
+  GradeFormationStyleKey
+} from '../data/formationDiagrams';
 import { standardMovementsLibrary } from '../data/movementLibrary';
 import { exportWordDocument, exportCleanWordDocxFromData } from '../utils/exportUtils';
 import {
@@ -57,15 +69,22 @@ import {
 import { SelectFormationModal } from './SelectFormationModal';
 import { ClassifiedImagePickerModal, ImageClassificationCategory } from './ClassifiedImagePickerModal';
 import { PpctManagerModal } from './PpctManagerModal';
+import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { resolveSlotMissingImageNotice } from '../utils/imageProvenance';
 import { getStoredPpctData, saveStoredPpctData } from '../data/defaultPpctData';
 import { extractIntegrationFromPlan } from '../utils/ppctParser';
-import { setAppStateDB, getAppStateDB } from '../utils/db';
+import { setAppStateDB, getAppStateDB, safeLocalStorageSet } from '../utils/db';
 import {
   createBalanced7LessonRows,
   createBalancedGranularLessonRows,
   splitAndAlignRows1to1,
   resolveAccurateMovement,
-  resolveAccurateGameImage
+  resolveAccurateGameImage,
+  resolveLessonSlotAssets,
+  sanitizeVanDungRow,
+  sanitizeRowColumn1Media,
+  isInvalidColumn1AttachmentForRow,
+  applyGradeDistinctFormationsToRows
 } from '../utils/planAutoMatcher';
 import {
   cleanLessonTitleForHeader,
@@ -76,6 +95,16 @@ import {
   getCurriculumRule,
   AuditReport
 } from '../utils/curriculumAuditSync';
+import { PlanVersionHistoryModal } from './PlanVersionHistoryModal';
+import {
+  LessonPlanVersion,
+  PlanVersionStore,
+  formatRelativeTimeVi,
+  getBestVersionForPlan,
+  getPlanVersionKey,
+  getPreferredVersionForPlan,
+  getVersionsForPlan
+} from '../utils/planVersionHistory';
 
 interface TabExportPrintProps {
   week: number;
@@ -89,6 +118,19 @@ interface TabExportPrintProps {
   currentMasterPlan?: MasterPlanItem;
   allMasterPlans?: Record<string, MasterPlanItem>;
   onUpdateMasterPlanItem?: (key: string, plan: MasterPlanItem) => void;
+  planVersionStore?: PlanVersionStore;
+  versionRefreshNonce?: number;
+  onAutoSaveDraftPlans?: (plans: MasterPlanItem[]) => void;
+  onSaveOfficialVersion?: (
+    plan: MasterPlanItem,
+    customLabel?: string,
+    markAsBest?: boolean,
+    baselinePlan?: MasterPlanItem | null
+  ) => LessonPlanVersion | void;
+  onSaveMultipleOfficialVersions?: (plans: MasterPlanItem[]) => void;
+  onLoadPlanVersion?: (planKey: string, versionId: string) => void;
+  onToggleBestVersion?: (planKey: string, versionId: string) => void;
+  onDeletePlanVersion?: (planKey: string, versionId: string) => void;
   images?: SgkImageItem[];
   showToast: (msg: string) => void;
   onUpdateMasterPlan?: (updated: MasterPlanItem) => void;
@@ -109,6 +151,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   currentMasterPlan,
   allMasterPlans,
   onUpdateMasterPlanItem,
+  planVersionStore = { versionsByPlanKey: {}, activeVersionIdByPlanKey: {} },
+  versionRefreshNonce = 0,
+  onAutoSaveDraftPlans,
+  onSaveOfficialVersion,
+  onSaveMultipleOfficialVersions,
+  onLoadPlanVersion,
+  onToggleBestVersion,
+  onDeletePlanVersion,
   images = [],
   showToast,
   onUpdateMasterPlan,
@@ -178,6 +228,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
   // Formation Diagram Picker State (supports inline at cursor and column attachments)
   const [isFormationPickerOpen, setIsFormationPickerOpen] = useState<boolean>(false);
+  const [isGradeFormationStyleOpen, setIsGradeFormationStyleOpen] = useState<boolean>(false);
+  const [gradeFormationStyles, setGradeFormationStyles] = useState<GradeFormationStyleMap>(() =>
+    getGradeFormationStyles()
+  );
   const [formationTarget, setFormationTarget] = useState<{
     planId: string;
     rowIndex: number;
@@ -216,73 +270,48 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setIsFormationPickerOpen(true);
   };
 
+  // Pending Auto-Draft Refs & Version Modal State
+  const autoDraftTimerRef = useRef<number | null>(null);
+  const pendingDraftPlansRef = useRef<MasterPlanItem[] | null>(null);
+  const latestPlansRef = useRef<MasterPlanItem[]>([]);
+  const onAutoSaveDraftPlansRef = useRef(onAutoSaveDraftPlans);
+  onAutoSaveDraftPlansRef.current = onAutoSaveDraftPlans;
+  const lastAppliedWeekRef = useRef<number | null>(null);
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
+  const [versionModalInitialKey, setVersionModalInitialKey] = useState<string>('');
+  const [autoDraftStatus, setAutoDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  const flushPendingDraft = () => {
+    if (autoDraftTimerRef.current !== null) {
+      window.clearTimeout(autoDraftTimerRef.current);
+      autoDraftTimerRef.current = null;
+    }
+    if (pendingDraftPlansRef.current && onAutoSaveDraftPlansRef.current) {
+      const toSave = pendingDraftPlansRef.current;
+      pendingDraftPlansRef.current = null;
+      onAutoSaveDraftPlansRef.current(toSave);
+      setAutoDraftStatus('saved');
+    }
+  };
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPendingDraft();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      flushPendingDraft();
+    };
+  }, []);
+
   // Sync with prop when parent changes week (e.g. clicking 'TUẦN HIỆN HÀNH')
   useEffect(() => {
     if (initialWeek && initialWeek !== selectedWeek) {
+      flushPendingDraft();
       setSelectedWeek(initialWeek);
     }
   }, [initialWeek]);
-
-  // Update schedule and dates when selectedWeek changes, prioritizing uploaded plan
-  useEffect(() => {
-    const savedDates = localStorage.getItem(`gdtc_dates_w${selectedWeek}`);
-    if (savedDates) {
-      try {
-        const parsed = JSON.parse(savedDates);
-        if (parsed.dateRange) setCustomDateRange(parsed.dateRange);
-        if (parsed.approvalDate) setCustomApprovalDate(parsed.approvalDate);
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      const updated = getWeekDateInfo(selectedWeek);
-      if (selectedWeek === 9) {
-        setCustomDateRange('Từ ngày 02-06 tháng 11 năm 2026');
-        setCustomApprovalDate('Vệ Giang, ngày 06 tháng 11 năm 2026');
-      } else {
-        setCustomDateRange(updated.dateRangeText);
-        setCustomApprovalDate(updated.approvalDateText);
-      }
-    }
-
-    // 1. Restore uploaded schedule rows if previously saved for this week
-    try {
-      const savedSchedule = localStorage.getItem(`gdtc_schedule_w${selectedWeek}`);
-      if (savedSchedule) {
-        const parsed = JSON.parse(savedSchedule);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const sanitized = parsed.map((r: WeeklyMasterScheduleRow) => {
-            if (r.grade === 5 && r.lessonTitle?.toLowerCase().includes('thăng bằng')) {
-              return {
-                ...r,
-                lessonTitle: r.lessonTitle.replace(/động tác thăng bằng,\s*/gi, '').replace(/thăng bằng,\s*/gi, '')
-              };
-            }
-            return r;
-          });
-          setWeeklyScheduleRows(sanitized);
-        } else {
-          setWeeklyScheduleRows(selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek));
-        }
-      } else {
-        setWeeklyScheduleRows(selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek));
-      }
-    } catch (e) {
-      setWeeklyScheduleRows(selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek));
-    }
-
-    // 2. Restore custom uploaded integration themes
-    try {
-      const savedThemes = localStorage.getItem(`gdtc_themes_w${selectedWeek}`);
-      if (savedThemes) {
-        setCustomWeeklyThemes(JSON.parse(savedThemes));
-      } else {
-        setCustomWeeklyThemes(null);
-      }
-    } catch (e) {
-      setCustomWeeklyThemes(null);
-    }
-  }, [selectedWeek]);
 
   // View mode
   const [viewMode, setViewMode] = useState<'all_grades' | 'grade_1' | 'grade_3' | 'grade_5' | 'single'>('all_grades');
@@ -335,11 +364,32 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
   // Initialize all plans for the selected week
   const [plansByGrade, setPlansByGrade] = useState<MasterPlanItem[]>([]);
+  latestPlansRef.current = plansByGrade;
 
-  // Push snapshot to history before modifications
+  // Schedule auto-draft save whenever plans are modified in Tab 6
+  const scheduleAutoDraftSave = (newPlans: MasterPlanItem[]) => {
+    latestPlansRef.current = newPlans;
+    pendingDraftPlansRef.current = newPlans;
+    setAutoDraftStatus('saving');
+    if (autoDraftTimerRef.current !== null) {
+      window.clearTimeout(autoDraftTimerRef.current);
+    }
+    autoDraftTimerRef.current = window.setTimeout(() => {
+      autoDraftTimerRef.current = null;
+      if (pendingDraftPlansRef.current && onAutoSaveDraftPlansRef.current) {
+        const toSave = pendingDraftPlansRef.current;
+        pendingDraftPlansRef.current = null;
+        onAutoSaveDraftPlansRef.current(toSave);
+        setAutoDraftStatus('saved');
+      }
+    }, 450);
+  };
+
+  // Push snapshot to history before modifications and auto-save draft
   const recordHistory = (newPlans: MasterPlanItem[]) => {
     setHistoryStack((prev) => [...prev.slice(-15), plansByGrade]);
     setPlansByGrade(newPlans);
+    scheduleAutoDraftSave(newPlans);
   };
 
   const handleUndo = () => {
@@ -347,6 +397,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const previous = historyStack[historyStack.length - 1];
     setHistoryStack((prev) => prev.slice(0, prev.length - 1));
     setPlansByGrade(previous);
+    scheduleAutoDraftSave(previous);
     showToast('Đã hoàn tác thao tác vừa rồi!');
   };
 
@@ -398,15 +449,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     if (parsedDateRange) setCustomDateRange(parsedDateRange);
     setWeeklyScheduleRows(rows);
 
-    // 1. Persist schedule rows and dates to localStorage & IndexedDB
-    try {
-      localStorage.setItem(`gdtc_schedule_w${targetWeek}`, JSON.stringify(rows));
-      setAppStateDB(`gdtc_schedule_w${targetWeek}`, rows);
-      if (parsedDateRange) {
-        localStorage.setItem(`gdtc_dates_w${targetWeek}`, JSON.stringify({ dateRange: parsedDateRange, approvalDate: customApprovalDate }));
-      }
-    } catch (e) {
-      console.warn('Error saving schedule to storage:', e);
+    // 1. Persist schedule rows and dates to IndexedDB & quota-safe localStorage
+    setAppStateDB(`gdtc_schedule_w${targetWeek}`, rows);
+    safeLocalStorageSet(`gdtc_schedule_w${targetWeek}`, JSON.stringify(rows));
+    if (parsedDateRange) {
+      safeLocalStorageSet(
+        `gdtc_dates_w${targetWeek}`,
+        JSON.stringify({ dateRange: parsedDateRange, approvalDate: customApprovalDate })
+      );
     }
 
     // 2. Extract integration themes (QPAN, Môi trường, Năng lực số 3.1TC1a/4.1TC1a/6.1TC2a)
@@ -418,16 +468,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       week: targetWeek
     };
     setCustomWeeklyThemes(mergedTheme);
-    try {
-      localStorage.setItem(`gdtc_themes_w${targetWeek}`, JSON.stringify(mergedTheme));
-      setAppStateDB(`gdtc_themes_w${targetWeek}`, mergedTheme);
-    } catch (e) {
-      console.warn('Error saving themes to storage:', e);
-    }
+    setAppStateDB(`gdtc_themes_w${targetWeek}`, mergedTheme);
+    safeLocalStorageSet(`gdtc_themes_w${targetWeek}`, JSON.stringify(mergedTheme));
 
     // 3. Propagate specific integration themes and titles into plansByGrade for all 3 grades
-    setPlansByGrade((prev) => {
-      const updated = prev.map((plan) => {
+    if (targetWeek === selectedWeek && plansByGrade.length > 0) {
+      const updated = plansByGrade.map((plan) => {
         const existingInteg = plan.integrations || {
           digitalSkill: 'Mã 4.1TC1a',
           digitalDescription: 'Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu.',
@@ -439,11 +485,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         const rowIntegText = matchingRow?.integrationNotes || '';
         const cleanRowInteg = rowIntegText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-        // Extract specific digital code from matching row if present
         const codeMatch = cleanRowInteg.match(/(?:mã\s*)?([1-6]\.1TC\w+(?:\s*\/\s*[1-6]\.1TC\w+)?)/i) || mergedTheme.digitalTheme?.match(/[1-6]\.1TC\w+/i);
         const code = codeMatch ? (codeMatch[1].toUpperCase().startsWith('MÃ') ? codeMatch[1] : `Mã ${codeMatch[1]}`) : existingInteg.digitalSkill;
 
-        // Extract digital description
         let digitalDesc = existingInteg.digitalDescription;
         if (/học liệu|ai|thiết bị số|phần mềm|quan sát phân tích/i.test(cleanRowInteg)) {
           digitalDesc = cleanRowInteg;
@@ -451,7 +495,6 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           digitalDesc = mergedTheme.digitalTheme;
         }
 
-        // Extract environmental description
         let envDesc = existingInteg.environmentalEducation;
         if (/môi trường|sân tập|xanh|sạch|đẹp|rác/i.test(cleanRowInteg)) {
           envDesc = cleanRowInteg;
@@ -459,7 +502,6 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           envDesc = mergedTheme.envTheme;
         }
 
-        // Extract life skills / QPAN description
         let lifeSkillsDesc = existingInteg.lifeSkills;
         if (/qpan|quốc phòng|kỷ luật|tác phong/i.test(cleanRowInteg)) {
           lifeSkillsDesc = cleanRowInteg;
@@ -479,7 +521,6 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           }
         };
 
-        // Notify parent and update central dictionary
         if (onUpdateMasterPlanItem) {
           onUpdateMasterPlanItem(`k${plan.grade}_t${plan.lessonNum}`, updatedPlan);
           onUpdateMasterPlanItem(`k${plan.grade}_t${plan.lessonNum}_w${targetWeek}`, updatedPlan);
@@ -488,17 +529,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         return updatedPlan;
       });
 
-      // Save updated plans to localStorage & IndexedDB
-      try {
-        localStorage.setItem(`gdtc_plans_w${targetWeek}`, JSON.stringify(updated));
-        setAppStateDB(`gdtc_plans_w${targetWeek}`, updated);
-      } catch (e) {
-        console.warn('Error saving plans to storage:', e);
-      }
-
       recordHistory(updated);
-      return updated;
-    });
+    }
 
     setIsUploadPlanModalOpen(false);
     setPasteTableText('');
@@ -539,21 +571,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   // Sync schedule with official PPCT
   const handleSyncScheduleWithPpct = (syncedRows: WeeklyMasterScheduleRow[]) => {
     setWeeklyScheduleRows(syncedRows);
-    setPlansByGrade((prev) => {
-      const updated = prev.map((p) => {
-        const match = syncedRows.find((r) => r.grade === p.grade && r.ppct === p.lessonNum);
-        if (match) {
-          return {
-            ...p,
-            title: match.lessonTitle,
-            rows: buildOfficialLessonRows(p.grade as 1 | 3 | 5, p.lessonNum, p.topic, match.lessonTitle)
-          };
-        }
-        return p;
-      });
-      recordHistory(updated);
-      return updated;
+    const updated = plansByGrade.map((p) => {
+      const match = syncedRows.find((r) => r.grade === p.grade && r.ppct === p.lessonNum);
+      if (match) {
+        return {
+          ...p,
+          title: match.lessonTitle,
+          rows: buildOfficialLessonRows(p.grade as 1 | 3 | 5, p.lessonNum, p.topic, match.lessonTitle)
+        };
+      }
+      return p;
     });
+    recordHistory(updated);
   };
 
 
@@ -569,24 +598,36 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     return createBalancedGranularLessonRows(gradeVal, titleName, images, warmupGame, practiceGame);
   };
 
-  // Helper to resolve a grade's master plan
-  const resolvePlan = (g: 1 | 3 | 5, pNum: number, fallbackKey: string): MasterPlanItem => {
-    const key = `k${g}_t${pNum}`;
-    const ppct = getGradePpctInfo(g, selectedWeek);
-    const rule = getCurriculumRule(g, pNum, selectedWeek);
+  // Build factory/SGK baseline plan for a specific (grade, lessonNum, week) slot (used when no user edits exist or for diff comparison)
+  const buildBaselinePlanForSlot = (
+    g: 1 | 3 | 5,
+    pNum: number,
+    fallbackKey: string,
+    overrides?: {
+      week?: number;
+      scheduleRows?: WeeklyMasterScheduleRow[];
+      dateRange?: string;
+      approvalDate?: string;
+      themes?: WeeklyIntegrationThemes | null;
+    }
+  ): MasterPlanItem => {
+    const targetWeek = overrides?.week ?? selectedWeek;
+    const targetSchedule = overrides?.scheduleRows ?? weeklyScheduleRows;
+    const targetDateRange = overrides?.dateRange ?? customDateRange;
+    const targetApprovalDate = overrides?.approvalDate ?? customApprovalDate;
+    const targetThemes = overrides?.themes !== undefined ? overrides.themes : customWeeklyThemes;
 
-    const timetableMatch = weeklyScheduleRows.find((r) => r.grade === g && r.ppct === pNum);
+    const key = `k${g}_t${pNum}`;
+    const ppct = getGradePpctInfo(g, targetWeek);
+    const rule = getCurriculumRule(g, pNum, targetWeek);
+
+    const timetableMatch = targetSchedule.find((r) => r.grade === g && r.ppct === pNum);
     const resolvedTitle = timetableMatch?.lessonTitle || rule.cleanTitle || ppct.defaultTitle;
     const resolvedTopic = rule.topic || ppct.defaultTopic;
 
-    // 1. Prioritize authentic plan for the active week
     let base: MasterPlanItem;
-    if (selectedWeek === 9 && masterPlansTuan9[key]) {
+    if (targetWeek === 9 && masterPlansTuan9[key]) {
       base = masterPlansTuan9[key];
-    } else if (allMasterPlans?.[key]) {
-      base = allMasterPlans[key];
-    } else if (allMasterPlans?.[`${key}_w${selectedWeek}`]) {
-      base = allMasterPlans[`${key}_w${selectedWeek}`];
     } else if (masterPlansTuan8[fallbackKey]) {
       base = masterPlansTuan8[fallbackKey];
     } else {
@@ -594,12 +635,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     }
 
     const normalized = normalizeMasterPlan(base);
-
-    // 2. Strict Content Mismatch Check:
-    // Does the base plan's content actually match resolvedTitle?
     const cleanBaseTitle = cleanLessonTitleForHeader(base.title || '').toLowerCase();
     const cleanResolvedTitle = cleanLessonTitleForHeader(resolvedTitle).toLowerCase();
+    const isAssessmentResolved = /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(cleanResolvedTitle);
     const isMismatched =
+      isAssessmentResolved ||
       (cleanBaseTitle !== cleanResolvedTitle &&
         !cleanBaseTitle.includes(cleanResolvedTitle.slice(0, 10)) &&
         !cleanResolvedTitle.includes(cleanBaseTitle.slice(0, 10))) ||
@@ -612,7 +652,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     let qualitiesComp = normalized.qualities;
 
     if (isMismatched) {
-      if (selectedWeek === 9 && masterPlansTuan9[key]) {
+      if (targetWeek === 9 && masterPlansTuan9[key]) {
         const auth9 = masterPlansTuan9[key];
         rawRows = auth9.rows;
         specialComp = auth9.specialCompetencies;
@@ -634,10 +674,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           : buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame);
     }
 
-    // Automatically align rows 1:1 horizontally so each activity has its own row
     rawRows = splitAndAlignRows1to1(rawRows, g, resolvedTitle, images, rule.warmupGame, rule.practiceGame);
 
-    // Guarantee disabled students accommodations are never missing
     if (!specialComp?.disabledStudents || specialComp.disabledStudents.trim().length === 0) {
       specialComp = {
         ...specialComp,
@@ -651,91 +689,145 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       };
     }
 
-    const rows = rawRows.map((r, rIdx) => {
-      const isWarmupGame = r.content.includes('1.3') || (r.content.toLowerCase().includes('trò chơi') && r.content.toLowerCase().includes('khởi động'));
-      const isMovement = r.content.includes('2.1') || r.content.toLowerCase().includes('khám phá') || r.content.toLowerCase().includes('kỹ thuật');
-      const isPracticeGame = r.content.includes('3.5') || (r.content.toLowerCase().includes('trò chơi') && r.content.toLowerCase().includes('vận động'));
+    const slotAssets = resolveLessonSlotAssets(g, resolvedTitle, resolvedTopic, images, rule.warmupGame, rule.practiceGame);
+    const isGranularRaw = rawRows.length >= 9;
 
-      // Warmup game row
+    const rows = rawRows.map((r, rIdx) => {
+      const rLower = (r.content || '').toLowerCase();
+      const isWarmupGame = r.content.includes('1.3') || (rLower.includes('trò chơi') && rLower.includes('khởi động')) || (!isGranularRaw && rIdx === 0);
+      const isKhoiDongChung = !isWarmupGame && (r.content.includes('1.2.') || (rLower.includes('khởi động') && !r.content.includes('1.1.')));
+      const isMovement = r.content.includes('2.1') || rLower.includes('khám phá') || rLower.includes('kỹ thuật mới') || (!isGranularRaw && rIdx === 1);
+      const isPracticeGame = r.content.includes('3.5') || (rLower.includes('trò chơi') && rLower.includes('vận động')) || (!isGranularRaw && rIdx === 5);
+      const isPracticeGroup = !isPracticeGame && (r.content.includes('3.2.') || (!isGranularRaw && r.content.includes('3.1.')));
+      const isVanDung = r.content.includes('4.2') || rLower.includes('vận dụng');
+
+      if (isKhoiDongChung) {
+        if (slotAssets.khoiDongImg?.url && (!r.contentImgUrl || isInvalidColumn1AttachmentForRow(r.content, r.contentImgUrl, r.contentImgTitle, g, resolvedTitle))) {
+          return {
+            ...r,
+            contentImgUrl: slotAssets.khoiDongImg.url,
+            contentImgTitle: slotAssets.khoiDongImg.title,
+            contentImages: [{ id: `kdc_${rIdx}`, url: slotAssets.khoiDongImg.url, title: slotAssets.khoiDongImg.title }]
+          };
+        }
+        return sanitizeRowColumn1Media(r, g, resolvedTitle);
+      }
+
       if (isWarmupGame) {
-        const gameImg = resolveAccurateGameImage(rule.warmupGame, g, 'tro_choi_kd', images);
+        const wName = slotAssets.warmupGameName || rule.warmupGame;
+        const gameImg = slotAssets.warmupGameImg;
         let contentText = r.content || '';
-        if (rule.warmupGame && !contentText.toLowerCase().includes(rule.warmupGame.toLowerCase())) {
+        if (wName && !contentText.toLowerCase().includes(wName.toLowerCase())) {
           if (contentText.includes('1.3.')) {
-            contentText = contentText.replace(/1\.3\..*$/m, `1.3. Trò chơi bổ trợ khởi động: "${rule.warmupGame}".`);
+            contentText = contentText.replace(/1\.3\..*$/m, `1.3. Trò chơi bổ trợ khởi động: "${wName}".`);
           } else {
-            contentText = `${contentText}\n1.3. Trò chơi bổ trợ khởi động: "${rule.warmupGame}".`;
+            contentText = `${contentText}\n1.3. Trò chơi bổ trợ khởi động: "${wName}".`;
           }
         }
         let gvText = r.gv || '';
         let hsText = r.hs || '';
-        if (rule.warmupGame) {
+        if (wName) {
           gvText = gvText
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${rule.warmupGame}"`)
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${rule.warmupGame}"`);
+            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`)
+            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`);
           hsText = hsText
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${rule.warmupGame}"`)
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${rule.warmupGame}"`);
+            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`)
+            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`);
         }
         return {
           ...r,
           content: contentText,
           gv: gvText,
           hs: hsText,
-          contentImgUrl: gameImg.url,
-          contentImgTitle: gameImg.title
+          contentImgUrl: gameImg.url || undefined,
+          contentImgTitle: gameImg.title || undefined,
+          contentImages: gameImg.url ? [{ id: `wg_${rIdx}`, url: gameImg.url, title: gameImg.title }] : []
         };
       }
 
-      // Technical movement exploration row: ensure authentic textbook photo, never artificial SVG or mismatched movement
-      if (isMovement) {
-        const acc = resolveAccurateMovement(r.content || '', resolvedTitle, g, images);
+      if (isMovement && !isAssessmentResolved) {
+        const acc = slotAssets.movementDetails;
         const currentUrl = r.contentImgUrl || '';
-        const cLower = (r.content || '').toLowerCase();
+        const mediaCorpus = [
+          currentUrl,
+          r.contentImgTitle || '',
+          ...(r.contentImages || []).map((i) => `${i.url || ''} ${i.title || ''}`)
+        ]
+          .join(' ')
+          .toLowerCase();
+        const cLower = rLower;
         const tLower = resolvedTitle.toLowerCase();
+
+        // Inspect BOTH URL and Title so authentic cropped PNGs (data:image/png...) are NOT falsely discarded!
         const isWrongImage =
           !currentUrl ||
-          currentUrl.startsWith('data:image/svg+xml') ||
+          isInvalidColumn1AttachmentForRow(r.content, currentUrl, r.contentImgTitle, g, resolvedTitle) ||
           isMismatched ||
-          (g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !currentUrl.includes('bung')) ||
-          (g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !currentUrl.includes('van_minh')) ||
-          (g === 5 && (tLower.includes('toàn thân') || cLower.includes('toàn thân')) && !currentUrl.includes('toan_than')) ||
-          (g === 5 && (tLower.includes('chân') || cLower.includes('chân')) && !currentUrl.includes('chan')) ||
-          (g === 1 && (tLower.includes('bụng') || cLower.includes('bụng')) && !currentUrl.includes('bung')) ||
-          (g === 1 && (tLower.includes('chân') || cLower.includes('chân')) && !currentUrl.includes('chan'));
+          (g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
+          (g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !mediaCorpus.includes('vặn mình') && !mediaCorpus.includes('van_minh')) ||
+          (g === 5 && (tLower.includes('toàn thân') || cLower.includes('toàn thân')) && !mediaCorpus.includes('toàn thân') && !mediaCorpus.includes('toan_than')) ||
+          (g === 5 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
+          (g === 1 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
+          (g === 1 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
+          ((tLower.includes('phối hợp') || cLower.includes('phối hợp')) && !mediaCorpus.includes('phối hợp') && !mediaCorpus.includes('phoi_hop'));
 
         if (isWrongImage) {
+          if (acc.imgUrl) {
+            return {
+              ...r,
+              contentImgUrl: acc.imgUrl,
+              contentImgTitle: acc.imgTitle,
+              contentImages:
+                acc.allImages && acc.allImages.length > 0
+                  ? acc.allImages
+                  : [{ id: `mv_${rIdx}`, url: acc.imgUrl, title: acc.imgTitle }]
+            };
+          }
           return {
             ...r,
-            contentImgUrl: acc.imgUrl,
-            contentImgTitle: acc.imgTitle
+            contentImgUrl: undefined,
+            contentImgTitle: acc.imgTitle || undefined,
+            contentImages: []
           };
         }
       }
 
-      // Practice Game
+      if (isPracticeGroup) {
+        const cleanedPractice = sanitizeRowColumn1Media(r, g, resolvedTitle);
+        if (slotAssets.luyenTapImg?.url && !cleanedPractice.contentImgUrl) {
+          return {
+            ...cleanedPractice,
+            contentImgUrl: slotAssets.luyenTapImg.url,
+            contentImgTitle: slotAssets.luyenTapImg.title,
+            contentImages: [{ id: `lt_${rIdx}`, url: slotAssets.luyenTapImg.url, title: slotAssets.luyenTapImg.title }]
+          };
+        }
+        return cleanedPractice;
+      }
+
       if (isPracticeGame) {
-        const gameImg = resolveAccurateGameImage(rule.practiceGame, g, 'tro_choi_vd', images);
+        const pName = slotAssets.practiceGameName || rule.practiceGame;
+        const gameImg = slotAssets.practiceGameImg;
         let contentText = r.content || '';
         if (contentText.includes('Kéo co thể thao')) {
-          contentText = contentText.replace(/Kéo co thể thao/g, rule.practiceGame || 'Trao gậy tiếp sức');
+          contentText = contentText.replace(/Kéo co thể thao/g, pName || 'Trao gậy tiếp sức');
         }
-        if (rule.practiceGame && !contentText.toLowerCase().includes(rule.practiceGame.toLowerCase())) {
+        if (pName && !contentText.toLowerCase().includes(pName.toLowerCase())) {
           if (contentText.includes('Trò chơi vận động:')) {
-            contentText = contentText.replace(/\*?\s*Trò chơi vận động:[^\n]*/i, `* Trò chơi vận động: "${rule.practiceGame}": Tổ chức cho học sinh chơi theo luật.`);
+            contentText = contentText.replace(/\*?\s*Trò chơi vận động:[^\n]*/i, `* Trò chơi vận động: "${pName}": Tổ chức cho học sinh chơi theo luật.`);
           } else {
-            contentText = `* Trò chơi vận động: "${rule.practiceGame}": Tổ chức cho học sinh chơi theo luật.\n${contentText}`;
+            contentText = `* Trò chơi vận động: "${pName}": Tổ chức cho học sinh chơi theo luật.\n${contentText}`;
           }
         }
         let gvText = r.gv || '';
         let hsText = r.hs || '';
-        if (rule.practiceGame) {
+        if (pName) {
           gvText = gvText
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${rule.practiceGame}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${rule.practiceGame}"`);
+            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
+            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
           hsText = hsText
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${rule.practiceGame}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${rule.practiceGame}"`);
+            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
+            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
         }
         if (g === 1) {
           contentText = contentText.replace(/4\s*gậy\/bóng\/cọc tiêu/gi, 'vạch xuất phát, cọc mốc an toàn');
@@ -744,26 +836,43 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }
 
         const currentGameUrl = r.contentImgUrl || '';
+        const gameCorpus = `${currentGameUrl} ${r.contentImgTitle || ''}`.toLowerCase();
         const isWrongGameImg =
           !currentGameUrl ||
-          currentGameUrl.startsWith('data:image/svg+xml') ||
-          (g === 5 && (rule.practiceGame?.includes('Trao gậy') || contentText.includes('Trao gậy')) && !currentGameUrl.includes('trao_gay')) ||
+          isInvalidColumn1AttachmentForRow(r.content, currentGameUrl, r.contentImgTitle, g, resolvedTitle) ||
+          (g === 5 && (pName?.includes('Trao gậy') || contentText.includes('Trao gậy')) && !gameCorpus.includes('trao gậy') && !gameCorpus.includes('trao_gay')) ||
           (g === 5 && currentGameUrl.includes('k1_tro_choi'));
+
+        const nextUrl = isWrongGameImg ? (gameImg.url || '') : currentGameUrl;
+        const nextTitle = isWrongGameImg ? (gameImg.title || '') : (r.contentImgTitle || gameImg.title || '');
 
         return {
           ...r,
           content: contentText,
           gv: gvText,
           hs: hsText,
-          contentImgUrl: isWrongGameImg ? gameImg.url : (r.contentImgUrl || gameImg.url),
-          contentImgTitle: isWrongGameImg ? gameImg.title : (r.contentImgTitle || gameImg.title)
+          contentImgUrl: nextUrl || undefined,
+          contentImgTitle: nextTitle || undefined,
+          contentImages: nextUrl ? [{ id: `pg_${rIdx}`, url: nextUrl, title: nextTitle || 'Trò chơi vận động' }] : []
         };
       }
 
-      return r;
+      if (isVanDung) {
+        const cleanedVd = sanitizeVanDungRow(sanitizeRowColumn1Media(r, g, resolvedTitle));
+        if (slotAssets.vanDungImg?.url && !cleanedVd.contentImgUrl) {
+          return {
+            ...cleanedVd,
+            contentImgUrl: slotAssets.vanDungImg.url,
+            contentImgTitle: slotAssets.vanDungImg.title,
+            contentImages: [{ id: `vd_${rIdx}`, url: slotAssets.vanDungImg.url, title: slotAssets.vanDungImg.title }]
+          };
+        }
+        return cleanedVd;
+      }
+
+      return sanitizeRowColumn1Media(r, g, resolvedTitle);
     });
 
-    // Resolve integrations: Inherit from timetableMatch if available, or customWeeklyThemes, or normalized
     let resolvedIntegrations = normalized.integrations || {
       digitalSkill: 'Mã 4.1TC1a',
       digitalDescription: 'Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu.',
@@ -798,32 +907,32 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           environmentalEducation: envDesc
         };
       }
-    } else if (customWeeklyThemes) {
-      const codeMatch = customWeeklyThemes.digitalTheme?.match(/[1-6]\.1TC\w+/i);
+    } else if (targetThemes) {
+      const codeMatch = targetThemes.digitalTheme?.match(/[1-6]\.1TC\w+/i);
       resolvedIntegrations = {
         digitalSkill: codeMatch ? `Mã ${codeMatch[0]}` : resolvedIntegrations.digitalSkill,
-        digitalDescription: customWeeklyThemes.digitalTheme || resolvedIntegrations.digitalDescription,
-        lifeSkills: `${customWeeklyThemes.qpanTheme || ''} ${customWeeklyThemes.lifeSkillsTheme || ''}`.trim() || resolvedIntegrations.lifeSkills,
-        environmentalEducation: customWeeklyThemes.envTheme || resolvedIntegrations.environmentalEducation
+        digitalDescription: targetThemes.digitalTheme || resolvedIntegrations.digitalDescription,
+        lifeSkills: `${targetThemes.qpanTheme || ''} ${targetThemes.lifeSkillsTheme || ''}`.trim() || resolvedIntegrations.lifeSkills,
+        environmentalEducation: targetThemes.envTheme || resolvedIntegrations.environmentalEducation
       };
     }
 
     return {
       ...normalized,
-      id: `plan_k${g}_t${pNum}_w${selectedWeek}`,
+      id: `plan_k${g}_t${pNum}_w${targetWeek}`,
       grade: g,
-      week: selectedWeek,
+      week: targetWeek,
       lessonNum: pNum,
       topic: resolvedTopic,
       title: resolvedTitle,
-      dateRange: customDateRange,
+      dateRange: targetDateRange,
       rows: rows,
       specialCompetencies: specialComp,
       generalCompetencies: generalComp,
       qualities: qualitiesComp,
       integrations: resolvedIntegrations,
       signatures: {
-        locationDate: customApprovalDate,
+        locationDate: targetApprovalDate,
         bgh: localSettings.approverPrincipal || 'Võ Thị Thuận',
         headTeacher: localSettings.approverHead || 'Bùi Ngọc Lâm',
         teacher: localSettings.teacherName || 'Lê Quốc Hưng'
@@ -831,58 +940,195 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     };
   };
 
-  // Re-build plans whenever selectedWeek or schedule rows change
+  // Resolve a grade's master plan: ALWAYS prioritize the user's last edited / active version in planVersionStore!
+  const resolvePlan = (
+    g: 1 | 3 | 5,
+    pNum: number,
+    fallbackKey: string,
+    overrides?: {
+      week?: number;
+      scheduleRows?: WeeklyMasterScheduleRow[];
+      dateRange?: string;
+      approvalDate?: string;
+      themes?: WeeklyIntegrationThemes | null;
+    }
+  ): MasterPlanItem => {
+    const targetWeek = overrides?.week ?? selectedWeek;
+    const targetDateRange = overrides?.dateRange ?? customDateRange;
+    const targetApprovalDate = overrides?.approvalDate ?? customApprovalDate;
+    const key = `k${g}_t${pNum}`;
+
+    const expectedRule = getCurriculumRule(g, pNum, targetWeek);
+    const isAssessmentWeekTarget =
+      expectedRule.movementKey === 'danh_gia' ||
+      /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(expectedRule.cleanTitle || '');
+
+    const hasStaleExerciseLeakInAssessment = (planObj: MasterPlanItem): boolean => {
+      if (!isAssessmentWeekTarget) return false;
+      const corpus = [
+        planObj.topic || '',
+        ...(planObj.rows || []).map((r) => r.content || '')
+      ]
+        .join(' ')
+        .toLowerCase();
+      return corpus.includes('vươn thở') || corpus.includes('bài thể dục') || corpus.includes('bài tập thể dục');
+    };
+
+    // Priority 1: Preferred (last edited / active / best) version from persistent planVersionStore
+    const preferredVer = getPreferredVersionForPlan(planVersionStore, targetWeek, g, pNum);
+    if (preferredVer?.snapshot) {
+      const snap = normalizeMasterPlan(preferredVer.snapshot);
+      // Bypass stale un-pinned auto-drafts if they leaked old Bài thể dục content onto an Assessment week
+      if (
+        !(preferredVer.status === 'draft' && !preferredVer.isStarredBest && hasStaleExerciseLeakInAssessment(snap))
+      ) {
+        // For auto-saved draft snapshots (not explicitly starred/saved), clean any legacy misplaced game photos in 1.2, SVGs in Col 1, legacy 4.2 text, and upgrade legacy shared Col 4 formations to grade-specific ones
+        const sanitizedRows =
+          preferredVer.status === 'draft' && !preferredVer.isStarredBest
+            ? applyGradeDistinctFormationsToRows(
+                snap.rows.map((r) => sanitizeVanDungRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))),
+                g,
+                false
+              )
+            : snap.rows;
+        return {
+          ...snap,
+          rows: sanitizedRows,
+          id: `plan_k${g}_t${pNum}_w${targetWeek}`,
+          grade: g,
+          week: targetWeek,
+          lessonNum: pNum,
+          dateRange: snap.dateRange || targetDateRange,
+          signatures: snap.signatures?.teacher
+            ? snap.signatures
+            : {
+                locationDate: targetApprovalDate,
+                bgh: localSettings.approverPrincipal || 'Võ Thị Thuận',
+                headTeacher: localSettings.approverHead || 'Bùi Ngọc Lâm',
+                teacher: localSettings.teacherName || 'Lê Quốc Hưng'
+              }
+        };
+      }
+    }
+
+    // Priority 2: Stored week-exact master plan in allMasterPlans dictionary
+    const weekSpecific = allMasterPlans?.[`${key}_w${targetWeek}`];
+    const fallbackDict =
+      allMasterPlans?.[key] && Number(allMasterPlans[key].week) === Number(targetWeek)
+        ? allMasterPlans[key]
+        : undefined;
+    const savedDictPlan = weekSpecific || fallbackDict;
+    if (savedDictPlan && savedDictPlan.rows && savedDictPlan.rows.length >= 5) {
+      const snap = normalizeMasterPlan(savedDictPlan);
+      if (!hasStaleExerciseLeakInAssessment(snap)) {
+        return {
+          ...snap,
+          rows: applyGradeDistinctFormationsToRows(
+            snap.rows.map((r) => sanitizeVanDungRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))),
+            g,
+            false
+          ),
+          id: `plan_k${g}_t${pNum}_w${targetWeek}`,
+          grade: g,
+          week: targetWeek,
+          lessonNum: pNum,
+          dateRange: snap.dateRange || targetDateRange
+        };
+      }
+    }
+
+    // Priority 3: Build clean SGK baseline
+    return buildBaselinePlanForSlot(g, pNum, fallbackKey, overrides);
+  };
+
+  // Load week schedule/dates/themes & build plans when selectedWeek or versionRefreshNonce changes
+  // IMPORTANT: Never depends on currentMasterPlan/lessonRows/weeklyScheduleRows so saving in Tab 6 NEVER resets edits!
   useEffect(() => {
+    const weekChanged = lastAppliedWeekRef.current !== selectedWeek;
+    lastAppliedWeekRef.current = selectedWeek;
+
+    let resolvedDateRange = customDateRange;
+    let resolvedApprovalDate = customApprovalDate;
+    let resolvedSchedule = weeklyScheduleRows;
+    let resolvedThemes = customWeeklyThemes;
+
+    if (weekChanged) {
+      const savedDates = localStorage.getItem(`gdtc_dates_w${selectedWeek}`);
+      if (savedDates) {
+        try {
+          const parsed = JSON.parse(savedDates);
+          if (parsed.dateRange) resolvedDateRange = parsed.dateRange;
+          if (parsed.approvalDate) resolvedApprovalDate = parsed.approvalDate;
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        const updated = getWeekDateInfo(selectedWeek);
+        if (selectedWeek === 9) {
+          resolvedDateRange = 'Từ ngày 02-06 tháng 11 năm 2026';
+          resolvedApprovalDate = 'Vệ Giang, ngày 06 tháng 11 năm 2026';
+        } else {
+          resolvedDateRange = updated.dateRangeText;
+          resolvedApprovalDate = updated.approvalDateText;
+        }
+      }
+      setCustomDateRange(resolvedDateRange);
+      setCustomApprovalDate(resolvedApprovalDate);
+
+      try {
+        const savedSchedule = localStorage.getItem(`gdtc_schedule_w${selectedWeek}`);
+        if (savedSchedule) {
+          const parsed = JSON.parse(savedSchedule);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            resolvedSchedule = parsed.map((r: WeeklyMasterScheduleRow) => {
+              if (r.grade === 5 && r.lessonTitle?.toLowerCase().includes('thăng bằng')) {
+                return {
+                  ...r,
+                  lessonTitle: r.lessonTitle.replace(/động tác thăng bằng,\s*/gi, '').replace(/thăng bằng,\s*/gi, '')
+                };
+              }
+              return r;
+            });
+          } else {
+            resolvedSchedule = selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek);
+          }
+        } else {
+          resolvedSchedule = selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek);
+        }
+      } catch (e) {
+        resolvedSchedule = selectedWeek === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(selectedWeek);
+      }
+      setWeeklyScheduleRows(resolvedSchedule);
+
+      try {
+        const savedThemes = localStorage.getItem(`gdtc_themes_w${selectedWeek}`);
+        resolvedThemes = savedThemes ? JSON.parse(savedThemes) : null;
+      } catch (e) {
+        resolvedThemes = null;
+      }
+      setCustomWeeklyThemes(resolvedThemes);
+    }
+
+    const overrides = {
+      week: selectedWeek,
+      scheduleRows: resolvedSchedule,
+      dateRange: resolvedDateRange,
+      approvalDate: resolvedApprovalDate,
+      themes: resolvedThemes
+    };
+
     const list: MasterPlanItem[] = [
-      resolvePlan(1, ppctG1.periods[0], 'k1_t15'),
-      resolvePlan(1, ppctG1.periods[1], 'k1_t16'),
-      resolvePlan(3, ppctG3.periods[0], 'k3_t15'),
-      resolvePlan(3, ppctG3.periods[1], 'k3_t16'),
-      resolvePlan(5, ppctG5.periods[0], 'k5_t15'),
-      resolvePlan(5, ppctG5.periods[1], 'k5_t16'),
+      resolvePlan(1, ppctG1.periods[0], 'k1_t15', overrides),
+      resolvePlan(1, ppctG1.periods[1], 'k1_t16', overrides),
+      resolvePlan(3, ppctG3.periods[0], 'k3_t15', overrides),
+      resolvePlan(3, ppctG3.periods[1], 'k3_t16', overrides),
+      resolvePlan(5, ppctG5.periods[0], 'k5_t15', overrides),
+      resolvePlan(5, ppctG5.periods[1], 'k5_t16', overrides),
     ];
 
-    // Check if saved plans exist in localStorage for this week
-    try {
-      const savedPlans = localStorage.getItem(`gdtc_plans_w${selectedWeek}`);
-      if (savedPlans) {
-        const parsed = JSON.parse(savedPlans);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach((sp: MasterPlanItem) => {
-            const matchIdx = list.findIndex((p) => p.grade === sp.grade && p.lessonNum === sp.lessonNum);
-            if (matchIdx >= 0 && sp.integrations) {
-              list[matchIdx] = {
-                ...list[matchIdx],
-                integrations: sp.integrations,
-                title: sp.title || list[matchIdx].title
-              };
-            }
-          });
-        }
-      }
-    } catch (e) {
-      console.warn('Error merging saved plans from storage', e);
-    }
-
-    if (currentMasterPlan && currentMasterPlan.week === selectedWeek) {
-      const idx = list.findIndex(
-        (p) => p.grade === currentMasterPlan.grade && p.lessonNum === currentMasterPlan.lessonNum
-      );
-      if (idx >= 0) {
-        // Only override if currentMasterPlan actually matches the lesson title of list[idx]
-        const cleanCurr = cleanLessonTitleForHeader(currentMasterPlan.title || '').toLowerCase();
-        const cleanTarget = cleanLessonTitleForHeader(list[idx].title || '').toLowerCase();
-        if (cleanCurr === cleanTarget || cleanCurr.includes(cleanTarget.slice(0, 10)) || cleanTarget.includes(cleanCurr.slice(0, 10))) {
-          list[idx] = {
-            ...normalizeMasterPlan(currentMasterPlan),
-            rows: lessonRows && lessonRows.length > 0 ? JSON.parse(JSON.stringify(lessonRows)) : currentMasterPlan.rows
-          };
-        }
-      }
-    }
-
     setPlansByGrade(list);
-  }, [selectedWeek, weeklyScheduleRows, currentMasterPlan, lessonRows]);
+    latestPlansRef.current = list;
+  }, [selectedWeek, versionRefreshNonce]);
 
   // Editable row handler
   const handlePlanRowChange = (planId: string, rowIndex: number, field: keyof LessonRow, value: any) => {
@@ -1162,6 +1408,111 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     category?: ImageClassificationCategory;
   } | null>(null);
 
+  const detectRowSlotMeta = (
+    rowContent: string | undefined,
+    rowIndex: number,
+    col: string,
+    defaultMovementName: string = 'động tác'
+  ): { rowName: string; category: ImageClassificationCategory; defaultQuery: string; addBtnLabel: string } => {
+    const c = (rowContent || '').toLowerCase();
+    if (c.includes('1.3.') || (c.includes('trò chơi') && c.includes('khởi động'))) {
+      return {
+        rowName: '1.3. Trò chơi bổ trợ khởi động',
+        category: 'tro_choi_kd',
+        defaultQuery: 'trò chơi khởi động',
+        addBtnLabel: '+ Gắn ảnh TC khởi động'
+      };
+    }
+    if (c.includes('1.2.') || (c.includes('khởi động chung') && !c.includes('1.3.'))) {
+      return {
+        rowName: '1.2. Khởi động chung & chuyên môn',
+        category: 'khoi_dong',
+        defaultQuery: 'khởi động',
+        addBtnLabel: '+ Gắn ảnh khởi động'
+      };
+    }
+    if (c.includes('1.1.') || c.includes('nhận lớp')) {
+      return {
+        rowName: '1.1. Nhận lớp & Mở đầu',
+        category: 'khoi_dong',
+        defaultQuery: 'khởi động',
+        addBtnLabel: '+ Gắn ảnh mở đầu'
+      };
+    }
+    if (c.includes('2.1.') || c.includes('khám phá') || c.includes('kiến thức mới')) {
+      return {
+        rowName: '2.1. Khám phá & Làm quen động tác',
+        category: 'dong_tac',
+        defaultQuery: defaultMovementName,
+        addBtnLabel: '+ Gắn ảnh động tác'
+      };
+    }
+    if (c.includes('3.5.') || (c.includes('trò chơi') && c.includes('vận động'))) {
+      return {
+        rowName: '3.5. Trò chơi vận động',
+        category: 'tro_choi_vd',
+        defaultQuery: 'trò chơi vận động',
+        addBtnLabel: '+ Gắn ảnh trò chơi'
+      };
+    }
+    if (c.includes('4.2.') || c.includes('4.3.') || c.includes('vận dụng')) {
+      return {
+        rowName: '4.2. Vận dụng thực tế SGK',
+        category: 'van_dung',
+        defaultQuery: 'vận dụng',
+        addBtnLabel: '+ Gắn ảnh vận dụng'
+      };
+    }
+    if (c.includes('3.1.') || c.includes('3.2.') || c.includes('3.3.') || c.includes('3.4.') || c.includes('luyện tập')) {
+      return {
+        rowName: '3. Hoạt động Luyện tập',
+        category: 'luyen_tap',
+        defaultQuery: 'luyện tập',
+        addBtnLabel: '+ Gắn ảnh luyện tập'
+      };
+    }
+
+    // Legacy 7-row index fallback when section headers are custom
+    if (rowIndex === 0) {
+      return {
+        rowName: '1. Mở đầu & Khởi động',
+        category: 'tro_choi_kd',
+        defaultQuery: 'khởi động',
+        addBtnLabel: '+ Gắn ảnh khởi động'
+      };
+    }
+    if (rowIndex === 1) {
+      return {
+        rowName: '2. Khám phá & Làm quen động tác',
+        category: 'dong_tac',
+        defaultQuery: defaultMovementName,
+        addBtnLabel: '+ Gắn ảnh động tác'
+      };
+    }
+    if (rowIndex === 5) {
+      return {
+        rowName: '3.4 Trò chơi vận động',
+        category: 'tro_choi_vd',
+        defaultQuery: 'trò chơi',
+        addBtnLabel: '+ Gắn ảnh trò chơi'
+      };
+    }
+    if (rowIndex === 6) {
+      return {
+        rowName: '4. Vận dụng',
+        category: 'van_dung',
+        defaultQuery: 'vận dụng',
+        addBtnLabel: '+ Gắn ảnh vận dụng'
+      };
+    }
+    return {
+      rowName: '3. Luyện tập',
+      category: col.includes('hs') ? 'luyen_tap' : 'dong_tac',
+      defaultQuery: defaultMovementName,
+      addBtnLabel: '+ Gắn ảnh Cột 1'
+    };
+  };
+
   const handleOpenPicker = (
     planId: string,
     rowIndex: number,
@@ -1170,35 +1521,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     forcedCategory?: ImageClassificationCategory
   ) => {
     const targetPlan = plansByGrade.find((p) => p.id === planId);
-    let rowName = `Dòng ${rowIndex + 1}`;
-    let autoCategory: ImageClassificationCategory = 'dong_tac';
-
-    if (rowIndex === 0) {
-      rowName = '1. Mở đầu & Khởi động (Trò chơi khởi động)';
-      autoCategory = 'tro_choi_kd';
-    } else if (rowIndex === 1) {
-      rowName = '2. Khám phá & Làm quen động tác';
-      autoCategory = 'dong_tac';
-    } else if (rowIndex >= 2 && rowIndex <= 4) {
-      rowName = '3. Luyện tập';
-      autoCategory = col === 'hs' ? 'luyen_tap' : 'dong_tac';
-    } else if (rowIndex === 5) {
-      rowName = '3.4 Trò chơi vận động';
-      autoCategory = 'tro_choi_vd';
-    } else if (rowIndex === 6) {
-      rowName = '4. Vận dụng';
-      autoCategory = 'luyen_tap';
-    }
+    const targetRow = targetPlan?.rows?.[rowIndex];
+    const detected = detectRowSlotMeta(targetRow?.content, rowIndex, col, query);
 
     setPickerTarget({
       planId,
       rowIndex,
       col,
-      searchQuery: query,
+      searchQuery: query || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
-      rowName: `${rowName} - ${col === 'content' ? 'Cột 1 (Nội dung)' : col === 'gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)'}`,
-      category: forcedCategory || autoCategory
+      rowName: `${detected.rowName} - ${col === 'content' ? 'Cột 1 (Nội dung)' : col === 'gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)'}`,
+      category: forcedCategory || detected.category
     });
     setPickerOpen(true);
   };
@@ -1212,20 +1546,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     query: string
   ) => {
     const targetPlan = plansByGrade.find((p) => p.id === planId);
+    const targetRow = targetPlan?.rows?.[rowIndex];
     const colName = col === 'inline_content' ? 'Cột 1 (Nội dung)' : col === 'inline_gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)';
-    let autoCategory: ImageClassificationCategory = 'dong_tac';
-
-    if (rowIndex === 0) {
-      autoCategory = 'tro_choi_kd';
-    } else if (rowIndex === 1) {
-      autoCategory = 'dong_tac';
-    } else if (rowIndex >= 2 && rowIndex <= 4) {
-      autoCategory = col === 'inline_hs' ? 'luyen_tap' : 'dong_tac';
-    } else if (rowIndex === 5) {
-      autoCategory = 'tro_choi_vd';
-    } else if (rowIndex === 6) {
-      autoCategory = 'luyen_tap';
-    }
+    const detected = detectRowSlotMeta(targetRow?.content, rowIndex, col, query);
 
     setPickerTarget({
       planId,
@@ -1233,11 +1556,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       col,
       cursorStart,
       cursorEnd,
-      searchQuery: query,
+      searchQuery: query || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
-      rowName: `Chèn ảnh vào dòng văn bản - ${colName} (Dòng ${rowIndex + 1})`,
-      category: autoCategory
+      rowName: `Chèn ảnh vào dòng văn bản - ${colName} (${detected.rowName})`,
+      category: detected.category
     });
     setPickerOpen(true);
   };
@@ -1402,37 +1725,47 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     showToast('Đã xóa hình ảnh khỏi Cột 3 (GV)!');
   };
 
-  // Save current week plans to IndexedDB and update parent
+  // Save current week plans officially to Version History, IndexedDB, and update parent WITHOUT resetting edits
   const handleSaveWeekPlans = async () => {
-    // 1. Update parent dictionary
-    plansByGrade.forEach((plan) => {
-      const key = `k${plan.grade}_t${plan.lessonNum}`;
-      if (onUpdateMasterPlanItem) {
-        onUpdateMasterPlanItem(key, plan);
-      }
-    });
+    flushPendingDraft();
+    const plansToCommit = latestPlansRef.current.length > 0 ? latestPlansRef.current : plansByGrade;
 
-    // 2. Persist to IndexedDB
+    // 1. Commit official versions across all plans for the week
+    if (onSaveMultipleOfficialVersions && plansToCommit.length > 0) {
+      onSaveMultipleOfficialVersions(plansToCommit);
+    } else {
+      plansToCommit.forEach((plan) => {
+        const key = `k${plan.grade}_t${plan.lessonNum}`;
+        if (onUpdateMasterPlanItem) {
+          onUpdateMasterPlanItem(key, plan);
+        }
+      });
+    }
+
+    // 2. Persist week settings & schedule to IndexedDB
     try {
       await setAppStateDB('weekly_schedule_rows', weeklyScheduleRows);
+      await setAppStateDB(`gdtc_schedule_w${selectedWeek}`, weeklyScheduleRows);
+      safeLocalStorageSet(`gdtc_schedule_w${selectedWeek}`, JSON.stringify(weeklyScheduleRows));
       await setAppStateDB('school_settings', localSettings);
       await setAppStateDB('active_week', selectedWeek);
       await setAppStateDB('custom_date_range', customDateRange);
       await setAppStateDB('custom_approval_date', customApprovalDate);
-      localStorage.setItem(`gdtc_dates_w${selectedWeek}`, JSON.stringify({
+      safeLocalStorageSet(`gdtc_dates_w${selectedWeek}`, JSON.stringify({
         dateRange: customDateRange,
         approvalDate: customApprovalDate
       }));
 
-      if (plansByGrade.length > 0) {
-        await setAppStateDB('master_plan', plansByGrade[0]);
-        await setAppStateDB('current_lesson_rows', plansByGrade[0].rows);
+      if (plansToCommit.length > 0) {
+        await setAppStateDB('master_plan', plansToCommit[0]);
+        await setAppStateDB('current_lesson_rows', plansToCommit[0].rows);
       }
 
       const currentAll = await getAppStateDB<Record<string, MasterPlanItem>>('gdtc_all_master_plans', {});
-      plansByGrade.forEach((plan) => {
+      plansToCommit.forEach((plan) => {
         const key = `k${plan.grade}_t${plan.lessonNum}`;
         currentAll[key] = plan;
+        currentAll[`${key}_w${plan.week}`] = plan;
       });
       await setAppStateDB('gdtc_all_master_plans', currentAll);
 
@@ -1440,12 +1773,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         onUpdateSchoolSettings(localSettings);
       }
 
-      if (onUpdateMasterPlan && plansByGrade.length > 0) {
-        onUpdateMasterPlan(plansByGrade[0]);
-      }
-
+      setAutoDraftStatus('saved');
       setIsEditMode(false);
-      showToast(`💾 Đã lưu thành công bộ giáo án 3 khối (K1, K3, K5) của Tuần ${selectedWeek} vào cơ sở dữ liệu!`);
+      showToast(`💾 Đã lưu chính thức bộ giáo án 3 khối (${plansToCommit.length} tiết) Tuần ${selectedWeek} vào lịch sử phiên bản & cơ sở dữ liệu!`);
     } catch (e) {
       console.error(e);
       showToast('Đã lưu dữ liệu vào phiên làm việc hiện tại!');
@@ -1548,8 +1878,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> GDPT 2018 · BGH
               </span>
             </div>
-            <p className="text-slate-500 text-xs mt-0.5">
-              Hỗ trợ chỉnh sửa tất cả các phần, chèn nhiều sơ đồ, lưu vĩnh viễn và xuất PDF giữ nguyên hình ảnh.
+            <p className="text-slate-500 text-xs mt-0.5 tabular-nums">
+              Hỗ trợ chỉnh sửa tất cả các phần, tự động lưu nháp liên tục và lưu lịch sử nhiều phiên bản.
+              {autoDraftStatus === 'saving' && (
+                <span className="ml-2 text-blue-600 font-semibold">· Đang tự động lưu bản nháp...</span>
+              )}
+              {autoDraftStatus === 'saved' && (
+                <span className="ml-2 text-emerald-700 font-semibold">· Đã tự động lưu nháp</span>
+              )}
             </p>
           </div>
 
@@ -1589,6 +1925,29 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             </button>
 
             <button
+              type="button"
+              onClick={() => {
+                const firstPlan = displayedPlans[0] || plansByGrade[0];
+                if (firstPlan) {
+                  setVersionModalInitialKey(getPlanVersionKey(firstPlan.week, firstPlan.grade, firstPlan.lessonNum));
+                }
+                setIsVersionModalOpen(true);
+              }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 shadow-2xs transition whitespace-nowrap shrink-0 tabular-nums"
+              title="Xem toàn bộ lịch sử thay đổi, khôi phục phiên bản cũ, tiếp tục bản nháp dở hoặc chọn phiên bản hoàn hảo nhất"
+            >
+              <History className="w-4 h-4 text-blue-600" />
+              <span>
+                Lịch sử & Phiên bản (
+                {plansByGrade.reduce(
+                  (sum, p) => sum + getVersionsForPlan(planVersionStore, p.week, p.grade, p.lessonNum).length,
+                  0
+                )}
+                )
+              </span>
+            </button>
+
+            <button
               onClick={handleSplitAndBalanceAllPlans}
               className="bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
               title="Tách 3.1, 3.2, 3.3 thành từng ô riêng, cân bằng chiều cao ô Cột GV (100-120 từ) và gắn ảnh chuẩn 100%"
@@ -1611,7 +1970,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             <button
               onClick={handleSaveWeekPlans}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-              title="Lưu toàn bộ chỉnh sửa của 3 khối vào cơ sở dữ liệu vĩnh viễn"
+              title="Lưu toàn bộ chỉnh sửa của 3 khối vào lịch sử phiên bản & cơ sở dữ liệu vĩnh viễn"
             >
               <Save className="w-4 h-4" />
               <span>Lưu Bộ 3 Khối (6 Tiết) Tuần {selectedWeek}</span>
@@ -1692,7 +2051,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <span className="font-bold text-slate-800">Chọn Tuần Học:</span>
               <select
                 value={selectedWeek}
-                onChange={(e) => setSelectedWeek(parseInt(e.target.value, 10))}
+                onChange={(e) => {
+                  flushPendingDraft();
+                  setSelectedWeek(parseInt(e.target.value, 10));
+                }}
                 className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
@@ -1762,6 +2124,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${auditReport.allPassed ? 'bg-emerald-400 text-emerald-950' : 'bg-amber-400 text-amber-950'}`}>
                 {auditReport.overallScore}%
               </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setGradeFormationStyles(getGradeFormationStyles());
+                setIsGradeFormationStyleOpen(true);
+              }}
+              className="px-2.5 py-1.5 bg-amber-50 border border-amber-300 hover:bg-amber-100 rounded-lg font-bold text-amber-900 flex items-center gap-1 transition"
+              title="Tùy chỉnh kiểu sơ đồ đội hình khác nhau cho Khối 1, Khối 3 và Khối 5"
+            >
+              <Compass className="w-3.5 h-3.5 text-amber-700" />
+              <span>Đổi Kiểu Đội Hình K1/3/5</span>
             </button>
 
             <button
@@ -2147,8 +2521,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                         {isEditMode ? (
                           <input
                             type="number"
-                            value={row.period}
-                            onChange={(e) => handleScheduleRowChange(row.id, 'period', parseInt(e.target.value, 10))}
+                            value={Number.isFinite(row.period) ? row.period : ''}
+                            onChange={(e) => handleScheduleRowChange(row.id, 'period', parseInt(e.target.value, 10) || 1)}
                             className="w-full text-center text-xs p-1 border border-blue-300 rounded"
                           />
                         ) : (
@@ -2189,8 +2563,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                         {isEditMode ? (
                           <input
                             type="number"
-                            value={row.ppct}
-                            onChange={(e) => handleScheduleRowChange(row.id, 'ppct', parseInt(e.target.value, 10))}
+                            value={Number.isFinite(row.ppct) ? row.ppct : ''}
+                            onChange={(e) => handleScheduleRowChange(row.id, 'ppct', parseInt(e.target.value, 10) || 1)}
                             className="w-full text-center text-xs p-1 border border-blue-300 rounded font-bold"
                           />
                         ) : (
@@ -2236,9 +2610,127 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         {/* CÁC BÀI DẠY CHI TIẾT THEO TỪNG TIẾT */}
         {displayedPlans.map((plan, planIdx) => {
           const isSingle = viewMode === 'single';
+          const planKey = getPlanVersionKey(plan.week, plan.grade, plan.lessonNum);
+          const planVersions = getVersionsForPlan(planVersionStore, plan.week, plan.grade, plan.lessonNum);
+          const activeVer = getPreferredVersionForPlan(planVersionStore, plan.week, plan.grade, plan.lessonNum);
+          const bestVer = getBestVersionForPlan(planVersionStore, plan.week, plan.grade, plan.lessonNum);
+          const isCurrentBest = Boolean(activeVer && (activeVer.isStarredBest || activeVer.status === 'best'));
+
           return (
             <div key={plan.id} className="official-lesson-page mb-12 print:mb-0 print:break-after-page">
+              {/* Per-Lesson Version Status & Quick Actions Strip (hidden when printing) */}
+              <div className="mb-4 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs no-print">
+                <div className="flex items-center gap-2 flex-wrap text-slate-600 tabular-nums">
+                  <span className="font-bold text-slate-900">
+                    K{plan.grade} · Tiết {plan.lessonNum}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  {activeVer ? (
+                    <>
+                      <span
+                        className={`font-semibold inline-flex items-center gap-1 ${
+                          isCurrentBest
+                            ? 'text-amber-700'
+                            : activeVer.status === 'draft'
+                            ? 'text-blue-700'
+                            : 'text-emerald-700'
+                        }`}
+                      >
+                        {isCurrentBest ? (
+                          <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                        ) : activeVer.status === 'draft' ? (
+                          <FileEdit className="w-3.5 h-3.5" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        Phiên bản #{activeVer.versionNumber} (
+                        {isCurrentBest
+                          ? 'Hoàn hảo nhất'
+                          : activeVer.status === 'draft'
+                          ? 'Bản nháp đang sửa dở'
+                          : 'Đã lưu chính thức'}
+                        )
+                      </span>
+                      <span aria-hidden="true">·</span>
+                      <span className="inline-flex items-center gap-1 text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        {formatRelativeTimeVi(activeVer.updatedAt)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-slate-500">Bản mặc định SGK (chưa có chỉnh sửa)</span>
+                  )}
+                </div>
 
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {bestVer && activeVer?.versionId !== bestVer.versionId && onLoadPlanVersion && (
+                    <button
+                      type="button"
+                      onClick={() => onLoadPlanVersion(planKey, bestVer.versionId)}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+                    >
+                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                      <span>Tải bản hoàn hảo (v{bestVer.versionNumber})</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activeVer && onToggleBestVersion) {
+                        onToggleBestVersion(planKey, activeVer.versionId);
+                      } else if (onSaveOfficialVersion) {
+                        const baseline = buildBaselinePlanForSlot(
+                          plan.grade as 1 | 3 | 5,
+                          plan.lessonNum,
+                          `k${plan.grade}_t${plan.lessonNum}`
+                        );
+                        onSaveOfficialVersion(plan, undefined, true, baseline);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border flex items-center gap-1 whitespace-nowrap shrink-0 transition ${
+                      isCurrentBest
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-amber-400 hover:text-amber-800'
+                    }`}
+                  >
+                    <Star className={`w-3 h-3 ${isCurrentBest ? 'fill-amber-500 text-amber-500' : 'text-slate-400'}`} />
+                    <span>{isCurrentBest ? 'Hoàn hảo nhất' : 'Chọn hoàn hảo'}</span>
+                  </button>
+
+                  {onSaveOfficialVersion && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        flushPendingDraft();
+                        const baseline = buildBaselinePlanForSlot(
+                          plan.grade as 1 | 3 | 5,
+                          plan.lessonNum,
+                          `k${plan.grade}_t${plan.lessonNum}`
+                        );
+                        onSaveOfficialVersion(plan, undefined, false, baseline);
+                        setAutoDraftStatus('saved');
+                      }}
+                      className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+                    >
+                      <Save className="w-3 h-3" />
+                      <span>Lưu phiên bản</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVersionModalInitialKey(planKey);
+                      setIsVersionModalOpen(true);
+                    }}
+                    className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 flex items-center gap-1 whitespace-nowrap shrink-0 transition tabular-nums"
+                  >
+                    <History className="w-3 h-3 text-blue-600" />
+                    <span>Lịch sử ({planVersions.length})</span>
+                  </button>
+                </div>
+              </div>
 
               {/* Title Section - In HOA, KHÔNG gạch ngang dưới tiêu đề */}
               <div className="text-center space-y-1.5 mb-6">
@@ -2656,25 +3148,31 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       const movementName = extractRowMovementName(row);
 
                       // Gather all diagrams/images for Column 1
-                      const displayedContentImages: DiagramAttachment[] = (row.contentImages && row.contentImages.length > 0)
-                        ? row.contentImages
-                        : row.contentImgUrl
-                        ? [{ id: 'c_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
-                        : [];
+                      const displayedContentImages: DiagramAttachment[] = (
+                        (row.contentImages && row.contentImages.length > 0)
+                          ? row.contentImages
+                          : row.contentImgUrl
+                          ? [{ id: 'c_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
 
                       // Gather all diagrams/images for Column 3 (Hoạt động GV)
-                      const displayedGvDiagrams: DiagramAttachment[] = (row.gvImages && row.gvImages.length > 0)
-                        ? row.gvImages
-                        : row.gvImgUrl
-                        ? [{ id: 'gv_init', url: row.gvImgUrl, title: row.gvImgTitle || 'Hình minh họa GV' }]
-                        : [];
+                      const displayedGvDiagrams: DiagramAttachment[] = (
+                        (row.gvImages && row.gvImages.length > 0)
+                          ? row.gvImages
+                          : row.gvImgUrl
+                          ? [{ id: 'gv_init', url: row.gvImgUrl, title: row.gvImgTitle || 'Hình minh họa GV' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
 
                       // Gather all diagrams for Column 4 (Hoạt động HS / Sơ đồ)
-                      const displayedDiagrams: DiagramAttachment[] = (row.hsImages && row.hsImages.length > 0)
-                        ? row.hsImages
-                        : row.hsImgUrl
-                        ? [{ id: 'diag_init', url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ đội hình' }]
-                        : [];
+                      const displayedDiagrams: DiagramAttachment[] = (
+                        (row.hsImages && row.hsImages.length > 0)
+                          ? row.hsImages
+                          : row.hsImgUrl
+                          ? [{ id: 'diag_init', url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ đội hình' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
 
                       return (
                         <tr key={rowIdx} className="hover:bg-slate-50/50">
@@ -2783,13 +3281,27 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 )}
 
                                 {/* Attached Images Gallery for Column 1 */}
-                                {displayedContentImages.length > 0 && (
+                                {displayedContentImages.length > 0 && (() => {
+                                  const slotMeta = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                  const tooltipFolder =
+                                    slotMeta.category === 'khoi_dong'
+                                      ? 'khoiDong'
+                                      : slotMeta.category === 'tro_choi_kd'
+                                      ? 'troChoiKhoiDong'
+                                      : slotMeta.category === 'luyen_tap'
+                                      ? 'luyenTap'
+                                      : slotMeta.category === 'tro_choi_vd'
+                                      ? 'troChoi'
+                                      : slotMeta.category === 'van_dung'
+                                      ? 'vanDung'
+                                      : 'kyThuat';
+                                  return (
                                   <div className="mt-2 space-y-1.5">
                                     <div className={`grid ${displayedContentImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'} gap-1.5`}>
                                       {displayedContentImages.map((cImg, cIdx) => (
                                         <div
                                           key={`content_img_${cIdx}`}
-                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group"
+                                          className="p-1 bg-slate-50 rounded border border-slate-200 text-center relative group group/imgtip"
                                         >
                                           <img
                                             src={cImg.url}
@@ -2802,15 +3314,23 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                               {cImg.title}
                                             </p>
                                           )}
+                                          <ImageProvenanceTooltip
+                                            image={{
+                                              title: cImg.title || row.contentImgTitle || movementName,
+                                              grade: String(plan.grade),
+                                              lessonTitle: plan.title,
+                                              folder: tooltipFolder,
+                                              imgUrl: cImg.url
+                                            }}
+                                            position="bottom"
+                                            className="no-print"
+                                          />
                                           <div className="flex items-center justify-center gap-1.5 mt-1 no-print">
                                             <button
-                                              onClick={() => handleOpenPicker(
-                                                plan.id,
-                                                rowIdx,
-                                                'content',
-                                                rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
-                                                rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
-                                              )}
+                                              onClick={() => {
+                                                const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                                handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
+                                              }}
                                               className="text-[10px] text-blue-600 hover:text-blue-800 underline font-semibold"
                                             >
                                               Đổi ảnh
@@ -2829,13 +3349,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
                                     <div className="flex gap-1 mt-1 no-print">
                                       <button
-                                        onClick={() => handleOpenPicker(
-                                          plan.id,
-                                          rowIdx,
-                                          'content',
-                                          rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
-                                          rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
-                                        )}
+                                        onClick={() => {
+                                          const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                          handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
+                                        }}
                                         className="flex-1 py-1 px-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-bold flex items-center justify-center gap-1 transition"
                                       >
                                         <PlusCircle className="w-3 h-3 text-blue-600" />
@@ -2851,39 +3368,53 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       </button>
                                     </div>
                                   </div>
-                                )}
+                                  );
+                                })()}
 
-                                {displayedContentImages.length === 0 && (
-                                  <div className="flex gap-1 mt-1.5 no-print">
-                                    <button
-                                      onClick={() => handleOpenPicker(
-                                        plan.id,
-                                        rowIdx,
-                                        'content',
-                                        rowIdx === 0 ? 'khởi động' : rowIdx === 5 ? 'trò chơi' : movementName,
-                                        rowIdx === 0 ? 'tro_choi_kd' : rowIdx === 5 ? 'tro_choi_vd' : rowIdx === 1 ? 'dong_tac' : 'luyen_tap'
+                                {displayedContentImages.length === 0 && (() => {
+                                  const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                  const missingNotice = !hasInlineMedia(row.content)
+                                    ? resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic)
+                                    : null;
+                                  const btnTheme =
+                                    slot.category === 'tro_choi_kd' || slot.category === 'khoi_dong'
+                                      ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
+                                      : slot.category === 'tro_choi_vd'
+                                      ? 'bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-800'
+                                      : slot.category === 'van_dung'
+                                      ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100 text-emerald-800'
+                                      : 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700';
+                                  return (
+                                    <div className="space-y-1.5 mt-1.5 no-print">
+                                      {missingNotice && (
+                                        <div className="p-2 bg-amber-50/90 border border-amber-300/90 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
+                                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                          <div>
+                                            <p className="font-bold text-amber-900">Chưa tìm được hình phù hợp cho mục này</p>
+                                            <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
+                                          </div>
+                                        </div>
                                       )}
-                                      className={`flex-1 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition ${
-                                        rowIdx === 0
-                                          ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
-                                          : rowIdx === 5
-                                          ? 'bg-purple-50 border-purple-200 hover:bg-purple-100 text-purple-800'
-                                          : 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700'
-                                      }`}
-                                    >
-                                      <FolderOpen className="w-3 h-3" />
-                                      <span>{rowIdx === 0 ? '+ Gắn ảnh khởi động' : rowIdx === 5 ? '+ Gắn ảnh trò chơi' : '+ Gắn ảnh Cột 1'}</span>
-                                    </button>
-                                    <button
-                                      onClick={() => handleOpenFormationPicker(plan.id, rowIdx, 'content')}
-                                      className="px-2 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition"
-                                      title="Gắn sơ đồ vào Cột 1"
-                                    >
-                                      <Compass className="w-3 h-3 text-indigo-600" />
-                                      <span>+ Sơ đồ Cột 1</span>
-                                    </button>
-                                  </div>
-                                )}
+                                      <div className="flex gap-1">
+                                        <button
+                                          onClick={() => handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category)}
+                                          className={`flex-1 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition ${btnTheme}`}
+                                        >
+                                          <FolderOpen className="w-3 h-3" />
+                                          <span>{slot.addBtnLabel}</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleOpenFormationPicker(plan.id, rowIdx, 'content')}
+                                          className="px-2 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-800 rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition"
+                                          title="Gắn sơ đồ vào Cột 1"
+                                        >
+                                          <Compass className="w-3 h-3 text-indigo-600" />
+                                          <span>+ Sơ đồ Cột 1</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             ) : (
                               /* VIEW / PRINT MODE FOR COLUMN 1 */
@@ -2895,12 +3426,26 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                   isEditMode={false}
                                 />
 
-                                {displayedContentImages.length > 0 && (
+                                {displayedContentImages.length > 0 ? (() => {
+                                  const slotMeta = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                  const tooltipFolder =
+                                    slotMeta.category === 'khoi_dong'
+                                      ? 'khoiDong'
+                                      : slotMeta.category === 'tro_choi_kd'
+                                      ? 'troChoiKhoiDong'
+                                      : slotMeta.category === 'luyen_tap'
+                                      ? 'luyenTap'
+                                      : slotMeta.category === 'tro_choi_vd'
+                                      ? 'troChoi'
+                                      : slotMeta.category === 'van_dung'
+                                      ? 'vanDung'
+                                      : 'kyThuat';
+                                  return (
                                   <div className="space-y-1.5">
                                     {displayedContentImages.map((cImg, cIdx) => (
                                       <div
                                         key={`print_c_${cIdx}`}
-                                        className="my-1.5 p-1 bg-slate-50/80 rounded border border-slate-200 text-center"
+                                        className="my-1.5 p-1 bg-slate-50/80 rounded border border-slate-200 text-center relative group/imgtip"
                                       >
                                         <img
                                           src={cImg.url}
@@ -2913,10 +3458,46 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                             {cImg.title}
                                           </p>
                                         )}
+                                        <ImageProvenanceTooltip
+                                          image={{
+                                            title: cImg.title || row.contentImgTitle || movementName,
+                                            grade: String(plan.grade),
+                                            lessonTitle: plan.title,
+                                            folder: tooltipFolder,
+                                            imgUrl: cImg.url
+                                          }}
+                                          position="bottom"
+                                          className="no-print"
+                                        />
                                       </div>
                                     ))}
                                   </div>
-                                )}
+                                  );
+                                })() : (() => {
+                                  if (hasInlineMedia(row.content)) return null;
+                                  const missingNotice = resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic);
+                                  if (!missingNotice) return null;
+                                  return (
+                                    <div className="no-print mt-1.5 p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
+                                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                      <div className="flex-1">
+                                        <p className="font-bold text-amber-900">Chưa có hình ảnh SGK phù hợp</p>
+                                        <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                            handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
+                                          }}
+                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[10px] transition"
+                                        >
+                                          <FolderOpen className="w-3 h-3" />
+                                          <span>Chọn ảnh trong Thư viện</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             )}
                           </td>
@@ -3348,6 +3929,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             setFormationTarget(null);
           }}
           targetRowIndex={formationTarget.rowIndex}
+          grade={plansByGrade.find((p) => p.id === formationTarget.planId)?.grade}
+          libraryImages={images}
           onSelectFormation={(rowIdx, diag) => {
             handleAddDiagramToRow(
               formationTarget.planId,
@@ -3361,6 +3944,117 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             setFormationTarget(null);
           }}
         />
+      )}
+
+      {/* Per-Grade Formation Style Customizer Modal (Khối 1 · Khối 3 · Khối 5) */}
+      {isGradeFormationStyleOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5"
+          onClick={() => setIsGradeFormationStyleOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-2xl w-full p-5 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                  <Compass className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900">
+                    Đa Dạng Hóa Kiểu Sơ Đồ Đội Hình Theo Khối (1 · 3 · 5)
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Chọn bộ đội hình riêng cho từng khối để tránh lặp lại giống hệt nhau giữa 3 khối khi in giáo án.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGradeFormationStyleOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 overflow-y-auto pr-1 text-xs">
+              {([1, 3, 5] as const).map((gVal) => {
+                const selectedKey = gradeFormationStyles[gVal];
+                const selectedInfo = GRADE_FORMATION_STYLE_OPTIONS.find((o) => o.key === selectedKey);
+                return (
+                  <div
+                    key={gVal}
+                    className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-extrabold text-sm text-slate-900">
+                        {gVal === 1
+                          ? 'Khối 1 (Trực quan · Gần gũi · Dễ quan sát)'
+                          : gVal === 3
+                          ? 'Khối 3 (Nề nếp · Bậc thang · 4 khu A-B-C-D)'
+                          : 'Khối 5 (Tự quản · Giãn cách 1.5m · 4 Trạm xoay vòng)'}
+                      </span>
+                      <select
+                        value={selectedKey}
+                        onChange={(e) =>
+                          setGradeFormationStyles((prev) => ({
+                            ...prev,
+                            [gVal]: e.target.value as GradeFormationStyleKey
+                          }))
+                        }
+                        className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        {GRADE_FORMATION_STYLE_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {selectedInfo && (
+                      <p className="text-[11px] text-slate-600 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200">
+                        {selectedInfo.shortSummary}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Các sơ đồ tự vẽ bằng Studio hoặc do AI tạo từ ảnh trò chơi sẽ luôn được giữ nguyên, không bị ghi đè.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setIsGradeFormationStyleOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-xs font-semibold text-slate-700"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  saveGradeFormationStyles(gradeFormationStyles);
+                  const updatedPlans = plansByGrade.map((p) => ({
+                    ...p,
+                    rows: applyGradeDistinctFormationsToRows(p.rows, p.grade, true)
+                  }));
+                  recordHistory(updatedPlans);
+                  setIsGradeFormationStyleOpen(false);
+                  showToast('✨ Đã áp dụng bộ sơ đồ đội hình riêng biệt cho Khối 1, Khối 3 và Khối 5!');
+                }}
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                <Check className="w-4 h-4 text-emerald-300" />
+                <span>Lưu & Áp Dụng Cho 3 Khối</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Upload Weekly Timetable & Auto-Extract Integrations Modal */}
@@ -3717,6 +4411,67 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             rowIndex: pickerTarget.rowIndex
           }}
           onSelectImage={handleAttachImage}
+        />
+      )}
+
+      {/* Version History & Draft Recovery Modal */}
+      {isVersionModalOpen && (
+        <PlanVersionHistoryModal
+          isOpen={isVersionModalOpen}
+          onClose={() => setIsVersionModalOpen(false)}
+          store={planVersionStore}
+          initialTargetKey={versionModalInitialKey}
+          targets={plansByGrade.map((p) => ({
+            week: p.week,
+            grade: p.grade as 1 | 3 | 5,
+            lessonNum: p.lessonNum,
+            title: p.title,
+            currentPlan: p,
+            defaultBaselinePlan: buildBaselinePlanForSlot(
+              p.grade as 1 | 3 | 5,
+              p.lessonNum,
+              `k${p.grade}_t${p.lessonNum}`
+            )
+          }))}
+          onSaveNewVersion={(plan, customLabel, markAsBest, baselinePlan) => {
+            if (onSaveOfficialVersion) {
+              flushPendingDraft();
+              onSaveOfficialVersion(plan, customLabel, markAsBest, baselinePlan);
+              setAutoDraftStatus('saved');
+            }
+          }}
+          onLoadVersion={(planKey, versionId) => {
+            if (onLoadPlanVersion) {
+              onLoadPlanVersion(planKey, versionId);
+            }
+          }}
+          onToggleBest={(planKey, versionId) => {
+            if (onToggleBestVersion) {
+              onToggleBestVersion(planKey, versionId);
+            }
+          }}
+          onDeleteVersion={(planKey, versionId) => {
+            if (onDeletePlanVersion) {
+              onDeletePlanVersion(planKey, versionId);
+            }
+          }}
+          onResetToDefaultBaseline={(target) => {
+            if (!target.defaultBaselinePlan) return;
+            const fresh = normalizeMasterPlan(target.defaultBaselinePlan);
+            setPlansByGrade((prev) =>
+              prev.map((p) =>
+                p.grade === fresh.grade && p.lessonNum === fresh.lessonNum && p.week === fresh.week
+                  ? fresh
+                  : p
+              )
+            );
+            if (onSaveOfficialVersion) {
+              onSaveOfficialVersion(fresh, 'Khôi phục từ bản gốc mặc định', false, fresh);
+            }
+            showToast(
+              `↩️ Đã khôi phục Tuần ${fresh.week} · Khối ${fresh.grade} · Tiết ${fresh.lessonNum} về mẫu gốc (các phiên bản cũ vẫn được giữ trong lịch sử).`
+            );
+          }}
         />
       )}
     </div>

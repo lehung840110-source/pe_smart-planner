@@ -5,9 +5,11 @@ export interface FormationDiagram {
   phase: 'nhan_lop' | 'khoi_dong' | 'tap_mau' | 'dong_loat' | 'to_nhom' | 'cap_doi' | 'thi_dua' | 'tro_choi' | 'hoi_tinh' | 'xuong_lop';
   description: string;
   svgDataUrl: string;
+  grade?: 1 | 3 | 5 | 'all';
+  elements?: FormationElement[];
 }
 
-import { formationStudioPresets, renderFormationSvgString } from '../utils/formationStudioUtils';
+import { FormationElement, formationStudioPresets, renderFormationSvgString } from '../utils/formationStudioUtils';
 
 const escXml = (str: string) =>
   (str || '')
@@ -991,8 +993,619 @@ export const standardFormationDiagrams: FormationDiagram[] = [
     phase: 'tro_choi',
     description: 'Vòng tròn 12 học sinh bao quanh tâm có bóng/cờ, di chuyển theo chiều kim đồng hồ.',
     svgDataUrl: renderFormationSvgString(formationStudioPresets.find((p) => p.id === 'p_tro_choi_vong_tron')!.elements, 'clean', 'SƠ ĐỒ TRÒ CHƠI THEO VÒNG TRÒN', 'Vận động vòng tròn')
+  },
+  // ============================================================================
+  // BỘ SƠ ĐỒ ĐA DẠNG HÓA RIÊNG BIỆT CHO TỪNG KHỐI (KHỐI 1 - KHỐI 3 - KHỐI 5)
+  // ============================================================================
+  // --- KHỐI 1: Trực quan, cự ly gần, vòng tròn & 2 hàng thoáng ---
+  {
+    id: 'f_k1_nhan_lop',
+    name: 'Khối 1 · Đội hình nhận lớp (2 hàng ngang cự ly hẹp)',
+    code: 'DH_K1_NHAN_LOP',
+    phase: 'nhan_lop',
+    grade: 1,
+    description: '2 hàng ngang cự ly gần dễ quan sát cô/thầy, cán sự đứng đầu hàng điểm số báo cáo.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_nl_gv', type: 'gv', x: 320, y: 86, color: '#dc2626', label: 'GV Lớp 1' },
+        { id: 'k1_nl_cs', type: 'cs', x: 118, y: 185, color: '#0284c7', label: 'CS' },
+        { id: 'k1_nl_l1', type: 'line_dashed', x: 145, y: 155, endX: 525, endY: 155, color: '#cbd5e1' },
+        ...[170, 225, 280, 335, 390, 445, 500].map((x, i) => ({ id: `k1_nl_r1_${i}`, type: 'hs' as const, x, y: 185, color: '#2563eb', radius: 11 })),
+        ...[198, 253, 308, 363, 418, 473].map((x, i) => ({ id: `k1_nl_r2_${i}`, type: 'hs' as const, x, y: 245, color: '#1e293b', radius: 11 })),
+        { id: 'k1_nl_txt', type: 'text', x: 320, y: 360, color: '#1d4ed8', label: 'Khối 1: 2 hàng ngang gọn nhẹ, cự ly gần giúp HS dễ lắng nghe GV', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: NHẬN LỚP (2 HÀNG NGANG)',
+      'Cự ly hẹp dễ quan sát'
+    )
+  },
+  {
+    id: 'f_k1_khoi_dong',
+    name: 'Khối 1 · Khởi động vòng tròn lớn (GV đứng tâm)',
+    code: 'DH_K1_KHOI_DONG',
+    phase: 'khoi_dong',
+    grade: 1,
+    description: 'Học sinh Lớp 1 đứng thành vòng tròn lớn quanh giáo viên, xoay các khớp theo nhạc vui tươi.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_kd_ring', type: 'shape_circle', x: 320, y: 235, radius: 112, color: '#0284c7', label: 'Vòng tròn Lớp 1' },
+        { id: 'k1_kd_gv', type: 'gv', x: 320, y: 232, color: '#dc2626', label: 'GV Tâm' },
+        ...Array.from({ length: 14 }, (_, i) => {
+          const ang = (i * 2 * Math.PI) / 14;
+          return {
+            id: `k1_kd_hs_${i}`,
+            type: 'hs' as const,
+            x: Math.round(320 + 112 * Math.cos(ang)),
+            y: Math.round(235 + 98 * Math.sin(ang)),
+            color: i % 2 === 0 ? '#0284c7' : '#2563eb',
+            radius: 10.5
+          };
+        }),
+        { id: 'k1_kd_arr', type: 'arrow_curved', x: 380, y: 125, endX: 438, endY: 180, color: '#16a34a' },
+        { id: 'k1_kd_txt', type: 'text', x: 320, y: 385, color: '#0369a1', label: 'Khối 1: Vòng tròn khởi động · Các em hướng mặt vào tâm quan sát GV', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: VÒNG TRÒN KHỞI ĐỘNG',
+      'GV đứng tâm hướng dẫn'
+    )
+  },
+  {
+    id: 'f_k1_tap_mau',
+    name: 'Khối 1 · Quan sát mẫu hình chữ U cự ly gần',
+    code: 'DH_K1_TAP_MAU',
+    phase: 'tap_mau',
+    grade: 1,
+    description: 'Học sinh quây hình chữ U gần bảng tranh SGK và GV làm mẫu theo phương pháp chiều gương.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_tm_board', type: 'sgk_board', x: 185, y: 95, width: 155, height: 55, color: '#d97706', label: 'Tranh SGK Lớp 1' },
+        { id: 'k1_tm_gv', type: 'gv', x: 405, y: 105, color: '#dc2626', label: 'GV Thị Phạm' },
+        // Chữ U 2 cánh + đáy gần
+        ...[185, 225, 265].map((y, i) => ({ id: `k1_tm_l_${i}`, type: 'hs' as const, x: 145, y, color: '#2563eb', radius: 10.5 })),
+        ...[185, 225, 265].map((y, i) => ({ id: `k1_tm_r_${i}`, type: 'hs' as const, x: 495, y, color: '#2563eb', radius: 10.5 })),
+        ...[200, 260, 320, 380, 440].map((x, i) => ({ id: `k1_tm_b_${i}`, type: 'hs' as const, x, y: 300, color: '#1e293b', radius: 10.5 })),
+        { id: 'k1_tm_txt', type: 'text', x: 320, y: 375, color: '#b45309', label: 'Khối 1: Đội hình chữ U cự ly gần · Quan sát trực tiếp tranh & động tác mẫu', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: CHỮ U QUAN SÁT MẪU',
+      'Cự ly gần quanh tranh SGK'
+    )
+  },
+  {
+    id: 'f_k1_dong_loat',
+    name: 'Khối 1 · Tập đồng loạt (2 hàng ngang so le)',
+    code: 'DH_K1_DONG_LOAT',
+    phase: 'dong_loat',
+    grade: 1,
+    description: '2 hàng ngang đứng so le giãn cách rộng, tránh va chạm và dễ bắt nhịp theo GV.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_dl_gv', type: 'gv', x: 320, y: 88, color: '#dc2626', label: 'GV Hô Nhịp' },
+        ...[110, 195, 280, 365, 450, 535].map((x, i) => ({ id: `k1_dl_1_${i}`, type: 'hs' as const, x, y: 195, color: '#16a34a', radius: 11.5 })),
+        ...[152, 237, 322, 407, 492].map((x, i) => ({ id: `k1_dl_2_${i}`, type: 'hs' as const, x, y: 270, color: '#0284c7', radius: 11.5 })),
+        { id: 'k1_dl_txt', type: 'text', x: 320, y: 372, color: '#15803d', label: 'Khối 1: 2 hàng ngang so le thoáng · Hàng sau xen khe nhìn rõ động tác mẫu', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: ĐỒNG LOẠT 2 HÀNG SO LE',
+      'Dễ quan sát & bắt nhịp'
+    )
+  },
+  {
+    id: 'f_k1_to_nhom',
+    name: 'Khối 1 · Tập theo tổ (4 cụm vòng tròn nhỏ)',
+    code: 'DH_K1_TO_NHOM',
+    phase: 'to_nhom',
+    grade: 1,
+    description: '4 tổ xếp thành 4 vòng tròn nhỏ vui nhộn giúp học sinh Lớp 1 tập trung theo tổ trưởng.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_tn_gv', type: 'gv', x: 320, y: 232, color: '#dc2626', label: 'GV' },
+        ...[
+          { cx: 155, cy: 145, lb: 'Tổ 1' },
+          { cx: 485, cy: 145, lb: 'Tổ 2' },
+          { cx: 155, cy: 315, lb: 'Tổ 3' },
+          { cx: 485, cy: 315, lb: 'Tổ 4' }
+        ].flatMap((g, gi) => [
+          { id: `k1_tn_c_${gi}`, type: 'shape_circle' as const, x: g.cx, y: g.cy, radius: 52, color: '#3b82f6', label: g.lb },
+          { id: `k1_tn_tt_${gi}`, type: 'tt' as const, x: g.cx, y: g.cy - 48, color: '#ea580c', label: `T${gi + 1}` },
+          ...[0, 1, 2, 3, 4].map((k) => {
+            const a = ((k + 0.5) * 2 * Math.PI) / 5;
+            return {
+              id: `k1_tn_h_${gi}_${k}`,
+              type: 'hs' as const,
+              x: Math.round(g.cx + 42 * Math.cos(a)),
+              y: Math.round(g.cy + 38 * Math.sin(a)),
+              color: '#2563eb',
+              radius: 9.5
+            };
+          })
+        ]),
+        { id: 'k1_tn_txt', type: 'text', x: 320, y: 394, color: '#1d4ed8', label: 'Khối 1: 4 cụm vòng tròn nhỏ · Quây quần giúp đỡ bạn tập đều nhịp', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: 4 CỤM VÒNG TRÒN TỔ',
+      'Thân thiện, dễ tập trung'
+    )
+  },
+  {
+    id: 'f_k1_cap_doi',
+    name: 'Khối 1 · Cặp đôi đối diện (2 dãy song song)',
+    code: 'DH_K1_CAP_DOI',
+    phase: 'cap_doi',
+    grade: 1,
+    description: '2 dãy cặp đôi đứng đối diện nhau cự ly 1.2m giúp các em Lớp 1 nhận xét giúp bạn đơn giản.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_cd_gv', type: 'gv', x: 320, y: 86, color: '#dc2626', label: 'GV Hỗ Trợ' },
+        ...[135, 255, 385, 505].flatMap((x, i) => [
+          { id: `k1_cd_1a_${i}`, type: 'hs' as const, x: x - 24, y: 185, color: '#2563eb', radius: 11, label: 'A' },
+          { id: `k1_cd_1b_${i}`, type: 'hs' as const, x: x + 24, y: 185, color: '#16a34a', radius: 11, label: 'B' },
+          { id: `k1_cd_2a_${i}`, type: 'hs' as const, x: x - 24, y: 275, color: '#2563eb', radius: 11, label: 'A' },
+          { id: `k1_cd_2b_${i}`, type: 'hs' as const, x: x + 24, y: 275, color: '#16a34a', radius: 11, label: 'B' }
+        ]),
+        { id: 'k1_cd_txt', type: 'text', x: 320, y: 370, color: '#475569', label: 'Khối 1: 2 dãy cặp đôi đối diện · Đôi bạn cùng tiến đếm nhịp 1-2-3-4', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: CẶP ĐÔI 2 DÃY ĐỐI DIỆN',
+      'Đôi bạn cùng tiến'
+    )
+  },
+  {
+    id: 'f_k1_thi_dua',
+    name: 'Khối 1 · Thi đua vòng cung cổ vũ',
+    code: 'DH_K1_THI_DUA',
+    phase: 'thi_dua',
+    grade: 1,
+    description: 'Các bạn ngồi/đứng theo hình vòng cung bán nguyệt cổ vũ cho từng tổ lên biểu diễn phía trước.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_td_gv', type: 'gv', x: 145, y: 105, color: '#dc2626', label: 'GV Cổ Vũ' },
+        { id: 'k1_td_stage', type: 'shape_rect', x: 215, y: 92, width: 220, height: 78, color: '#f59e0b', label: 'Nhóm Biểu Diễn' },
+        ...[255, 300, 345, 390].map((x, i) => ({ id: `k1_td_p_${i}`, type: 'hs' as const, x, y: 136, color: '#ea580c', radius: 11 })),
+        ...Array.from({ length: 11 }, (_, i) => {
+          const ang = Math.PI * (0.12 + (i * 0.76) / 10);
+          return {
+            id: `k1_td_a_${i}`,
+            type: 'hs' as const,
+            x: Math.round(320 + 185 * Math.cos(ang)),
+            y: Math.round(210 + 125 * Math.sin(ang)),
+            color: '#2563eb',
+            radius: 10.5
+          };
+        }),
+        { id: 'k1_td_txt', type: 'text', x: 320, y: 382, color: '#b45309', label: 'Khối 1: Hình bán nguyệt cổ vũ · Tạo không khí vui tươi, tự tin biểu diễn', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: VÒNG CUNG THI ĐUA CỔ VŨ',
+      'Tạo hứng thú cho Lớp 1'
+    )
+  },
+  {
+    id: 'f_k1_hoi_tinh',
+    name: 'Khối 1 · Vòng tròn hồi tĩnh & thả lỏng',
+    code: 'DH_K1_HOI_TINH',
+    phase: 'hoi_tinh',
+    grade: 1,
+    description: 'Vòng tròn nhẹ nhàng quanh GV hít thở sâu, rũ tay chân và nghe nhận xét khen ngợi.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_ht_gv', type: 'gv', x: 320, y: 235, color: '#dc2626', label: 'GV Nhận Xét' },
+        { id: 'k1_ht_ring', type: 'shape_circle', x: 320, y: 235, radius: 108, color: '#10b981', label: 'Vòng Thả Lỏng' },
+        ...Array.from({ length: 12 }, (_, i) => {
+          const ang = (i * 2 * Math.PI) / 12;
+          return {
+            id: `k1_ht_h_${i}`,
+            type: 'hs' as const,
+            x: Math.round(320 + 108 * Math.cos(ang)),
+            y: Math.round(235 + 95 * Math.sin(ang)),
+            color: '#0d9488',
+            radius: 10.5
+          };
+        }),
+        { id: 'k1_ht_txt', type: 'text', x: 320, y: 386, color: '#0f766e', label: 'Khối 1: Vòng tròn thả lỏng · Hít thở sâu điều hòa và nhận xét khen thưởng', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: VÒNG TRÒN HỒI TĨNH',
+      'Thả lỏng nhẹ nhàng'
+    )
+  },
+  {
+    id: 'f_k1_xuong_lop',
+    name: 'Khối 1 · Đội hình xuống lớp (2 hàng dọc)',
+    code: 'DH_K1_XUONG_LOP',
+    phase: 'xuong_lop',
+    grade: 1,
+    description: 'Học sinh Lớp 1 xếp 2 hàng dọc gọn gàng theo hiệu lệnh GV trật tự trở về lớp.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k1_xl_gv', type: 'gv', x: 320, y: 86, color: '#dc2626', label: 'GV Dẫn Hàng' },
+        { id: 'k1_xl_cs1', type: 'cs', x: 255, y: 145, color: '#0284c7', label: 'T1' },
+        { id: 'k1_xl_cs2', type: 'cs', x: 385, y: 145, color: '#0284c7', label: 'T2' },
+        ...[195, 245, 295, 345].flatMap((y, i) => [
+          { id: `k1_xl_l_${i}`, type: 'hs' as const, x: 255, y, color: '#1e293b', radius: 10.5 },
+          { id: `k1_xl_r_${i}`, type: 'hs' as const, x: 385, y, color: '#1e293b', radius: 10.5 }
+        ]),
+        { id: 'k1_xl_arr', type: 'arrow_straight', x: 320, y: 350, endX: 320, endY: 118, color: '#16a34a' },
+        { id: 'k1_xl_txt', type: 'text', x: 320, y: 392, color: '#475569', label: 'Khối 1: Xếp 2 hàng dọc trật tự di chuyển về lớp học an toàn', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 1: 2 HÀNG DỌC XUỐNG LỚP',
+      'Gọn gàng, an toàn'
+    )
+  },
+
+  // --- KHỐI 3: Nề nếp chuẩn mực, 3-4 hàng, sân khấu & 4 khu vực A-B-C-D ---
+  {
+    id: 'f_k3_nhan_lop',
+    name: 'Khối 3 · Đội hình nhận lớp (4 hàng ngang chuẩn)',
+    code: 'DH_K3_NHAN_LOP',
+    phase: 'nhan_lop',
+    grade: 3,
+    description: '4 hàng ngang tập trung cự ly 1 khuỷu tay, lớp trưởng chỉ huy báo cáo sĩ số.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: NHẬN LỚP (4 HÀNG NGANG)', 'Cự ly 1 khuỷu tay', 'nhan_lop')
+  },
+  {
+    id: 'f_k3_khoi_dong',
+    name: 'Khối 3 · Khởi động 4 hàng ngang so le (1 sải tay)',
+    code: 'DH_K3_KHOI_DONG',
+    phase: 'khoi_dong',
+    grade: 3,
+    description: '4 hàng ngang so le giãn cách đúng 1 sải tay, xoay kỹ các khớp theo nhịp đếm.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: KHỞI ĐỘNG 4 HÀNG SO LE', 'Giãn cách 1 sải tay', 'khoi_dong')
+  },
+  {
+    id: 'f_k3_tap_mau',
+    name: 'Khối 3 · Quan sát mẫu (3 hàng bậc thang + Tranh SGK)',
+    code: 'DH_K3_TAP_MAU',
+    phase: 'tap_mau',
+    grade: 3,
+    description: '3 hàng ngang so le hình bậc thang (hàng đầu ngồi/thấp) hướng về bảng tranh SGK & GV.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k3_tm_b', type: 'sgk_board', x: 185, y: 92, width: 165, height: 56, color: '#d97706', label: 'Tranh Kỹ Thuật K3' },
+        { id: 'k3_tm_gv', type: 'gv', x: 435, y: 98, color: '#dc2626', label: 'GV Làm Mẫu' },
+        ...[125, 195, 265, 335, 405, 475].map((x, i) => ({ id: `k3_tm_1_${i}`, type: 'hs' as const, x, y: 195, color: '#0284c7', radius: 10 })),
+        ...[160, 230, 300, 370, 440, 510].map((x, i) => ({ id: `k3_tm_2_${i}`, type: 'hs' as const, x, y: 252, color: '#2563eb', radius: 10.5 })),
+        ...[125, 195, 265, 335, 405, 475].map((x, i) => ({ id: `k3_tm_3_${i}`, type: 'hs' as const, x, y: 310, color: '#1e293b', radius: 11 })),
+        { id: 'k3_tm_txt', type: 'text', x: 320, y: 380, color: '#475569', label: 'Khối 3: 3 hàng ngang bậc thang quan sát rõ từng nhịp mẫu và tranh SGK', fontSize: 12 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 3: 3 HÀNG BẬC THANG QUAN SÁT',
+      'Theo dõi nhịp & khẩu lệnh'
+    )
+  },
+  {
+    id: 'f_k3_dong_loat',
+    name: 'Khối 3 · Tập đồng loạt (3 hàng ngang so le)',
+    code: 'DH_K3_DONG_LOAT',
+    phase: 'dong_loat',
+    grade: 3,
+    description: 'Cả lớp xếp 3 hàng ngang so le chuẩn cự ly, đồng loạt thực hiện theo nhịp hô dứt khoát.',
+    svgDataUrl: renderFormationSvgString(formationStudioPresets.find((p) => p.id === 'p_3_hang_ngang')!.elements, 'clean', 'SƠ ĐỒ KHỐI 3: TẬP ĐỒNG LOẠT 3 HÀNG NGANG', 'Chuẩn nhịp đội ngũ')
+  },
+  {
+    id: 'f_k3_to_nhom',
+    name: 'Khối 3 · Tập theo tổ (4 khu vực A-B-C-D)',
+    code: 'DH_K3_TO_NHOM',
+    phase: 'to_nhom',
+    grade: 3,
+    description: '4 tổ di chuyển về 4 khu vực chữ nhật A-B-C-D quy định, tổ trưởng điều hành ôn luyện.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: 4 KHU VỰC TỔ A-B-C-D', 'Tổ trưởng điều hành', 'to_nhom')
+  },
+  {
+    id: 'f_k3_cap_doi',
+    name: 'Khối 3 · Cặp đôi đối diện (3 dãy cự ly 1.5m)',
+    code: 'DH_K3_CAP_DOI',
+    phase: 'cap_doi',
+    grade: 3,
+    description: '3 dãy cặp đôi quay mặt đối diện nhau, luân phiên hô nhịp và sửa lỗi tư thế cho bạn.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: CẶP ĐÔI ĐỐI DIỆN 3 DÃY', 'Kiểm tra chéo 1.5m', 'cap_doi')
+  },
+  {
+    id: 'f_k3_thi_dua',
+    name: 'Khối 3 · Sân khấu thi đua giữa các tổ',
+    code: 'DH_K3_THI_DUA',
+    phase: 'thi_dua',
+    grade: 3,
+    description: '1 tổ lên sân khấu biểu diễn, 3 tổ còn lại ngồi/đứng theo hàng quan sát và chấm điểm.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: SÂN KHẤU THI ĐUA 4 TỔ', 'Trình diễn & nhận xét', 'thi_dua')
+  },
+  {
+    id: 'f_k3_hoi_tinh',
+    name: 'Khối 3 · Hồi tĩnh 3 hàng ngang so le',
+    code: 'DH_K3_HOI_TINH',
+    phase: 'hoi_tinh',
+    grade: 3,
+    description: '3 hàng ngang so le thả lỏng các khớp, điều hòa nhịp tim và lắng nghe nhận xét tiết học.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: HỒI TĨNH 3 HÀNG SO LE', 'Thả lỏng điều hòa', 'hoi_tinh')
+  },
+  {
+    id: 'f_k3_xuong_lop',
+    name: 'Khối 3 · Đội hình xuống lớp (4 hàng dọc)',
+    code: 'DH_K3_XUONG_LOP',
+    phase: 'xuong_lop',
+    grade: 3,
+    description: '4 hàng dọc thẳng hàng theo tổ trưởng di chuyển trật tự về lớp.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 3: 4 HÀNG DỌC XUỐNG LỚP', 'Gióng hàng thẳng tắp', 'xuong_lop')
+  },
+
+  // --- KHỐI 5: Tự quản cao, 4 hàng dọc chỉ huy, giãn cách rộng 1.5m, 4 trạm xoay vòng, Chữ U BGK ---
+  {
+    id: 'f_k5_nhan_lop',
+    name: 'Khối 5 · Nhận lớp 4 hàng dọc chỉ huy báo cáo',
+    code: 'DH_K5_NHAN_LOP',
+    phase: 'nhan_lop',
+    grade: 5,
+    description: '4 tổ xếp 4 hàng dọc chỉnh tề, Liên đội/Cán sự báo cáo sĩ số trực tiếp trước Giáo viên.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_nl_gv', type: 'gv', x: 320, y: 84, color: '#dc2626', label: 'GV Nhận Lớp' },
+        { id: 'k5_nl_cs', type: 'cs', x: 320, y: 145, color: '#0284c7', label: 'CS Báo Cáo' },
+        { id: 'k5_nl_arr', type: 'arrow_straight', x: 320, y: 132, endX: 320, endY: 108, color: '#dc2626' },
+        ...[145, 260, 380, 495].flatMap((x, cIdx) => [
+          { id: `k5_nl_tt_${cIdx}`, type: 'tt' as const, x, y: 192, color: '#ea580c', label: `T${cIdx + 1}` },
+          ...[235, 275, 315, 355].map((y, rIdx) => ({
+            id: `k5_nl_h_${cIdx}_${rIdx}`,
+            type: 'hs' as const,
+            x,
+            y,
+            color: '#1e293b',
+            radius: 10
+          }))
+        ]),
+        { id: 'k5_nl_txt', type: 'text', x: 320, y: 392, color: '#334155', label: 'Khối 5: 4 hàng dọc đội ngũ tự quản · Cán sự báo cáo sĩ số chuẩn điều lệnh', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: 4 HÀNG DỌC CHỈ HUY BÁO CÁO',
+      'Tác phong tự quản đội ngũ'
+    )
+  },
+  {
+    id: 'f_k5_khoi_dong',
+    name: 'Khối 5 · Khởi động 4 hàng giãn cách rộng 1.5m (Chữ thập)',
+    code: 'DH_K5_KHOI_DONG',
+    phase: 'khoi_dong',
+    grade: 5,
+    description: 'Đội hình 4 hàng giãn cách rộng 1.5m an toàn cho bài tập dụng cụ / gậy thể dục.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_kd_gv', type: 'gv', x: 320, y: 84, color: '#dc2626', label: 'GV Điều Hành' },
+        { id: 'k5_kd_cs', type: 'cs', x: 420, y: 92, color: '#0284c7', label: 'CS Đếm' },
+        { id: 'k5_kd_d1', type: 'line_dashed', x: 95, y: 148, endX: 205, endY: 148, color: '#e11d48', label: '1.5m' },
+        ...[105, 210, 320, 430, 535].flatMap((x, i) => [
+          { id: `k5_kd_r1_${i}`, type: 'hs' as const, x, y: 168, color: '#0284c7', radius: 10 },
+          { id: `k5_kd_r2_${i}`, type: 'hs' as const, x: i < 4 ? x + 52 : 535, y: 226, color: '#2563eb', radius: 10 },
+          { id: `k5_kd_r3_${i}`, type: 'hs' as const, x, y: 284, color: '#0284c7', radius: 10 },
+          { id: `k5_kd_r4_${i}`, type: 'hs' as const, x: i < 4 ? x + 52 : 535, y: 342, color: '#2563eb', radius: 10 }
+        ]),
+        { id: 'k5_kd_txt', type: 'text', x: 320, y: 392, color: '#0369a1', label: 'Khối 5: 4 hàng so le giãn cách rộng 1.5m · An toàn vận động biên độ lớn', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: KHỞI ĐỘNG GIÃN CÁCH RỘNG 1.5M',
+      'Biên độ lớn & an toàn'
+    )
+  },
+  {
+    id: 'f_k5_tap_mau',
+    name: 'Khối 5 · Chữ U mở rộng phân tích kỹ thuật',
+    code: 'DH_K5_TAP_MAU',
+    phase: 'tap_mau',
+    grade: 5,
+    description: 'Đội hình Chữ U rộng 2 cánh bao quanh khu vực phân tích động tác với dụng cụ / gậy.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 5: CHỮ U PHÂN TÍCH KỸ THUẬT', 'Quan sát đa góc độ', 'bac_thang_chu_u')
+  },
+  {
+    id: 'f_k5_dong_loat',
+    name: 'Khối 5 · Tập đồng loạt giãn cách rộng 1.5m (Có gậy/vạch)',
+    code: 'DH_K5_DONG_LOAT',
+    phase: 'dong_loat',
+    grade: 5,
+    description: '4 hàng ngang so le cự ly rộng 1.5m kèm gậy/vạch giãn cách đảm bảo an toàn biên độ vung gậy.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 5: TẬP ĐỒNG LOẠT GIÃN CÁCH 1.5M', 'An toàn biên độ vung gậy', 'tap_the_duc_voi_gay')
+  },
+  {
+    id: 'f_k5_to_nhom',
+    name: 'Khối 5 · Tập theo 4 Trạm luân chuyển (Xoay vòng)',
+    code: 'DH_K5_TO_NHOM',
+    phase: 'to_nhom',
+    grade: 5,
+    description: '4 trạm tập luyện tự quản theo tổ, xoay vòng trạm 1 → 2 → 3 → 4 khi có hiệu lệnh còi GV.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_tn_gv', type: 'gv', x: 320, y: 235, color: '#dc2626', label: 'GV Giám Sát' },
+        { id: 'k5_tn_z1', type: 'shape_rect', x: 55, y: 82, width: 195, height: 112, color: '#2563eb', label: 'TRẠM 1 (Tổ 1)' },
+        { id: 'k5_tn_z2', type: 'shape_rect', x: 390, y: 82, width: 195, height: 112, color: '#16a34a', label: 'TRẠM 2 (Tổ 2)' },
+        { id: 'k5_tn_z3', type: 'shape_rect', x: 390, y: 268, width: 195, height: 112, color: '#ea580c', label: 'TRẠM 3 (Tổ 3)' },
+        { id: 'k5_tn_z4', type: 'shape_rect', x: 55, y: 268, width: 195, height: 112, color: '#9333ea', label: 'TRẠM 4 (Tổ 4)' },
+        // Học sinh ở 4 trạm
+        ...[105, 150, 195].map((x, i) => ({ id: `k5_t1_${i}`, type: 'hs' as const, x, y: 145, color: '#2563eb', radius: 9.5 })),
+        ...[440, 485, 530].map((x, i) => ({ id: `k5_t2_${i}`, type: 'hs' as const, x, y: 145, color: '#16a34a', radius: 9.5 })),
+        ...[440, 485, 530].map((x, i) => ({ id: `k5_t3_${i}`, type: 'hs' as const, x, y: 330, color: '#ea580c', radius: 9.5 })),
+        ...[105, 150, 195].map((x, i) => ({ id: `k5_t4_${i}`, type: 'hs' as const, x, y: 330, color: '#9333ea', radius: 9.5 })),
+        // Mũi tên xoay vòng 1 -> 2 -> 3 -> 4 -> 1
+        { id: 'k5_rot_12', type: 'arrow_straight', x: 260, y: 132, endX: 378, endY: 132, color: '#16a34a' },
+        { id: 'k5_rot_23', type: 'arrow_straight', x: 495, y: 202, endX: 495, endY: 258, color: '#ea580c' },
+        { id: 'k5_rot_34', type: 'arrow_straight', x: 378, y: 328, endX: 260, endY: 328, color: '#9333ea' },
+        { id: 'k5_rot_41', type: 'arrow_straight', x: 145, y: 258, endX: 145, endY: 202, color: '#2563eb' },
+        { id: 'k5_tn_txt', type: 'text', x: 320, y: 398, color: '#1e293b', label: 'Khối 5: 4 Trạm luân chuyển tự quản theo chiều kim đồng hồ (T1→T2→T3→T4)', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: 4 TRẠM XOAY VÒNG TỰ QUẢN',
+      'Luân chuyển nhóm 1→2→3→4'
+    )
+  },
+  {
+    id: 'f_k5_cap_doi',
+    name: 'Khối 5 · Cặp đôi so le cự ly 2m (Chấm chéo kỹ thuật)',
+    code: 'DH_K5_CAP_DOI',
+    phase: 'cap_doi',
+    grade: 5,
+    description: 'Các cặp đôi xếp xen kẽ so le khoảng cách rộng 2m để vung gậy an toàn và chấm chéo lỗi sai.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_cd_gv', type: 'gv', x: 320, y: 84, color: '#dc2626', label: 'GV Giám Sát' },
+        ...[
+          { x: 135, y: 175 },
+          { x: 320, y: 175 },
+          { x: 505, y: 175 },
+          { x: 225, y: 285 },
+          { x: 415, y: 285 }
+        ].flatMap((p, idx) => [
+          { id: `k5_cd_a_${idx}`, type: 'hs' as const, x: p.x - 36, y: p.y, color: '#2563eb', radius: 10.5, label: 'Tập' },
+          { id: `k5_cd_b_${idx}`, type: 'hs' as const, x: p.x + 36, y: p.y, color: '#9333ea', radius: 10.5, label: 'Chấm' },
+          { id: `k5_cd_arr_${idx}`, type: 'line_dashed' as const, x: p.x - 20, y: p.y, endX: p.x + 20, endY: p.y, color: '#e11d48' }
+        ]),
+        { id: 'k5_cd_txt', type: 'text', x: 320, y: 382, color: '#7e22ce', label: 'Khối 5: Cặp đôi so le giãn cách 2m · Thực hành & nhận xét chéo tiêu chí', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: CẶP ĐÔI SO LE CHẤM CHÉO 2M',
+      'Khoảng cách rộng an toàn'
+    )
+  },
+  {
+    id: 'f_k5_thi_dua',
+    name: 'Khối 5 · Thi đua chữ U Ban Giám Khảo chấm điểm',
+    code: 'DH_K5_THI_DUA',
+    phase: 'thi_dua',
+    grade: 5,
+    description: 'Đội hình Chữ U với bàn/nhóm Ban Giám Khảo & Thư ký các tổ chấm điểm trình diễn công tâm.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_td_gv', type: 'gv', x: 185, y: 98, color: '#dc2626', label: 'GV Chủ Tọa' },
+        { id: 'k5_td_bgk', type: 'sgk_board', x: 325, y: 74, width: 175, height: 48, color: '#9333ea', label: 'Ban Giám Khảo Tổ' },
+        { id: 'k5_td_stage', type: 'shape_rect', x: 205, y: 158, width: 230, height: 90, color: '#16a34a', label: 'Khu Thi Đấu Trình Diễn' },
+        ...[250, 295, 340, 385].map((x, i) => ({ id: `k5_td_m_${i}`, type: 'hs' as const, x, y: 206, color: '#16a34a', radius: 10.5 })),
+        ...[145, 195, 245, 295].map((y, i) => ({ id: `k5_td_l_${i}`, type: 'hs' as const, x: 120, y, color: '#1e293b', radius: 10 })),
+        ...[145, 195, 245, 295].map((y, i) => ({ id: `k5_td_r_${i}`, type: 'hs' as const, x: 520, y, color: '#1e293b', radius: 10 })),
+        ...[200, 260, 320, 380, 440].map((x, i) => ({ id: `k5_td_b_${i}`, type: 'hs' as const, x, y: 325, color: '#1e293b', radius: 10 })),
+        { id: 'k5_td_txt', type: 'text', x: 320, y: 386, color: '#7e22ce', label: 'Khối 5: Chữ U Ban Giám Khảo · Từng tổ biểu diễn & tổ trưởng chấm điểm chéo', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: CHỮ U BAN GIÁM KHẢO THI ĐUA',
+      'Đánh giá & chấm điểm chéo'
+    )
+  },
+  {
+    id: 'f_k5_hoi_tinh',
+    name: 'Khối 5 · Hồi tĩnh 2 vòng tròn đồng tâm',
+    code: 'DH_K5_HOI_TINH',
+    phase: 'hoi_tinh',
+    grade: 5,
+    description: '2 vòng tròn đồng tâm thực hiện động tác điều hòa nhịp thở sâu và tự đánh giá tiết học.',
+    svgDataUrl: renderFormationSvgString(
+      [
+        { id: 'k5_ht_gv', type: 'gv', x: 320, y: 232, color: '#dc2626', label: 'GV Nhận Xét' },
+        { id: 'k5_ht_c1', type: 'shape_circle', x: 320, y: 232, radius: 66, color: '#0ea5e9', label: 'Vòng trong' },
+        { id: 'k5_ht_c2', type: 'shape_circle', x: 320, y: 232, radius: 122, color: '#10b981', label: 'Vòng ngoài' },
+        ...Array.from({ length: 8 }, (_, i) => {
+          const ang = (i * 2 * Math.PI) / 8;
+          return { id: `k5_ht_in_${i}`, type: 'hs' as const, x: Math.round(320 + 66 * Math.cos(ang)), y: Math.round(232 + 56 * Math.sin(ang)), color: '#0284c7', radius: 9.5 };
+        }),
+        ...Array.from({ length: 12 }, (_, i) => {
+          const ang = ((i + 0.5) * 2 * Math.PI) / 12;
+          return { id: `k5_ht_out_${i}`, type: 'hs' as const, x: Math.round(320 + 122 * Math.cos(ang)), y: Math.round(232 + 104 * Math.sin(ang)), color: '#059669', radius: 10 };
+        }),
+        { id: 'k5_ht_txt', type: 'text', x: 320, y: 392, color: '#047857', label: 'Khối 5: 2 vòng tròn đồng tâm · Hồi tĩnh thả lỏng & tự nhận xét đánh giá', fontSize: 11.5 }
+      ],
+      'clean',
+      'SƠ ĐỒ KHỐI 5: 2 VÒNG TRÒN ĐỒNG TÂM HỒI TĨNH',
+      'Điều hòa sâu & nhận xét'
+    )
+  },
+  {
+    id: 'f_k5_xuong_lop',
+    name: 'Khối 5 · Đội hình xuống lớp (4 hàng dọc tự quản)',
+    code: 'DH_K5_XUONG_LOP',
+    phase: 'xuong_lop',
+    grade: 5,
+    description: '4 hàng dọc chỉnh tề, cất dụng cụ gọn gàng theo hiệu lệnh của Cán sự lớp.',
+    svgDataUrl: createFormationSvg('SƠ ĐỒ KHỐI 5: 4 HÀNG DỌC XUỐNG LỚP', 'Chỉnh tề & tự quản', 'hang_doc_tap_trung')
   }
 ];
+
+export type GradeFormationStyleKey =
+  | 'k1_truc_quan'
+  | 'k3_chuan_muc'
+  | 'k5_tu_quan'
+  | 'vong_tron_linh_hoat'
+  | 'hang_ngang_2';
+
+export interface GradeFormationStyleMap {
+  1: GradeFormationStyleKey;
+  3: GradeFormationStyleKey;
+  5: GradeFormationStyleKey;
+}
+
+export const GRADE_FORMATION_STYLE_OPTIONS: Array<{
+  key: GradeFormationStyleKey;
+  label: string;
+  shortSummary: string;
+}> = [
+  {
+    key: 'k1_truc_quan',
+    label: 'Kiểu Khối 1 · Trực quan (Vòng tròn & 2 hàng + Chữ U gần)',
+    shortSummary: 'Nhận lớp 2 hàng · Khởi động vòng tròn GV tâm · Quan sát chữ U gần · Tổ cụm vòng tròn nhỏ · Hồi tĩnh vòng tròn'
+  },
+  {
+    key: 'k3_chuan_muc',
+    label: 'Kiểu Khối 3 · Chuẩn mực (3-4 hàng so le + Khu A-B-C-D)',
+    shortSummary: 'Nhận lớp 4 hàng · Khởi động 4 hàng so le · Quan sát 3 hàng bậc thang · Tổ 4 khu A-B-C-D · Sân khấu thi đua'
+  },
+  {
+    key: 'k5_tu_quan',
+    label: 'Kiểu Khối 5 · Tự quản (4 hàng dọc chỉ huy + 4 Trạm xoay vòng + 1.5m)',
+    shortSummary: 'Nhận lớp 4 hàng dọc chỉ huy · Giãn cách rộng 1.5m · 4 Trạm luân chuyển · Chữ U BGK chấm chéo · 2 vòng đồng tâm'
+  },
+  {
+    key: 'vong_tron_linh_hoat',
+    label: 'Kiểu Vòng tròn & Bán nguyệt mở rộng',
+    shortSummary: 'Ưu tiên vòng tròn, chữ U quan sát và bán nguyệt cổ vũ tương tác gần'
+  },
+  {
+    key: 'hang_ngang_2',
+    label: 'Kiểu 2 Hàng thoáng & Cặp đôi song song',
+    shortSummary: 'Ưu tiên 2 hàng ngang so le rộng, 2 hàng dọc, cụm 4 tổ rõ ràng'
+  }
+];
+
+const DEFAULT_GRADE_FORMATION_STYLES: GradeFormationStyleMap = {
+  1: 'k1_truc_quan',
+  3: 'k3_chuan_muc',
+  5: 'k5_tu_quan'
+};
+
+export function getGradeFormationStyles(): GradeFormationStyleMap {
+  try {
+    const raw = localStorage.getItem('gdtc_grade_formation_styles');
+    if (!raw) return { ...DEFAULT_GRADE_FORMATION_STYLES };
+    const parsed = JSON.parse(raw);
+    return {
+      1: parsed?.[1] || DEFAULT_GRADE_FORMATION_STYLES[1],
+      3: parsed?.[3] || DEFAULT_GRADE_FORMATION_STYLES[3],
+      5: parsed?.[5] || DEFAULT_GRADE_FORMATION_STYLES[5]
+    };
+  } catch {
+    return { ...DEFAULT_GRADE_FORMATION_STYLES };
+  }
+}
+
+function safeDiagramStorageSet(key: string, val: string): void {
+  try {
+    localStorage.setItem(key, val);
+  } catch {
+    try {
+      localStorage.removeItem('gdtc_user_custom_images');
+      localStorage.removeItem('gdtc_inline_images_registry');
+      localStorage.setItem(key, val);
+    } catch {
+      // Ignore quota limits silently
+    }
+  }
+}
+
+export function saveGradeFormationStyles(styles: GradeFormationStyleMap): void {
+  safeDiagramStorageSet('gdtc_grade_formation_styles', JSON.stringify(styles));
+}
 
 export function getSavedCustomFormations(): FormationDiagram[] {
   try {
@@ -1015,53 +1628,116 @@ export function getSavedCustomFormations(): FormationDiagram[] {
         code: item.code || 'DH_TU_CHON',
         phase: item.phase || 'dong_loat',
         description: item.description || 'Sơ đồ đội hình phục vụ giảng dạy GDTC.',
-        svgDataUrl: svg
+        svgDataUrl: svg,
+        grade: item.grade || 'all',
+        elements: Array.isArray(item.elements) ? item.elements : undefined
       } as FormationDiagram;
     });
-  } catch (e) {
+  } catch {
     return [];
   }
 }
 
 export function saveCustomFormationToStorage(formation: FormationDiagram) {
-  try {
-    const current = getSavedCustomFormations();
-    const rawId = String(formation.id || `custom_${Date.now()}`);
-    const cleanId = rawId.startsWith('custom_') ? rawId : `custom_${rawId}`;
-    const cleanFormation = { ...formation, id: cleanId };
-    const updated = [cleanFormation, ...current.filter((item) => item.id !== cleanId)];
-    localStorage.setItem('gdtc_custom_formations', JSON.stringify(updated));
-  } catch (e) {
-    console.error('Error saving custom formation:', e);
-  }
+  const current = getSavedCustomFormations();
+  const rawId = String(formation.id || `custom_${Date.now()}`);
+  const cleanId = rawId.startsWith('custom_') ? rawId : `custom_${rawId}`;
+  const cleanFormation = { ...formation, id: cleanId };
+  const updated = [cleanFormation, ...current.filter((item) => item.id !== cleanId)].slice(0, 40);
+  safeDiagramStorageSet('gdtc_custom_formations', JSON.stringify(updated));
 }
 
 export function deleteCustomFormationFromStorage(id: string): FormationDiagram[] {
-  try {
-    const current = getSavedCustomFormations();
-    const updated = current.filter((item) => item.id !== id);
-    localStorage.setItem('gdtc_custom_formations', JSON.stringify(updated));
-    return updated;
-  } catch (e) {
-    console.error('Error deleting custom formation:', e);
-    return [];
-  }
+  const current = getSavedCustomFormations();
+  const updated = current.filter((item) => item.id !== id);
+  safeDiagramStorageSet('gdtc_custom_formations', JSON.stringify(updated));
+  return updated;
 }
 
 export function resetCustomFormations(): void {
   try {
     localStorage.removeItem('gdtc_custom_formations');
-  } catch (e) {
-    console.error('Error resetting custom formations:', e);
+  } catch {
+    // ignore
   }
 }
 
 
+const LEGACY_SHARED_IDS = new Set([
+  'f_nhan_lop',
+  'f_khoi_dong',
+  'f_tap_mau',
+  'f_dong_loat',
+  'f_to_nhom',
+  'f_cap_doi',
+  'f_thi_dua',
+  'f_tro_choi_vong_tron',
+  'f_hoi_tinh',
+  'f_xuong_lop'
+]);
+
 /**
- * Intelligent helper to match the most appropriate diagram based on Vietnamese text keywords.
- * Specifically prevents the triangle game from getting a circle diagram!
+ * Checks whether a Column 4 diagram URL matches one of the legacy shared SVG templates
+ * (so we can upgrade un-starred/baseline plans to grade-distinct Khối 1 / 3 / 5 formations
+ * without touching user-custom Studio/AI drawings or manually starred plans).
  */
-export function getFormationDiagramByKeyword(text: string, defaultPhase?: string): FormationDiagram {
+export function isLegacySharedStandardFormationUrl(svgUrl?: string): boolean {
+  if (!svgUrl) return false;
+  return standardFormationDiagrams.some((d) => LEGACY_SHARED_IDS.has(d.id) && d.svgDataUrl === svgUrl);
+}
+
+/**
+ * Resolves a distinct formation diagram tailored to a specific grade (1 | 3 | 5) & phase.
+ * Uses the user's configured style preset per grade (defaulting to distinct K1, K3, K5 styles).
+ */
+export function getFormationDiagramForPhaseAndGrade(
+  phase: FormationDiagram['phase'],
+  grade?: number,
+  keywordText?: string
+): FormationDiagram {
+  if (keywordText) {
+    const byKeyword = getFormationDiagramByKeyword(keywordText, phase, grade);
+    if (byKeyword) return byKeyword;
+  }
+
+  const g = grade === 3 ? 3 : grade === 5 ? 5 : grade === 1 ? 1 : undefined;
+  if (!g) {
+    return standardFormationDiagrams.find((f) => f.phase === phase) || standardFormationDiagrams[0];
+  }
+
+  const styles = getGradeFormationStyles();
+  const chosenStyle = styles[g];
+
+  let prefix: 'k1' | 'k3' | 'k5' = g === 1 ? 'k1' : g === 3 ? 'k3' : 'k5';
+  if (chosenStyle === 'k1_truc_quan') prefix = 'k1';
+  else if (chosenStyle === 'k3_chuan_muc') prefix = 'k3';
+  else if (chosenStyle === 'k5_tu_quan') prefix = 'k5';
+  else if (chosenStyle === 'vong_tron_linh_hoat') prefix = 'k1';
+  else if (chosenStyle === 'hang_ngang_2') {
+    if (phase === 'dong_loat') return standardFormationDiagrams.find((f) => f.id === 'f_p_2_hang_ngang') || standardFormationDiagrams[3];
+    if (phase === 'xuong_lop') return standardFormationDiagrams.find((f) => f.id === 'f_p_2_hang_doc') || standardFormationDiagrams[0];
+    prefix = 'k1';
+  }
+
+  const mappedId = `f_${prefix}_${phase}`;
+  const exact = standardFormationDiagrams.find((f) => f.id === mappedId);
+  if (exact) return exact;
+
+  // Grade-distinct fallback for tro_choi when no named game keyword matched
+  if (phase === 'tro_choi') {
+    if (prefix === 'k1') return standardFormationDiagrams.find((f) => f.id === 'f_p_tro_choi_vong_tron') || standardFormationDiagrams[14];
+    if (prefix === 'k5') return standardFormationDiagrams.find((f) => f.id === 'f_p_tro_choi_tiep_suc') || standardFormationDiagrams[8];
+    return standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_vong_tron') || standardFormationDiagrams[14];
+  }
+
+  return standardFormationDiagrams.find((f) => f.phase === phase) || standardFormationDiagrams[0];
+}
+
+/**
+ * Intelligent helper to match the most appropriate diagram based on Vietnamese text keywords
+ * and optional grade (1 | 3 | 5) so Grade 1, 3, and 5 don't repeat identically.
+ */
+export function getFormationDiagramByKeyword(text: string, defaultPhase?: string, grade?: number): FormationDiagram {
   const lower = (text || '').toLowerCase();
 
   // 1. Trò chơi tam giác (Highest priority check!)
@@ -1070,7 +1746,7 @@ export function getFormationDiagramByKeyword(text: string, defaultPhase?: string
   }
 
   // 1b. Trò chơi Kéo co
-  if (lower.includes('kéo co') || lower.includes('keo co')) {
+  if (lower.includes('kéo co') || lower.includes('keo co') || lower.includes('kéo khoẻ') || lower.includes('kéo khỏe')) {
     return standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_keo_co') || standardFormationDiagrams[7];
   }
 
@@ -1120,12 +1796,12 @@ export function getFormationDiagramByKeyword(text: string, defaultPhase?: string
   }
 
   // 1l. Tiếp sức 4 làn
-  if (lower.includes('tiếp sức') && (lower.includes('làn') || lower.includes('cọc tiêu') || lower.includes('chạy'))) {
+  if (lower.includes('tiếp sức') && (lower.includes('làn') || lower.includes('cọc tiêu') || lower.includes('chạy') || lower.includes('đua'))) {
     return standardFormationDiagrams.find((f) => f.id === 'f_p_tro_choi_tiep_suc') || standardFormationDiagrams[8];
   }
 
   // 2. Chuyền gậy tiếp sức
-  if (lower.includes('chuyền gậy') || (lower.includes('gậy') && lower.includes('tiếp sức'))) {
+  if (lower.includes('chuyền gậy') || lower.includes('trao gậy') || (lower.includes('gậy') && lower.includes('tiếp sức'))) {
     return standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_chuyen_gay') || standardFormationDiagrams[8];
   }
 
@@ -1154,46 +1830,64 @@ export function getFormationDiagramByKeyword(text: string, defaultPhase?: string
     return standardFormationDiagrams.find((f) => f.id === 'f_the_duc_voi_gay') || standardFormationDiagrams[13];
   }
 
-  // 8. Trò chơi chung (vòng tròn)
-  if (lower.includes('trò chơi') || lower.includes('vòng tròn') || lower.includes('làm theo hiệu lệnh')) {
+  // 8. Trò chơi chung / hiệu lệnh / vòng tròn -> diversify by grade if provided!
+  if (lower.includes('trò chơi') || lower.includes('vòng tròn') || lower.includes('làm theo hiệu lệnh') || lower.includes('kết bạn') || lower.includes('chui qua hầm')) {
+    if (grade === 1) {
+      return standardFormationDiagrams.find((f) => f.id === 'f_k1_khoi_dong') || standardFormationDiagrams.find((f) => f.id === 'f_p_tro_choi_vong_tron') || standardFormationDiagrams[14];
+    }
+    if (grade === 5) {
+      return standardFormationDiagrams.find((f) => f.id === 'f_p_tro_choi_tiep_suc') || standardFormationDiagrams[8];
+    }
     return standardFormationDiagrams.find((f) => f.id === 'f_tro_choi_vong_tron') || standardFormationDiagrams[14];
   }
 
   // 9. Cặp đôi
   if (lower.includes('cặp đôi') || lower.includes('đối diện')) {
+    if (grade) return getFormationDiagramForPhaseAndGrade('cap_doi', grade);
     return standardFormationDiagrams.find((f) => f.id === 'f_cap_doi') || standardFormationDiagrams[5];
   }
 
   // 10. Tổ nhóm
   if (lower.includes('tổ nhóm') || lower.includes('theo tổ') || lower.includes('4 tổ')) {
+    if (grade) return getFormationDiagramForPhaseAndGrade('to_nhom', grade);
     return standardFormationDiagrams.find((f) => f.id === 'f_to_nhom') || standardFormationDiagrams[4];
   }
 
   // 11. Thi đua
   if (lower.includes('thi đua') || lower.includes('trình diễn') || lower.includes('biểu diễn')) {
+    if (grade) return getFormationDiagramForPhaseAndGrade('thi_dua', grade);
     return standardFormationDiagrams.find((f) => f.id === 'f_thi_dua') || standardFormationDiagrams[6];
   }
 
   // 12. Hồi tĩnh / thả lỏng
   if (lower.includes('hồi tĩnh') || lower.includes('thả lỏng') || lower.includes('vận dụng')) {
+    if (grade) return getFormationDiagramForPhaseAndGrade('hoi_tinh', grade);
     return standardFormationDiagrams.find((f) => f.id === 'f_hoi_tinh') || standardFormationDiagrams[15];
   }
 
   // 13. Khởi động
   if (lower.includes('khởi động')) {
-    return standardFormationDiagrams.find((f) => f.id === 'f_khoi_dong') || standardFormationDiagrams[1];
+    if (grade) return getFormationDiagramForPhaseAndGrade('khoi_dong', grade);
+    return standardFormationDiagrams[1];
   }
 
   // 14. Nhận lớp
   if (lower.includes('nhận lớp') || lower.includes('mở đầu')) {
-    return standardFormationDiagrams.find((f) => f.id === 'f_nhan_lop') || standardFormationDiagrams[0];
+    if (grade) return getFormationDiagramForPhaseAndGrade('nhan_lop', grade);
+    return standardFormationDiagrams[0];
   }
 
-  // 15. Fallback based on phase
+  // 15. Fallback based on phase (and grade!)
   if (defaultPhase) {
+    if (grade) {
+      return getFormationDiagramForPhaseAndGrade(defaultPhase as FormationDiagram['phase'], grade);
+    }
     const byPhase = standardFormationDiagrams.find((f) => f.phase === defaultPhase);
     if (byPhase) return byPhase;
   }
 
+  if (grade) {
+    return getFormationDiagramForPhaseAndGrade('nhan_lop', grade);
+  }
   return standardFormationDiagrams[0];
 }
