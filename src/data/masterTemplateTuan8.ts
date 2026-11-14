@@ -896,11 +896,96 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
   }
 ];
 
+function healDuplicatedCooldownVanDungRows(rows: LessonRow[]): LessonRow[] {
+  if (!Array.isArray(rows) || rows.length < 9) return rows;
+  const lastIdx = rows.length - 1;
+  const secondLastIdx = rows.length - 2;
+  const lastContentLower = (rows[lastIdx]?.content || '').toLowerCase();
+  const secondLastLower = (rows[secondLastIdx]?.content || '').toLowerCase();
+
+  let vanDungIdx = rows.findIndex((r, idx) => {
+    const c = (r?.content || '').toLowerCase();
+    return idx >= secondLastIdx && (c.includes('4.2.') || c.includes('4.2:')) && !c.includes('4.1.');
+  });
+
+  // Fallback: if both of the last two rows are 4.2. Vận dụng (Row 10 lost 4.1 completely), target last row as 4.2
+  if (vanDungIdx === secondLastIdx && (lastContentLower.includes('4.2') || lastContentLower.includes('vận dụng'))) {
+    vanDungIdx = lastIdx;
+  }
+  if (vanDungIdx <= 0) return rows;
+
+  const vanDungRow = rows[vanDungIdx];
+
+  return rows.map((row, idx) => {
+    if (idx >= vanDungIdx) return row;
+    const c = row.content || '';
+    const cLower = c.toLowerCase();
+    const isCooldownRow = cLower.includes('4.1.') || cLower.includes('4.1 ') || cLower.includes('hồi tĩnh');
+    const isDuplicateVanDungAtSecondLast =
+      idx === secondLastIdx &&
+      (cLower.includes('4.2.') || cLower.includes('4.2:') || cLower.includes('câu hỏi vận dụng sách giáo khoa') || cLower.includes('vận dụng'));
+
+    if (!isCooldownRow && !isDuplicateVanDungAtSecondLast) return row;
+
+    const hasCorrupted42 =
+      isDuplicateVanDungAtSecondLast ||
+      cLower.includes('4.2.') ||
+      cLower.includes('4.2:') ||
+      cLower.includes('câu hỏi vận dụng sách giáo khoa');
+    const sharedContentImg =
+      Boolean(row.contentImgUrl && vanDungRow?.contentImgUrl && row.contentImgUrl === vanDungRow.contentImgUrl) ||
+      Boolean(row.contentImgUrl && (row.contentImgTitle || '').toLowerCase().includes('vận dụng'));
+
+    if (!hasCorrupted42 && !sharedContentImg) return row;
+
+    const cleanContent =
+      `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n` +
+      `4.1. Hồi tĩnh:\n` +
+      `- Thả lỏng toàn thân, cúi người rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi để cơ thể hồi phục.`;
+
+    const cleanGv =
+      `- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ mềm tay, rung thả lỏng đùi và chân, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n` +
+      `- Nhắc học sinh thả lỏng tự nhiên, không gồng cứng cơ thể.`;
+
+    const cleanHs =
+      `- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n` +
+      `- Rũ tay, thả lỏng bắp chân nhịp nhàng, cảm nhận cơ thể hồi phục sảng khoái.`;
+
+    const nextRow: LessonRow = {
+      ...row,
+      content: hasCorrupted42 ? cleanContent : row.content,
+      gv: hasCorrupted42 ? cleanGv : row.gv,
+      hs: hasCorrupted42 ? cleanHs : row.hs
+    };
+
+    if (sharedContentImg || hasCorrupted42) {
+      delete nextRow.contentImgUrl;
+      delete nextRow.contentImgTitle;
+      nextRow.contentImages = [];
+    }
+
+    // If Row 10 mistakenly shares the exact same Xuống lớp diagram as Row 11 (or lacks diagram), switch Row 10 back to Hồi tĩnh diagram
+    const hoiTinhDiag = standardFormationDiagrams.find((d) => d.phase === 'hoi_tinh');
+    if (
+      hoiTinhDiag &&
+      (!nextRow.hsImgUrl || (vanDungRow?.hsImgUrl && nextRow.hsImgUrl === vanDungRow.hsImgUrl) || hasCorrupted42)
+    ) {
+      nextRow.hsImgUrl = hoiTinhDiag.svgDataUrl;
+      nextRow.hsImgTitle = hoiTinhDiag.name;
+      nextRow.hsImages = [{ id: `diag_ht_heal_${idx}`, url: hoiTinhDiag.svgDataUrl, title: hoiTinhDiag.name }];
+    }
+
+    return nextRow;
+  });
+}
+
 export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): MasterPlanItem {
   const base = masterPlansTuan8.k1_t15;
   if (!raw || typeof raw !== 'object') {
     return JSON.parse(JSON.stringify(base));
   }
+
+  const rawRows = Array.isArray(raw.rows) && raw.rows.length > 0 ? raw.rows : base.rows;
 
   return {
     id: raw.id || base.id,
@@ -940,7 +1025,7 @@ export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): Maste
       teacherTools: raw.locationEquipment?.teacherTools ?? base.locationEquipment.teacherTools,
       studentTools: raw.locationEquipment?.studentTools ?? base.locationEquipment.studentTools,
     },
-    rows: Array.isArray(raw.rows) && raw.rows.length > 0 ? raw.rows : base.rows,
+    rows: healDuplicatedCooldownVanDungRows(rawRows),
     postLessonAdjustment: raw.postLessonAdjustment ?? base.postLessonAdjustment,
     signatures: {
       locationDate: raw.signatures?.locationDate ?? base.signatures.locationDate,
@@ -950,4 +1035,5 @@ export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): Maste
     },
   };
 }
+
 

@@ -6,6 +6,7 @@ import { TabExtractSample } from './components/TabExtractSample';
 import { TabScenarioLibrary } from './components/TabScenarioLibrary';
 import { TabGenerator } from './components/TabGenerator';
 import { TabExportPrint } from './components/TabExportPrint';
+import { TabIntro } from './components/TabIntro';
 import { SettingsModal } from './components/SettingsModal';
 import { SelectCellModal } from './components/SelectCellModal';
 import { ScenarioModal } from './components/ScenarioModal';
@@ -16,9 +17,12 @@ import { FormationStudioModal } from './components/FormationStudioModal';
 import { SelectFormationModal } from './components/SelectFormationModal';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
+import { AuthModal } from './components/AuthModal';
+import { LockedFeatureGate } from './components/LockedFeatureGate';
 import { FormationDiagram, saveCustomFormationToStorage, standardFormationDiagrams } from './data/formationDiagrams';
-import { ParsedLessonFileResult, parseLessonFile } from './utils/documentParser';
+import { ParsedLessonFileResult, parseLessonFile, customTemplateToMasterPlan } from './utils/documentParser';
 import { exportWordDocument } from './utils/exportUtils';
+import { useAuth } from './contexts/AuthContext';
 import {
   defaultSchoolSettings,
   defaultScenarios,
@@ -27,7 +31,7 @@ import {
 } from './data/defaultData';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from './data/masterTemplateTuan8';
 import { masterPlansTuan9 } from './data/masterTemplateTuan9';
-import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory } from './types/gdtc';
+import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate } from './types/gdtc';
 import {
   getAllImagesDB,
   saveImageDB,
@@ -38,7 +42,7 @@ import {
   setAppStateDB,
   clearImagesDB,
 } from './utils/db';
-import { CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2, Lock, UserPlus, LogIn } from 'lucide-react';
 import {
   PlanVersionStore,
   LessonPlanVersion,
@@ -56,7 +60,18 @@ import { getGradePpctInfo } from './utils/academicCalendar';
 import { createBalancedGranularLessonRows } from './utils/planAutoMatcher';
 
 export default function App() {
+  const { user: authUser, isLoading: authLoading, pullWorkspace, pushWorkspace } = useAuth();
+  const isGuest = !authLoading && !authUser;
   const [activeTab, setActiveTab] = useState<string>('tab-generator');
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
+  const [authGateReason, setAuthGateReason] = useState<string | null>(null);
+  const [userCustomTemplates, setUserCustomTemplates] = useState<UserCustomTemplate[]>([]);
+  const [activeCustomTemplateId, setActiveCustomTemplateId] = useState<string | null>(null);
+  const userCustomTemplatesRef = useRef<UserCustomTemplate[]>([]);
+  useEffect(() => {
+    userCustomTemplatesRef.current = userCustomTemplates;
+  }, [userCustomTemplates]);
 
   // IndexedDB-backed State
   const [images, setImages] = useState<SgkImageItem[]>(defaultSgkImages);
@@ -116,6 +131,10 @@ export default function App() {
   const [scanInitialPage, setScanInitialPage] = useState<number | undefined>(undefined);
 
   const handleNavigateToScanFromLesson = (targetGrade: 1 | 3 | 5, targetPage?: number) => {
+    if (isGuest) {
+      requireAuth('Quét & bóc tách ảnh trực tiếp từ SGK (Tab 1)');
+      return;
+    }
     setScanInitialGrade(targetGrade);
     setScanInitialPage(targetPage);
     setActiveTab('tab-scan');
@@ -125,6 +144,17 @@ export default function App() {
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isDbLoadedRef = useRef<boolean>(false);
+
+  const openAuthModal = (mode: 'login' | 'register' = 'login', reason: string | null = null) => {
+    setAuthGateReason(reason);
+    setAuthModalMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
+  const requireAuth = (featureName: string, mode: 'login' | 'register' = 'register') => {
+    openAuthModal(mode, featureName);
+    showToast(`🔒 Đăng ký hoặc đăng nhập miễn phí để mở khóa: ${featureName}`);
+  };
 
   // Unified Lesson Plan Version History & Draft Store (Default = Last Edited Version)
   const [planVersionStore, setPlanVersionStore] = useState<PlanVersionStore>({
@@ -221,6 +251,18 @@ export default function App() {
         planVersionStoreRef.current = loadedVersionStore;
         setPlanVersionStore(loadedVersionStore);
 
+        const storedCustomTemplates = await getAppStateDB<UserCustomTemplate[]>('user_custom_templates', []);
+        const safeCustomTemplates = Array.isArray(storedCustomTemplates) ? storedCustomTemplates : [];
+        userCustomTemplatesRef.current = safeCustomTemplates;
+        setUserCustomTemplates(safeCustomTemplates);
+
+        const storedActiveCustomId = await getAppStateDB<string | null>('active_custom_template_id', null);
+        setActiveCustomTemplateId(
+          storedActiveCustomId && safeCustomTemplates.some((t) => t.id === storedActiveCustomId)
+            ? storedActiveCustomId
+            : safeCustomTemplates[0]?.id || null
+        );
+
         const storedAllPlans = await getAppStateDB('gdtc_all_master_plans', null);
         const normalizedMap: Record<string, MasterPlanItem> = {
           ...masterPlansTuan8,
@@ -249,6 +291,7 @@ export default function App() {
         });
         setAllMasterPlans(normalizedMap);
         await setAppStateDB('gdtc_all_master_plans', normalizedMap);
+        setVersionRefreshNonce((n) => n + 1);
 
         // Restore active week and lesson metadata
         const savedWeek = await getAppStateDB('active_week', 9);
@@ -340,6 +383,172 @@ export default function App() {
     }
   }, [planVersionStore]);
 
+  useEffect(() => {
+    if (isDbLoadedRef.current) {
+      setAppStateDB('user_custom_templates', userCustomTemplates);
+    }
+  }, [userCustomTemplates]);
+
+  useEffect(() => {
+    if (isDbLoadedRef.current) {
+      setAppStateDB('active_custom_template_id', activeCustomTemplateId);
+    }
+  }, [activeCustomTemplateId]);
+
+  const allMasterPlansRef = useRef<Record<string, MasterPlanItem>>(allMasterPlans);
+  useEffect(() => {
+    allMasterPlansRef.current = allMasterPlans;
+  }, [allMasterPlans]);
+
+  const schoolSettingsRef = useRef<SchoolSettings>(schoolSettings);
+  useEffect(() => {
+    schoolSettingsRef.current = schoolSettings;
+  }, [schoolSettings]);
+
+  const buildWorkspaceSnapshot = () => ({
+    version: 1,
+    updatedAt: Date.now(),
+    schoolSettings: schoolSettingsRef.current,
+    planVersionStore: planVersionStoreRef.current,
+    allMasterPlans: allMasterPlansRef.current,
+    userCustomTemplates: userCustomTemplatesRef.current,
+    activeCustomTemplateId,
+    activeWeek: week,
+    activeGrade: grade,
+    activeLessonNum: lessonNum
+  });
+
+  const mergeAndApplyServerWorkspace = async (serverWs: any) => {
+    if (!serverWs || typeof serverWs !== 'object') return false;
+    let changed = false;
+
+    if (serverWs.schoolSettings && typeof serverWs.schoolSettings === 'object') {
+      const mergedSettings = { ...schoolSettingsRef.current, ...serverWs.schoolSettings };
+      setSchoolSettings(mergedSettings);
+      await setAppStateDB('school_settings', mergedSettings);
+    }
+
+    if (Array.isArray(serverWs.userCustomTemplates) && serverWs.userCustomTemplates.length > 0) {
+      const mergedMap = new Map<string, UserCustomTemplate>();
+      [...userCustomTemplatesRef.current, ...serverWs.userCustomTemplates].forEach((tpl: UserCustomTemplate) => {
+        if (!tpl?.id) return;
+        const existing = mergedMap.get(tpl.id);
+        if (!existing || (tpl.updatedAt || 0) >= (existing.updatedAt || 0)) {
+          mergedMap.set(tpl.id, tpl);
+        }
+      });
+      const mergedTemplates = Array.from(mergedMap.values()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      userCustomTemplatesRef.current = mergedTemplates;
+      setUserCustomTemplates(mergedTemplates);
+      await setAppStateDB('user_custom_templates', mergedTemplates);
+      if (!activeCustomTemplateId && mergedTemplates[0]) {
+        setActiveCustomTemplateId(serverWs.activeCustomTemplateId || mergedTemplates[0].id);
+      }
+      changed = true;
+    }
+
+    if (serverWs.planVersionStore && typeof serverWs.planVersionStore === 'object') {
+      const localStore = planVersionStoreRef.current;
+      const remoteStore = serverWs.planVersionStore as PlanVersionStore;
+      const mergedByKey: Record<string, LessonPlanVersion[]> = { ...(localStore.versionsByPlanKey || {}) };
+      const mergedActive: Record<string, string> = { ...(localStore.activeVersionIdByPlanKey || {}) };
+
+      Object.entries(remoteStore.versionsByPlanKey || {}).forEach(([planKey, remoteList]) => {
+        const localList = mergedByKey[planKey] || [];
+        const byId = new Map<string, LessonPlanVersion>();
+        [...localList, ...(remoteList || [])].forEach((v) => {
+          if (!v?.versionId) return;
+          const prev = byId.get(v.versionId);
+          if (!prev || (v.updatedAt || 0) >= (prev.updatedAt || 0)) {
+            byId.set(v.versionId, v);
+          }
+        });
+        const sorted = Array.from(byId.values()).sort((a, b) => a.versionNumber - b.versionNumber);
+        mergedByKey[planKey] = sorted;
+        const newest = [...sorted].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        if (newest) {
+          mergedActive[planKey] = newest.versionId;
+        }
+      });
+
+      const nextStore: PlanVersionStore = {
+        versionsByPlanKey: mergedByKey,
+        activeVersionIdByPlanKey: mergedActive
+      };
+      planVersionStoreRef.current = nextStore;
+      setPlanVersionStore(nextStore);
+      await savePlanVersionStoreDB(nextStore);
+      changed = true;
+    }
+
+    const nextAllPlans: Record<string, MasterPlanItem> = { ...allMasterPlansRef.current };
+    if (serverWs.allMasterPlans && typeof serverWs.allMasterPlans === 'object') {
+      Object.entries(serverWs.allMasterPlans).forEach(([k, val]) => {
+        if (val && typeof val === 'object') {
+          nextAllPlans[k] = normalizeMasterPlan(val as MasterPlanItem);
+        }
+      });
+    }
+    Object.values(planVersionStoreRef.current.versionsByPlanKey || {}).forEach((versions) => {
+      const latest = [...(versions || [])].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (latest?.snapshot) {
+        const snap = normalizeMasterPlan(latest.snapshot);
+        const shortKey = `k${snap.grade}_t${snap.lessonNum}`;
+        nextAllPlans[shortKey] = snap;
+        nextAllPlans[`${shortKey}_w${snap.week}`] = snap;
+      }
+    });
+    setAllMasterPlans(nextAllPlans);
+    await setAppStateDB('gdtc_all_master_plans', nextAllPlans);
+
+    const activeVer = getPreferredVersionForPlan(planVersionStoreRef.current, week, grade, lessonNum);
+    if (activeVer?.snapshot) {
+      const snap = normalizeMasterPlan(activeVer.snapshot);
+      skipNextAutoDraftRef.current = true;
+      setCurrentMasterPlan(snap);
+      setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+      setTitle(snap.title);
+      setTopic(snap.topic);
+    }
+
+    setVersionRefreshNonce((n) => n + 1);
+    return changed;
+  };
+
+  const hasPulledInitialWorkspaceRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (!authUser) {
+      hasPulledInitialWorkspaceRef.current = false;
+      return;
+    }
+    if (hasPulledInitialWorkspaceRef.current) return;
+    hasPulledInitialWorkspaceRef.current = true;
+
+    pullWorkspace().then(async (ws) => {
+      if (ws && (ws.planVersionStore || ws.userCustomTemplates?.length || ws.allMasterPlans)) {
+        await mergeAndApplyServerWorkspace(ws);
+      }
+    }).catch(() => {});
+  }, [authUser?.id]);
+
+  // Debounced automatic server sync when authenticated
+  const autoSyncTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!authUser || !isDbLoadedRef.current) return;
+    if (autoSyncTimerRef.current !== null) {
+      window.clearTimeout(autoSyncTimerRef.current);
+    }
+    autoSyncTimerRef.current = window.setTimeout(() => {
+      autoSyncTimerRef.current = null;
+      pushWorkspace(buildWorkspaceSnapshot()).catch(() => {});
+    }, 2000);
+    return () => {
+      if (autoSyncTimerRef.current !== null) {
+        window.clearTimeout(autoSyncTimerRef.current);
+      }
+    };
+  }, [authUser?.id, planVersionStore, userCustomTemplates, schoolSettings, activeCustomTemplateId]);
+
   // Helper: sync a plan into allMasterPlans safely by both week-specific and generic key
   const upsertMasterPlanInDictionary = (plan: MasterPlanItem) => {
     const normalized = normalizeMasterPlan(plan);
@@ -378,7 +587,7 @@ export default function App() {
     plansToSave: MasterPlanItem[],
     sourceTab: 'tab-generator' | 'tab-export'
   ) => {
-    if (!isDbLoadedRef.current || plansToSave.length === 0) return;
+    if (!isDbLoadedRef.current || !authUser || plansToSave.length === 0) return;
     let updatedStore = planVersionStoreRef.current;
     let anyChanged = false;
     const dictUpdates: Record<string, MasterPlanItem> = {};
@@ -408,18 +617,43 @@ export default function App() {
     sourceTab: 'tab-generator' | 'tab-export',
     customLabel?: string,
     markAsBest?: boolean,
-    baselinePlan?: MasterPlanItem | null
+    baselinePlan?: MasterPlanItem | null,
+    forceNewVersion?: boolean
   ): LessonPlanVersion => {
     const res = commitOfficialVersion(planVersionStoreRef.current, plan, sourceTab, {
       customLabel,
       markAsBest,
       baselinePlan,
-      forceNewVersion: Boolean(customLabel)
+      forceNewVersion: forceNewVersion ?? Boolean(customLabel)
     });
     planVersionStoreRef.current = res.store;
     setPlanVersionStore(res.store);
     savePlanVersionStoreDB(res.store).catch(() => {});
-    upsertMasterPlanInDictionary(res.savedVersion.snapshot);
+
+    const snap = normalizeMasterPlan(res.savedVersion.snapshot);
+    const shortKey = `k${snap.grade}_t${snap.lessonNum}`;
+    const weekKey = `${shortKey}_w${snap.week}`;
+    setAllMasterPlans((prev) => {
+      const next = { ...prev, [shortKey]: snap, [weekKey]: snap };
+      setAppStateDB('gdtc_all_master_plans', next).catch(() => {});
+      return next;
+    });
+
+    if (
+      Number(snap.week) === Number(week) &&
+      Number(snap.grade) === Number(grade) &&
+      Number(snap.lessonNum) === Number(lessonNum)
+    ) {
+      skipNextAutoDraftRef.current = true;
+      setCurrentMasterPlan(snap);
+      setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+      setTitle(snap.title);
+      setTopic(snap.topic);
+      setAppStateDB('master_plan', snap).catch(() => {});
+      setAppStateDB('current_lesson_rows', snap.rows).catch(() => {});
+    }
+
+    setVersionRefreshNonce((n) => n + 1);
     showToast(
       `💾 Đã lưu "${res.savedVersion.label}" (Phiên bản #${res.savedVersion.versionNumber})!`
     );
@@ -433,28 +667,36 @@ export default function App() {
     let nextStore = planVersionStoreRef.current;
     const dictUpdates: Record<string, MasterPlanItem> = {};
     plans.forEach((p) => {
-      const res = commitOfficialVersion(nextStore, p, sourceTab);
+      const res = commitOfficialVersion(nextStore, p, sourceTab, { forceNewVersion: false });
       nextStore = res.store;
-      const snap = res.savedVersion.snapshot;
+      const snap = normalizeMasterPlan(res.savedVersion.snapshot);
       dictUpdates[`k${snap.grade}_t${snap.lessonNum}`] = snap;
       dictUpdates[`k${snap.grade}_t${snap.lessonNum}_w${snap.week}`] = snap;
     });
     planVersionStoreRef.current = nextStore;
     setPlanVersionStore(nextStore);
     savePlanVersionStoreDB(nextStore).catch(() => {});
-    setAllMasterPlans((prev) => ({ ...prev, ...dictUpdates }));
+    setAllMasterPlans((prev) => {
+      const next = { ...prev, ...dictUpdates };
+      setAppStateDB('gdtc_all_master_plans', next).catch(() => {});
+      return next;
+    });
 
     // If current Tab 5 lesson is among these plans, keep it synced silently without wiping Tab 6
     const matchingTab5 = plans.find(
-      (p) => p.grade === grade && p.lessonNum === lessonNum && p.week === week
+      (p) => Number(p.grade) === Number(grade) && Number(p.lessonNum) === Number(lessonNum) && Number(p.week) === Number(week)
     );
     if (matchingTab5) {
+      const normalizedMatch = normalizeMasterPlan(matchingTab5);
       skipNextAutoDraftRef.current = true;
-      setCurrentMasterPlan(normalizeMasterPlan(matchingTab5));
-      setLessonRows(JSON.parse(JSON.stringify(matchingTab5.rows)));
-      setTitle(matchingTab5.title);
-      setTopic(matchingTab5.topic);
+      setCurrentMasterPlan(normalizedMatch);
+      setLessonRows(JSON.parse(JSON.stringify(normalizedMatch.rows)));
+      setTitle(normalizedMatch.title);
+      setTopic(normalizedMatch.topic);
+      setAppStateDB('master_plan', normalizedMatch).catch(() => {});
+      setAppStateDB('current_lesson_rows', normalizedMatch.rows).catch(() => {});
     }
+    setVersionRefreshNonce((n) => n + 1);
   };
 
   const handleLoadPlanVersion = (planKey: string, versionId: string) => {
@@ -572,7 +814,7 @@ export default function App() {
 
   // Debounced auto-save draft for Tab 5 edits (NEVER overwrites a different week/grade/lesson slot!)
   useEffect(() => {
-    if (!isDbLoadedRef.current) return;
+    if (!isDbLoadedRef.current || !authUser) return;
     if (!lessonRows || lessonRows.length === 0) return;
 
     const currentKey = getPlanVersionKey(week, grade, lessonNum);
@@ -612,12 +854,12 @@ export default function App() {
     }, 450);
 
     return () => clearTimeout(timer);
-  }, [lessonRows, week, grade, lessonNum, topic, title]);
+  }, [lessonRows, week, grade, lessonNum, topic, title, authUser]);
 
   // Flush draft immediately when closing/reloading browser tab
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!isDbLoadedRef.current || !lessonRows || lessonRows.length === 0) return;
+      if (!isDbLoadedRef.current || !authUser || !lessonRows || lessonRows.length === 0) return;
       const currentKey = getPlanVersionKey(week, grade, lessonNum);
       if (loadedPlanKeyRef.current !== currentKey) return;
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
@@ -637,7 +879,7 @@ export default function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [lessonRows, week, grade, lessonNum, topic, title, currentMasterPlan]);
+  }, [lessonRows, week, grade, lessonNum, topic, title, currentMasterPlan, authUser]);
 
   useEffect(() => {
     if (isDbLoadedRef.current) {
@@ -648,6 +890,41 @@ export default function App() {
       setAppStateDB('active_title', title);
     }
   }, [week, grade, lessonNum, topic, title]);
+
+  const handleTabChange = (nextTab: string) => {
+    if (activeTab === 'tab-generator' && nextTab !== 'tab-generator' && lessonRows.length > 0) {
+      const key = `k${grade}_t${lessonNum}`;
+      const syncedPlan: MasterPlanItem = normalizeMasterPlan({
+        ...currentMasterPlan,
+        id: `plan_${key}_w${week}`,
+        grade: grade as 1 | 3 | 5,
+        week,
+        lessonNum,
+        topic,
+        title,
+        rows: JSON.parse(JSON.stringify(lessonRows))
+      });
+      handleAutoSaveDraftPlans([syncedPlan], 'tab-generator');
+    }
+
+    if (nextTab === 'tab-generator') {
+      const latestVer = getPreferredVersionForPlan(planVersionStoreRef.current, week, grade, lessonNum);
+      if (latestVer?.snapshot) {
+        const snap = normalizeMasterPlan(latestVer.snapshot);
+        skipNextAutoDraftRef.current = true;
+        setCurrentMasterPlan(snap);
+        setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+        setTitle(snap.title);
+        setTopic(snap.topic);
+      }
+    }
+
+    if (nextTab === 'tab-export') {
+      setVersionRefreshNonce((n) => n + 1);
+    }
+
+    setActiveTab(nextTab);
+  };
 
   const handleSwitchToExportFromGenerator = () => {
     const key = `k${grade}_t${lessonNum}`;
@@ -665,7 +942,11 @@ export default function App() {
     handleAutoSaveDraftPlans([syncedPlan], 'tab-generator');
     setVersionRefreshNonce((n) => n + 1);
     setActiveTab('tab-export');
-    showToast(`Đã lưu bản nháp và chuyển sang Xem trước & In cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`);
+    showToast(
+      isGuest
+        ? `Đang mở chế độ Xem trước A4 cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
+        : `Đã lưu bản nháp và chuyển sang Xem trước & In cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
+    );
   };
 
   const showToast = (msg: string) => {
@@ -676,6 +957,10 @@ export default function App() {
   };
 
   const handleResetData = async () => {
+    if (isGuest) {
+      requireAuth('Khôi phục dữ liệu gốc của hệ thống');
+      return;
+    }
     if (
       window.confirm(
         'Khôi phục toàn bộ Thư viện ảnh, Kịch bản và Kế hoạch bài dạy về dữ liệu gốc trong IndexedDB?'
@@ -710,6 +995,10 @@ export default function App() {
   };
 
   const handleOpenSelectCellModal = (img: SgkImageItem) => {
+    if (isGuest) {
+      requireAuth('Gắn ảnh vào giáo án');
+      return;
+    }
     setImageToAttach(img);
     setIsSelectCellModalOpen(true);
   };
@@ -744,6 +1033,10 @@ export default function App() {
   };
 
   const handleOpenSmartClean = (img: SgkImageItem) => {
+    if (isGuest) {
+      requireAuth('Tẩy rác & làm sạch ảnh bằng AI');
+      return;
+    }
     setCleanImageTarget(img);
     setIsSmartCleanOpen(true);
   };
@@ -758,8 +1051,11 @@ export default function App() {
   };
 
   // Gemini Vision AI Analysis
-  // Gemini Vision AI Analysis
   const handleAnalyzeVision = async (img: SgkImageItem) => {
+    if (isGuest) {
+      requireAuth('Phân tích động tác bằng Gemini Vision AI');
+      return;
+    }
     setIsAnalyzingVision(true);
     showToast('Gemini Vision AI đang đọc hình ảnh động tác SGK...');
 
@@ -930,24 +1226,105 @@ export default function App() {
     showToast(`Đã tự động điền kịch bản và chèn ảnh "${movementName}" vào đúng cột!`);
   };
 
-  const handleLessonImported = (result: ParsedLessonFileResult) => {
-    if (result.title) setTitle(result.title);
-    if (result.topic) setTopic(result.topic);
-    if (result.week) setWeek(result.week);
-    if (result.grade) setGrade(result.grade);
-    if (result.lessonNum) setLessonNum(result.lessonNum);
-    if (result.rows && result.rows.length > 0) {
-      setLessonRows(result.rows);
-    }
-    if (result.teacherName || result.schoolName) {
+  const handleSaveUserTemplate = (tpl: UserCustomTemplate, applyImmediately: boolean) => {
+    setUserCustomTemplates((prev) => {
+      const next = [tpl, ...prev.filter((t) => t.id !== tpl.id)];
+      userCustomTemplatesRef.current = next;
+      setAppStateDB('user_custom_templates', next).catch(() => {});
+      return next;
+    });
+    setActiveCustomTemplateId(tpl.id);
+    setAppStateDB('active_custom_template_id', tpl.id).catch(() => {});
+
+    const mp = customTemplateToMasterPlan(tpl);
+    if (tpl.teacherName || tpl.schoolName) {
       setSchoolSettings((prev) => ({
         ...prev,
-        teacherName: result.teacherName || prev.teacherName,
-        schoolName: result.schoolName || prev.schoolName,
+        teacherName: tpl.teacherName || prev.teacherName,
+        schoolName: tpl.schoolName || prev.schoolName
       }));
     }
+
+    // Also store in version store for quick recall across Tab 5 & Tab 6
+    const versionRes = commitOfficialVersion(planVersionStoreRef.current, mp, 'tab-generator', {
+      customLabel: `Mẫu mới: ${tpl.name}`,
+      forceNewVersion: true
+    });
+    planVersionStoreRef.current = versionRes.store;
+    setPlanVersionStore(versionRes.store);
+    savePlanVersionStoreDB(versionRes.store).catch(() => {});
+    upsertMasterPlanInDictionary(mp);
+
+    if (applyImmediately) {
+      loadedPlanKeyRef.current = getPlanVersionKey(mp.week, mp.grade, mp.lessonNum);
+      skipNextAutoDraftRef.current = true;
+      setCurrentMasterPlan(mp);
+      setWeek(mp.week);
+      setGrade(mp.grade);
+      setLessonNum(mp.lessonNum);
+      setTopic(mp.topic);
+      setTitle(mp.title);
+      setLessonRows(JSON.parse(JSON.stringify(mp.rows)));
+      setVersionRefreshNonce((n) => n + 1);
+      setActiveTab('tab-extract');
+      showToast(`✨ Đã lưu & hiển thị "${tpl.name}" với ${tpl.rows.length} hoạt động (Tab 3, Tab 5 & Tab 6)!`);
+    } else {
+      setVersionRefreshNonce((n) => n + 1);
+      showToast(`✅ Đã lưu mẫu "${tpl.name}" vào bộ sưu tập Mẫu mới từ người dùng!`);
+    }
+  };
+
+  const handleUpdateCustomTemplate = (updatedTpl: UserCustomTemplate) => {
+    setUserCustomTemplates((prev) => {
+      const next = prev.map((t) => (t.id === updatedTpl.id ? updatedTpl : t));
+      userCustomTemplatesRef.current = next;
+      setAppStateDB('user_custom_templates', next).catch(() => {});
+      return next;
+    });
+    const mp = customTemplateToMasterPlan(updatedTpl);
+    if (activeCustomTemplateId === updatedTpl.id) {
+      setCurrentMasterPlan(mp);
+    }
+    upsertMasterPlanInDictionary(mp);
+  };
+
+  const handleDeleteCustomTemplate = (tplId: string) => {
+    setUserCustomTemplates((prev) => {
+      const next = prev.filter((t) => t.id !== tplId);
+      userCustomTemplatesRef.current = next;
+      setAppStateDB('user_custom_templates', next).catch(() => {});
+      if (activeCustomTemplateId === tplId) {
+        const nextActive = next[0]?.id || null;
+        setActiveCustomTemplateId(nextActive);
+        setAppStateDB('active_custom_template_id', nextActive).catch(() => {});
+      }
+      return next;
+    });
+    showToast('🗑️ Đã xóa mẫu giáo án khỏi danh sách Mẫu mới từ người dùng.');
+  };
+
+  const handleSelectCustomTemplate = (tpl: UserCustomTemplate) => {
+    setActiveCustomTemplateId(tpl.id);
+    setAppStateDB('active_custom_template_id', tpl.id).catch(() => {});
+    const mp = customTemplateToMasterPlan(tpl);
+    setCurrentMasterPlan(mp);
+  };
+
+  const handleApplyCustomTemplateToGenerator = (tpl: UserCustomTemplate) => {
+    setActiveCustomTemplateId(tpl.id);
+    setAppStateDB('active_custom_template_id', tpl.id).catch(() => {});
+    const mp = customTemplateToMasterPlan(tpl);
+    loadedPlanKeyRef.current = getPlanVersionKey(mp.week, mp.grade, mp.lessonNum);
+    skipNextAutoDraftRef.current = true;
+    setCurrentMasterPlan(mp);
+    setWeek(mp.week);
+    setGrade(mp.grade);
+    setLessonNum(mp.lessonNum);
+    setTopic(mp.topic);
+    setTitle(mp.title);
+    setLessonRows(JSON.parse(JSON.stringify(mp.rows)));
     setActiveTab('tab-generator');
-    showToast(`Đã nạp thành công giáo án "${result.title || 'Mới'}" với ${result.rows.length} hoạt động!`);
+    showToast(`✨ Đã nạp mẫu "${tpl.name}" vào Trình tạo giáo án!`);
   };
 
   const handleSaveAllExtractedToLibrary = (newScenarios: ScenarioItem[]) => {
@@ -1053,42 +1430,109 @@ export default function App() {
       {/* Main Top Header */}
       <Header
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         imageCount={images.length}
         schoolSettings={schoolSettings}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() =>
+          isGuest ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
+        }
         onResetData={handleResetData}
-        onOpenImport={() => setIsImportModalOpen(true)}
-        onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
-        onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
-        onOpenFormationStudio={() => setIsGlobalStudioOpen(true)}
-        onOpenFormationLibrary={() => setIsGlobalFormationLibraryOpen(true)}
+        onOpenImport={() =>
+          isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+        }
+        onOpenGoogleDrive={() =>
+          isGuest ? requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive') : setIsGoogleDriveOpen(true)
+        }
+        onOpenBackupRestore={() =>
+          isGuest ? requireAuth('Sao lưu & Khôi phục toàn bộ dữ liệu') : setIsBackupRestoreOpen(true)
+        }
+        onOpenFormationStudio={() =>
+          isGuest ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
+        }
+        onOpenFormationLibrary={() =>
+          isGuest ? requireAuth('Kho 32+ sơ đồ đội hình & chèn vào giáo án') : setIsGlobalFormationLibraryOpen(true)
+        }
         onOpenPpctManager={() => {
-          setActiveTab('tab-export');
+          handleTabChange('tab-export');
           showToast('📊 Chuyển đến Xem trước & Rà soát Phân phối chương trình (PPCT) 3 khối!');
         }}
         currentWeek={week}
         onSelectCurrentWeek={() => {
-          setActiveTab('tab-export');
+          handleTabChange('tab-export');
           showToast(`✨ Đang xem Kế hoạch bài dạy Tuần ${week} (Tuần hiện hành)!`);
         }}
+        authUser={authUser}
+        isGuest={isGuest}
+        onOpenAuth={() => openAuthModal('login', null)}
       />
+
+      {/* Guest Basic Access Banner */}
+      {isGuest && (
+        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-blue-50 border-b border-amber-200 no-print">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-xs">
+            <div className="flex items-center gap-2.5 text-slate-700">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 text-white font-bold text-[11px] shrink-0">
+                <Lock className="w-3 h-3" />
+                Chế Độ Khách (Cơ Bản)
+              </span>
+              <span className="leading-snug">
+                Bạn đang dùng thử các tính năng xem &amp; sinh mẫu cơ bản. <strong>Đăng ký / Đăng nhập</strong> tài khoản miễn phí để mở khóa 100% tính năng (Quét SGK, Sửa trực tiếp, Lưu phiên bản, Nạp file, Studio Sơ đồ &amp; Xuất Word/PDF).
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => openAuthModal('register', null)}
+                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Đăng Ký Miễn Phí</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openAuthModal('login', null)}
+                className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center gap-1.5 transition"
+              >
+                <LogIn className="w-3.5 h-3.5 text-blue-600" />
+                <span>Đăng Nhập</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Body View */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
         {activeTab === 'tab-scan' && (
-          <TabScan
-            images={images}
-            onImageExtracted={handleImageExtracted}
-            onNavigateToGallery={() => setActiveTab('tab-img-library')}
-            onAnalyzeVision={handleAnalyzeVision}
-            onOpenSmartClean={handleOpenSmartClean}
-            onOpenBatchUpload={() => {
-              setActiveTab('tab-img-library');
-            }}
-            initialGrade={scanInitialGrade}
-            initialPage={scanInitialPage}
-          />
+          isGuest ? (
+            <LockedFeatureGate
+              badgeText="Tab 1 · Bóc Tách SGK"
+              title="Tab 1 · Quét & Bóc Tách Ảnh Từ SGK Điện Tử"
+              description="Trích xuất ảnh động tác và trò chơi trực tiếp từ sách giáo khoa GDTC Kết nối tri thức (Khối 1, 3, 5), làm sạch nền AI và phân tích kỹ thuật bằng Gemini Vision dành riêng cho thành viên."
+              highlights={[
+                'Cắt vùng ảnh chuẩn nét cao từ từng trang SGK Khối 1, 3, 5',
+                'Tự động phân tích tên động tác, nhịp đếm bằng Gemini Vision AI',
+                'Làm sạch nền & khử nhiễu ảnh scan trước khi đưa vào giáo án',
+                'Lưu trực tiếp vào Thư viện ảnh & gắn tự động vào đúng tiết học'
+              ]}
+              onRegister={() => openAuthModal('register', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')}
+              onLogin={() => openAuthModal('login', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')}
+              onFallbackTab={() => handleTabChange('tab-generator')}
+            />
+          ) : (
+            <TabScan
+              images={images}
+              onImageExtracted={handleImageExtracted}
+              onNavigateToGallery={() => handleTabChange('tab-img-library')}
+              onAnalyzeVision={handleAnalyzeVision}
+              onOpenSmartClean={handleOpenSmartClean}
+              onOpenBatchUpload={() => {
+                handleTabChange('tab-img-library');
+              }}
+              initialGrade={scanInitialGrade}
+              initialPage={scanInitialPage}
+            />
+          )
         )}
 
         {activeTab === 'tab-img-library' && (
@@ -1099,26 +1543,55 @@ export default function App() {
             onAnalyzeVision={handleAnalyzeVision}
             onOpenSmartClean={handleOpenSmartClean}
             showToast={showToast}
+            isGuest={isGuest}
+            onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
 
         {activeTab === 'tab-extract' && (
-          <TabExtractSample
-            currentMasterPlan={currentMasterPlan}
-            setCurrentMasterPlan={setCurrentMasterPlan}
-            userImages={images}
-            onApplyMasterToGenerator={(plan) => {
-              setGrade(plan.grade);
-              setLessonNum(plan.lessonNum + 2);
-              setWeek(plan.week + 1);
-              setTopic(plan.topic);
-              setTitle(plan.title);
-              setLessonRows(JSON.parse(JSON.stringify(plan.rows)));
-              setActiveTab('tab-generator');
-              showToast(`Đã chuyển giáo án mẫu sang Trình tạo bài giảng (Tuần ${plan.week + 1})!`);
-            }}
-            showToast={showToast}
-          />
+          isGuest ? (
+            <LockedFeatureGate
+              badgeText="Tab 3 · Sửa Giáo Án Mẫu"
+              title="Tab 3 · Giáo Án Mẫu & Chỉnh Sửa Trực Tiếp 4 Cột"
+              description="Không gian làm việc chuyên sâu để giáo viên chỉnh sửa từng dòng hoạt động chuẩn Công văn 5512, quản lý các mẫu giáo án mới do bạn nạp lên và chuyển đổi nhanh sang tuần kế tiếp."
+              highlights={[
+                'Sửa trực tiếp toàn bộ bảng 4 cột chuẩn 1:1 (Nội dung · LVĐ · GV · HS)',
+                'Quản lý, chỉnh sửa và áp dụng bộ sưu tập Mẫu giáo án mới từ người dùng',
+                'Đính kèm, thay thế ảnh động tác & sơ đồ đội hình ngay trên từng dòng',
+                'Chuyển nhanh giáo án mẫu đã hoàn thiện sang Tuần mới (Tab 5)'
+              ]}
+              onRegister={() => openAuthModal('register', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')}
+              onLogin={() => openAuthModal('login', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')}
+              onFallbackTab={() => handleTabChange('tab-generator')}
+            />
+          ) : (
+            <TabExtractSample
+              currentMasterPlan={currentMasterPlan}
+              setCurrentMasterPlan={setCurrentMasterPlan}
+              userImages={images}
+              userCustomTemplates={userCustomTemplates}
+              activeCustomTemplateId={activeCustomTemplateId}
+              onSelectCustomTemplate={handleSelectCustomTemplate}
+              onUpdateCustomTemplate={handleUpdateCustomTemplate}
+              onDeleteCustomTemplate={handleDeleteCustomTemplate}
+              onOpenImport={() => setIsImportModalOpen(true)}
+              onApplyMasterToGenerator={(plan) => {
+                const targetWeek = plan.week + 1;
+                const targetLesson = plan.lessonNum + 2;
+                loadedPlanKeyRef.current = getPlanVersionKey(targetWeek, plan.grade, targetLesson);
+                skipNextAutoDraftRef.current = true;
+                setGrade(plan.grade);
+                setLessonNum(targetLesson);
+                setWeek(targetWeek);
+                setTopic(plan.topic);
+                setTitle(plan.title);
+                setLessonRows(JSON.parse(JSON.stringify(plan.rows)));
+                setActiveTab('tab-generator');
+                showToast(`Đã chuyển giáo án mẫu sang Trình tạo bài giảng (Tuần ${targetWeek})!`);
+              }}
+              showToast={showToast}
+            />
+          )
         )}
 
         {activeTab === 'tab-library' && (
@@ -1126,15 +1599,31 @@ export default function App() {
             scenarios={scenarios}
             setScenarios={setScenarios}
             onOpenAddModal={() => {
+              if (isGuest) {
+                requireAuth('Thêm kịch bản giảng dạy mới');
+                return;
+              }
               setScenarioToEdit(null);
               setIsScenarioModalOpen(true);
             }}
             onEditScenario={(sc) => {
+              if (isGuest) {
+                requireAuth('Chỉnh sửa kịch bản giảng dạy');
+                return;
+              }
               setScenarioToEdit(sc);
               setIsScenarioModalOpen(true);
             }}
-            onInsertToLesson={handleInsertScenarioToLesson}
+            onInsertToLesson={(sc) => {
+              if (isGuest) {
+                requireAuth('Chèn kịch bản vào giáo án tuần này');
+                return;
+              }
+              handleInsertScenarioToLesson(sc);
+            }}
             showToast={showToast}
+            isGuest={isGuest}
+            onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
 
@@ -1157,17 +1646,52 @@ export default function App() {
             currentMasterPlan={currentMasterPlan}
             onChangeLessonContext={handleChangeGeneratorContext}
             planVersionStore={planVersionStore}
-            onSaveOfficialVersion={(plan, label, markAsBest, baseline) =>
-              handleSaveOfficialVersion(plan, 'tab-generator', label, markAsBest, baseline)
-            }
-            onLoadPlanVersion={handleLoadPlanVersion}
-            onToggleBestVersion={handleToggleBestVersion}
-            onDeletePlanVersion={handleDeletePlanVersion}
+            onSaveOfficialVersion={(plan, label, markAsBest, baseline, forceNew) => {
+              if (isGuest) {
+                requireAuth('Lưu phiên bản giáo án mới');
+                return;
+              }
+              return handleSaveOfficialVersion(plan, 'tab-generator', label, markAsBest, baseline, forceNew);
+            }}
+            onLoadPlanVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Tải phiên bản từ Lịch sử');
+                return;
+              }
+              handleLoadPlanVersion(planKey, versionId);
+            }}
+            onToggleBestVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Đánh dấu phiên bản hoàn hảo nhất');
+                return;
+              }
+              handleToggleBestVersion(planKey, versionId);
+            }}
+            onDeletePlanVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Xóa phiên bản trong Lịch sử');
+                return;
+              }
+              handleDeletePlanVersion(planKey, versionId);
+            }}
+            userCustomTemplates={userCustomTemplates}
+            activeCustomTemplateId={activeCustomTemplateId}
+            onApplyCustomTemplate={(tpl) => {
+              if (isGuest) {
+                requireAuth('Sử dụng mẫu giáo án mới từ người dùng');
+                return;
+              }
+              handleApplyCustomTemplateToGenerator(tpl);
+            }}
             onSwitchToExport={handleSwitchToExportFromGenerator}
-            onSwitchToMasterTemplate={() => setActiveTab('tab-extract')}
+            onSwitchToMasterTemplate={() => handleTabChange('tab-extract')}
             onNavigateToScan={handleNavigateToScanFromLesson}
             showToast={showToast}
-            onOpenImport={() => setIsImportModalOpen(true)}
+            onOpenImport={() =>
+              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+            }
+            isGuest={isGuest}
+            onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
 
@@ -1181,6 +1705,7 @@ export default function App() {
             lessonRows={lessonRows}
             schoolSettings={schoolSettings}
             onUpdateSchoolSettings={(newSettings) => {
+              if (isGuest) return;
               setSchoolSettings(newSettings);
               setAppStateDB('school_settings', newSettings);
             }}
@@ -1190,15 +1715,59 @@ export default function App() {
             planVersionStore={planVersionStore}
             versionRefreshNonce={versionRefreshNonce}
             onAutoSaveDraftPlans={(plans) => handleAutoSaveDraftPlans(plans, 'tab-export')}
-            onSaveOfficialVersion={(plan, label, markAsBest, baseline) =>
-              handleSaveOfficialVersion(plan, 'tab-export', label, markAsBest, baseline)
+            onSaveOfficialVersion={(plan, label, markAsBest, baseline, forceNew) => {
+              if (isGuest) {
+                requireAuth('Lưu phiên bản giáo án mới');
+                return;
+              }
+              return handleSaveOfficialVersion(plan, 'tab-export', label, markAsBest, baseline, forceNew);
+            }}
+            onSaveMultipleOfficialVersions={(plans) => {
+              if (isGuest) {
+                requireAuth('Lưu bộ giáo án 3 khối vào Lịch sử & Cơ sở dữ liệu');
+                return;
+              }
+              handleSaveMultipleOfficialVersions(plans, 'tab-export');
+            }}
+            onLoadPlanVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Tải phiên bản từ Lịch sử');
+                return;
+              }
+              handleLoadPlanVersion(planKey, versionId);
+            }}
+            onToggleBestVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Đánh dấu phiên bản hoàn hảo nhất');
+                return;
+              }
+              handleToggleBestVersion(planKey, versionId);
+            }}
+            onDeletePlanVersion={(planKey, versionId) => {
+              if (isGuest) {
+                requireAuth('Xóa phiên bản trong Lịch sử');
+                return;
+              }
+              handleDeletePlanVersion(planKey, versionId);
+            }}
+            onActiveWeekChange={(nw) => setWeek(nw)}
+            userCustomTemplates={userCustomTemplates}
+            activeCustomTemplateId={activeCustomTemplateId}
+            onSelectCustomTemplate={(id) => {
+              if (isGuest) {
+                requireAuth('Xem & sử dụng Mẫu giáo án mới từ người dùng');
+                return;
+              }
+              setActiveCustomTemplateId(id);
+              setAppStateDB('active_custom_template_id', id).catch(() => {});
+            }}
+            onUpdateUserCustomTemplate={(tpl) => {
+              if (isGuest) return;
+              handleUpdateCustomTemplate(tpl);
+            }}
+            onOpenImportModal={() =>
+              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
             }
-            onSaveMultipleOfficialVersions={(plans) =>
-              handleSaveMultipleOfficialVersions(plans, 'tab-export')
-            }
-            onLoadPlanVersion={handleLoadPlanVersion}
-            onToggleBestVersion={handleToggleBestVersion}
-            onDeletePlanVersion={handleDeletePlanVersion}
             images={images}
             showToast={showToast}
             onUpdateMasterPlan={(updated) => {
@@ -1206,9 +1775,39 @@ export default function App() {
               setCurrentMasterPlan(updated);
               setLessonRows(JSON.parse(JSON.stringify(updated.rows)));
             }}
-            onNavigateToLibrary={() => setActiveTab('tab-img-library')}
-            onOpenGoogleDrive={() => setIsGoogleDriveOpen(true)}
-            onNavigateToGenerator={() => setActiveTab('tab-generator')}
+            onNavigateToLibrary={() => handleTabChange('tab-img-library')}
+            onOpenGoogleDrive={() =>
+              isGuest ? requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive') : setIsGoogleDriveOpen(true)
+            }
+            onNavigateToGenerator={() => handleTabChange('tab-generator')}
+            isGuest={isGuest}
+            onRequireAuth={(feature) => requireAuth(feature)}
+          />
+        )}
+
+        {activeTab === 'tab-intro' && (
+          <TabIntro
+            onNavigateTab={handleTabChange}
+            onOpenImport={() =>
+              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+            }
+            onOpenAuth={() => openAuthModal('login', null)}
+            onOpenAuthMode={(mode) => openAuthModal(mode, null)}
+            onOpenFormationStudio={() =>
+              isGuest ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
+            }
+            onOpenSettings={() =>
+              isGuest ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
+            }
+            isGuest={isGuest}
+            liveStats={{
+              imageCount: images.length,
+              planCount: Object.keys(allMasterPlans || {}).length,
+              savedVersionCount: Object.values(planVersionStore.versionsByPlanKey || {}).reduce(
+                (sum, list) => sum + list.length,
+                0
+              )
+            }}
           />
         )}
       </main>
@@ -1261,7 +1860,44 @@ export default function App() {
       <ImportLessonModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onLessonImported={handleLessonImported}
+        onSaveUserTemplate={handleSaveUserTemplate}
+        showToast={showToast}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => {
+          setIsAuthModalOpen(false);
+          setAuthGateReason(null);
+        }}
+        initialMode={authModalMode}
+        gateReason={authGateReason}
+        defaultSchoolName={schoolSettings.schoolName}
+        defaultTeacherName={schoolSettings.teacherName}
+        onAuthSuccess={async (mode) => {
+          setAuthGateReason(null);
+          hasPulledInitialWorkspaceRef.current = true;
+          if (mode === 'register') {
+            await pushWorkspace(buildWorkspaceSnapshot());
+            showToast('☁️ Đã tạo tài khoản và sao lưu dữ liệu làm việc hiện tại lên tài khoản!');
+          } else {
+            const ws = await pullWorkspace();
+            if (ws && (ws.planVersionStore || ws.userCustomTemplates?.length || ws.allMasterPlans)) {
+              await mergeAndApplyServerWorkspace(ws);
+              showToast('☁️ Đã đồng bộ các phiên bản giáo án & mẫu người dùng từ tài khoản!');
+            } else {
+              await pushWorkspace(buildWorkspaceSnapshot());
+            }
+          }
+        }}
+        onManualSyncUp={async () => {
+          const ok = await pushWorkspace(buildWorkspaceSnapshot());
+          if (ok) {
+            showToast('☁️ Đã đồng bộ dữ liệu giáo án hiện tại lên máy chủ!');
+          } else {
+            showToast('⚠️ Chưa thể đồng bộ lên máy chủ, vui lòng thử lại.');
+          }
+        }}
         showToast={showToast}
       />
 

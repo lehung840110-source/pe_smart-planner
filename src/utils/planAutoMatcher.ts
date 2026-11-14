@@ -1673,11 +1673,15 @@ const LEGACY_VANDUNG_REGEX =
  */
 export function sanitizeVanDungRow(row: LessonRow): LessonRow {
   const cLower = (row.content || '').toLowerCase();
+  const hasCooldownSection = cLower.includes('4.1') || cLower.includes('hồi tĩnh');
+  const hasExplicitVanDungHeading = cLower.includes('4.2') || /4\.2[\.\:]|vận dụng\s*:/.test(cLower);
+  // NEVER convert a 4.1. Hồi tĩnh row whose parent heading contains "4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH" into 4.2. Vận dụng!
+  if (hasCooldownSection && !hasExplicitVanDungHeading) return row;
+
   const isVanDungRow = cLower.includes('4.2') || cLower.includes('vận dụng');
   if (!isVanDungRow) return row;
 
   const combinedCorpus = `${row.content || ''}\n${row.gv || ''}\n${row.hs || ''}`;
-  const hasCooldownSection = cLower.includes('4.1') || cLower.includes('hồi tĩnh');
   const needsRewrite =
     LEGACY_VANDUNG_REGEX.test(combinedCorpus) ||
     !cLower.includes('câu hỏi vận dụng sách giáo khoa');
@@ -1708,6 +1712,56 @@ export function sanitizeVanDungRow(row: LessonRow): LessonRow {
     gv: app.fullGvText,
     hs: app.fullHsText
   };
+}
+
+/**
+ * Sanitizes all rows in a plan while preserving separation between Row 10 (4.1 Hồi tĩnh)
+ * and Row 11 (4.2 Vận dụng), automatically healing any duplicated 4.2 Vận dụng row.
+ */
+export function sanitizePlanRowsVanDung(rows: LessonRow[], grade: number = 1): LessonRow[] {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+  const isGranular = rows.length >= 9;
+  const lastIdx = rows.length - 1;
+  const secondLastIdx = rows.length - 2;
+
+  const hoiTinhDiag = getFormationDiagramForPhaseAndGrade('hoi_tinh', grade);
+
+  return rows.map((row, idx) => {
+    const cLower = (row.content || '').toLowerCase();
+    const lastLower = (rows[lastIdx]?.content || '').toLowerCase();
+    const hasCooldown = cLower.includes('4.1') || cLower.includes('hồi tĩnh');
+    const isLastAlsoVanDung = lastLower.includes('4.2') || lastLower.includes('vận dụng') || lastLower.includes('nhận xét');
+
+    // In 10-11 row granular plans, the second-to-last row (index rows.length - 2) must stay pure 4.1 Hồi tĩnh
+    if (isGranular && idx === secondLastIdx && (hasCooldown || (isLastAlsoVanDung && (cLower.includes('4.2') || cLower.includes('vận dụng'))))) {
+      const needsHeal = cLower.includes('4.2') || cLower.includes('câu hỏi vận dụng') || !hasCooldown;
+      if (needsHeal) {
+        const healed: LessonRow = {
+          ...row,
+          content:
+            `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n` +
+            `4.1. Hồi tĩnh:\n` +
+            `- Thả lỏng toàn thân, cúi người rũ tay, rung đùi, lắc bắp chân và hít thở sâu theo nhịp chậm rãi để cơ thể hồi phục.`,
+          gv:
+            `- Điều hành toàn lớp thực hiện các động tác hồi tĩnh: cúi người rũ mềm tay, rung thả lỏng đùi và chân, hít thở sâu để đưa cơ thể về trạng thái hồi phục ổn định sau vận động.\n` +
+            `- Nhắc học sinh thả lỏng tự nhiên, không gồng cứng cơ thể.`,
+          hs:
+            `- Đội hình hồi tĩnh: Đứng giãn cách tự nhiên hoặc vòng tròn, hít thở sâu, thả lỏng toàn thân theo sự điều khiển của giáo viên.\n` +
+            `- Rũ tay, thả lỏng bắp chân nhịp nhàng, cảm nhận cơ thể hồi phục sảng khoái.`,
+          hsImgUrl: hoiTinhDiag.svgDataUrl,
+          hsImgTitle: hoiTinhDiag.name,
+          hsImages: [{ id: `diag_ht_g${grade}_${idx}`, url: hoiTinhDiag.svgDataUrl, title: hoiTinhDiag.name }]
+        };
+        delete healed.contentImgUrl;
+        delete healed.contentImgTitle;
+        healed.contentImages = [];
+        return healed;
+      }
+      return row;
+    }
+
+    return sanitizeVanDungRow(row);
+  });
 }
 
 /**
@@ -2013,9 +2067,12 @@ export function splitAndAlignRows1to1(
   customWarmupGame?: string,
   customPracticeGame?: string
 ): LessonRow[] {
-  // If already 10 or more rows, sanitize any misplaced SVG/game attachments in Column 1 and clean Vận dụng 4.2 text
+  // If already 10 or more rows, sanitize any misplaced SVG/game attachments in Column 1 and clean Vận dụng 4.2 text (without touching 4.1 Hồi tĩnh)
   if (rows && rows.length >= 10) {
-    return rows.map((r) => sanitizeVanDungRow(sanitizeRowColumn1Media(r, grade, title)));
+    return sanitizePlanRowsVanDung(
+      rows.map((r) => sanitizeRowColumn1Media(r, grade, title)),
+      grade
+    );
   }
 
   // Create clean 1:1 granular rows using deterministic 6-slot resolver
@@ -2108,7 +2165,8 @@ export function splitAndAlignRows1to1(
   // Slot 4.2 (Vận dụng -> idx 10)
   const srcVanDung = rows.find((r) => {
     const c = (r.content || '').toLowerCase();
-    return (c.includes('4.2.') || c.includes('vận dụng')) && isCustomRaster(r.contentImgUrl);
+    const isCooldownOnly = (c.includes('4.1') || c.includes('hồi tĩnh')) && !c.includes('4.2');
+    return !isCooldownOnly && (c.includes('4.2.') || c.includes('vận dụng')) && isCustomRaster(r.contentImgUrl);
   });
   if (srcVanDung?.contentImgUrl && granular11[10] && !granular11[10].contentImgUrl) {
     granular11[10].contentImgUrl = srcVanDung.contentImgUrl;
@@ -2201,8 +2259,12 @@ export function autoScanLibraryAndAttachToRows(
     const isPracticeTextRow =
       !isPracticeGameRow &&
       (c.includes('3.1.') || c.includes('3.2.') || c.includes('3.3.') || c.includes('3.4.'));
-    const isVanDungRow = c.includes('4.2.') || c.includes('vận dụng');
-    const isCooldownOnlyRow = !isVanDungRow && (c.includes('4.1.') || c.includes('hồi tĩnh'));
+    const hasCooldownText = c.includes('4.1.') || c.includes('4.1 ') || c.includes('hồi tĩnh');
+    const isGranularSecondLast = updatedRows.length >= 9 && idx === updatedRows.length - 2;
+    const isCooldownOnlyRow =
+      hasCooldownText || (isGranularSecondLast && (c.includes('4.2') || c.includes('vận dụng')));
+    const isVanDungRow =
+      !isCooldownOnlyRow && (c.includes('4.2.') || c.includes('4.2:') || c.includes('vận dụng'));
 
     if (isIntroBlock) {
       delete row.contentImgUrl;

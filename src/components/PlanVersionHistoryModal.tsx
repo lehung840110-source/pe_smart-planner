@@ -45,7 +45,8 @@ interface PlanVersionHistoryModalProps {
     plan: MasterPlanItem,
     customLabel?: string,
     markAsBest?: boolean,
-    baselinePlan?: MasterPlanItem | null
+    baselinePlan?: MasterPlanItem | null,
+    forceNewVersion?: boolean
   ) => void;
   onLoadVersion: (planKey: string, versionId: string) => void;
   onToggleBest: (planKey: string, versionId: string) => void;
@@ -126,7 +127,8 @@ export const PlanVersionHistoryModal: React.FC<PlanVersionHistoryModalProps> = (
       activeTarget.currentPlan,
       newVersionLabel.trim() || undefined,
       markBest,
-      activeTarget.defaultBaselinePlan
+      activeTarget.defaultBaselinePlan,
+      true
     );
     setNewVersionLabel('');
   };

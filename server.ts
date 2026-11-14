@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { generateSgk2dSequenceSvg } from './src/utils/sgkVectorGenerator.js';
 
 import fs from 'fs';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -2237,6 +2238,395 @@ Style: 2D flat digital vector cel-shading illustration, clean outlines, sequenti
   });
 });
 
+// ============================================================================
+// PERSISTENT USER ACCOUNTS, AUTHENTICATION & WORKSPACE SYNC (SCRYPT + HMAC)
+// ============================================================================
+const DATA_DIR = path.join(__dirname, '.data');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const WORKSPACES_DIR = path.join(DATA_DIR, 'workspaces');
+const SECRET_FILE = path.join(DATA_DIR, '.session_secret');
+
+interface StoredUser {
+  id: string;
+  email: string;
+  fullName: string;
+  schoolName: string;
+  role: 'teacher' | 'admin';
+  passwordHash: string;
+  createdAt: number;
+  lastLoginAt: number;
+}
+
+function ensureAuthStorage() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(WORKSPACES_DIR)) fs.mkdirSync(WORKSPACES_DIR, { recursive: true });
+  if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
+}
+
+function getSessionSecret(): string {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET !== 'CHANGE_THIS_SESSION_SECRET') {
+    return process.env.SESSION_SECRET;
+  }
+  ensureAuthStorage();
+  if (fs.existsSync(SECRET_FILE)) {
+    const existing = fs.readFileSync(SECRET_FILE, 'utf8').trim();
+    if (existing.length >= 32) return existing;
+  }
+  const generated = crypto.randomBytes(48).toString('hex');
+  fs.writeFileSync(SECRET_FILE, generated, { encoding: 'utf8', mode: 0o600 });
+  return generated;
+}
+
+function readUsersList(): StoredUser[] {
+  ensureAuthStorage();
+  try {
+    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeUsersList(users: StoredUser[]) {
+  ensureAuthStorage();
+  const tmpFile = `${USERS_FILE}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(users, null, 2), 'utf8');
+  fs.renameSync(tmpFile, USERS_FILE);
+}
+
+function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derived = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${derived}`;
+}
+
+function verifyPassword(password: string, storedHash: string): boolean {
+  const [salt, expectedHex] = (storedHash || '').split(':');
+  if (!salt || !expectedHex) return false;
+  const derivedBuf = crypto.scryptSync(password, salt, 64);
+  const expectedBuf = Buffer.from(expectedHex, 'hex');
+  if (derivedBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(derivedBuf, expectedBuf);
+}
+
+function signSessionToken(user: StoredUser): string {
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: user.id,
+      email: user.email,
+      exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+    }),
+    'utf8'
+  ).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', getSessionSecret())
+    .update(payload)
+    .digest('base64url');
+  return `${payload}.${sig}`;
+}
+
+function parseCookies(cookieHeader?: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!cookieHeader) return out;
+  cookieHeader.split(';').forEach((part) => {
+    const idx = part.indexOf('=');
+    if (idx > 0) {
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      if (k) out[k] = decodeURIComponent(v);
+    }
+  });
+  return out;
+}
+
+function authenticateRequest(req: Request): StoredUser | null {
+  const authHeader = req.headers.authorization || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  const cookies = parseCookies(req.headers.cookie);
+  const token = bearerToken || cookies.gdtc_session || '';
+  if (!token || !token.includes('.')) return null;
+
+  const [payloadB64, sigB64] = token.split('.');
+  if (!payloadB64 || !sigB64) return null;
+
+  const expectedSig = crypto
+    .createHmac('sha256', getSessionSecret())
+    .update(payloadB64)
+    .digest('base64url');
+
+  const sigBuf = Buffer.from(sigB64);
+  const expectedBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    if (!payload?.sub || !payload?.exp || Date.now() > payload.exp) return null;
+    const users = readUsersList();
+    return users.find((u) => u.id === payload.sub) || null;
+  } catch {
+    return null;
+  }
+}
+
+function toPublicUser(u: StoredUser) {
+  return {
+    id: u.id,
+    email: u.email,
+    fullName: u.fullName,
+    schoolName: u.schoolName,
+    role: u.role,
+    createdAt: u.createdAt,
+    lastLoginAt: u.lastLoginAt
+  };
+}
+
+function setSessionCookie(res: Response, token: string) {
+  res.setHeader(
+    'Set-Cookie',
+    `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`
+  );
+}
+
+app.post('/api/auth/register', (req: Request, res: Response) => {
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const fullName = String(req.body?.fullName || '').trim() || 'Giáo viên GDTC';
+  const schoolName = String(req.body?.schoolName || '').trim() || 'TRƯỜNG TIỂU HỌC & THCS';
+
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return res.status(400).json({ success: false, error: 'Email không hợp lệ. Vui lòng nhập đúng định dạng email.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ success: false, error: 'Mật khẩu phải có ít nhất 6 ký tự.' });
+  }
+
+  const users = readUsersList();
+  if (users.some((u) => u.email === rawEmail)) {
+    return res.status(409).json({ success: false, error: 'Email này đã được đăng ký tài khoản. Vui lòng đăng nhập.' });
+  }
+
+  const now = Date.now();
+  const newUser: StoredUser = {
+    id: `usr_${now}_${crypto.randomBytes(4).toString('hex')}`,
+    email: rawEmail,
+    fullName,
+    schoolName,
+    role: users.length === 0 ? 'admin' : 'teacher',
+    passwordHash: hashPassword(password),
+    createdAt: now,
+    lastLoginAt: now
+  };
+
+  users.push(newUser);
+  writeUsersList(users);
+
+  const token = signSessionToken(newUser);
+  setSessionCookie(res, token);
+
+  return res.json({
+    success: true,
+    token,
+    user: toPublicUser(newUser)
+  });
+});
+
+app.post('/api/auth/login', (req: Request, res: Response) => {
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+
+  if (!rawEmail || !password) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập đầy đủ Email và Mật khẩu.' });
+  }
+
+  const users = readUsersList();
+  const idx = users.findIndex((u) => u.email === rawEmail);
+  if (idx < 0 || !verifyPassword(password, users[idx].passwordHash)) {
+    return res.status(401).json({ success: false, error: 'Email hoặc mật khẩu chưa chính xác.' });
+  }
+
+  users[idx].lastLoginAt = Date.now();
+  writeUsersList(users);
+
+  const token = signSessionToken(users[idx]);
+  setSessionCookie(res, token);
+
+  return res.json({
+    success: true,
+    token,
+    user: toPublicUser(users[idx])
+  });
+});
+
+app.post('/api/auth/logout', (_req: Request, res: Response) => {
+  res.setHeader('Set-Cookie', 'gdtc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/me', (req: Request, res: Response) => {
+  const user = authenticateRequest(req);
+  if (!user) {
+    return res.json({ authenticated: false, user: null });
+  }
+  return res.json({ authenticated: true, user: toPublicUser(user) });
+});
+
+app.get('/api/workspace', (req: Request, res: Response) => {
+  const user = authenticateRequest(req);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+  ensureAuthStorage();
+  const safeId = user.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  const wsPath = path.join(WORKSPACES_DIR, `${safeId}.json`);
+  if (!fs.existsSync(wsPath)) {
+    return res.json({ success: true, workspace: null });
+  }
+  try {
+    const data = JSON.parse(fs.readFileSync(wsPath, 'utf8'));
+    return res.json({ success: true, workspace: data });
+  } catch {
+    return res.json({ success: true, workspace: null });
+  }
+});
+
+app.put('/api/workspace', (req: Request, res: Response) => {
+  const user = authenticateRequest(req);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+  ensureAuthStorage();
+  const safeId = user.id.replace(/[^a-zA-Z0-9_-]/g, '');
+  const wsPath = path.join(WORKSPACES_DIR, `${safeId}.json`);
+  const tmpPath = `${wsPath}.tmp`;
+
+  const payload = {
+    ...(req.body?.workspace || req.body || {}),
+    userId: user.id,
+    updatedAt: Date.now()
+  };
+
+  fs.writeFileSync(tmpPath, JSON.stringify(payload), 'utf8');
+  fs.renameSync(tmpPath, wsPath);
+
+  return res.json({ success: true, updatedAt: payload.updatedAt });
+});
+
+// ============================================================================
+// MULTI-TASK LESSON PLAN ANALYZER (EXTRACT FULL 5512 CUSTOM USER TEMPLATE)
+// ============================================================================
+app.post('/api/ai/analyze-lesson-template', async (req: Request, res: Response) => {
+  const { rawText, fileName, extractedDraft } = req.body || {};
+
+  // If Gemini is configured and rawText is substantial, enhance missing fields via AI
+  if (aiClient && typeof rawText === 'string' && rawText.trim().length > 80) {
+    try {
+      const response = await aiClient.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Bạn là chuyên gia phân tích Kế hoạch bài dạy môn Giáo dục Thể chất (GDPT 2018 - Công văn 5512).
+Hãy phân tích văn bản giáo án sau và trích xuất chuẩn xác thành JSON gồm:
+- templateName: tên ngắn gọn đại diện cho mẫu giáo án này
+- subject: môn học (mặc định "Giáo dục thể chất")
+- grade: số khối lớp (1, 2, 3, 4 hoặc 5)
+- week: số tuần
+- lessonNum: số tiết PPCT
+- topic: Chủ đề bài học
+- title: Tên bài học
+- dateRange: thời gian thực hiện (nếu có)
+- specialCompetencies: { healthCare, basicMovement, sportsCompetency, disabledStudents }
+- generalCompetencies: { autonomy, collaboration, problemSolving, disabledStudents }
+- qualities: { diligence, honesty, responsibility, disabledStudents }
+- integrations: { digitalSkill, digitalDescription, lifeSkills, environmentalEducation }
+- locationEquipment: { location, teacherTools, studentTools }
+- postLessonAdjustment: nội dung mục IV Điều chỉnh sau bài dạy (nếu có)
+
+Tên file: ${fileName || 'giao_an'}
+Nội dung thô (cắt gọn tối đa 9000 ký tự):
+${rawText.slice(0, 9000)}`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              templateName: { type: Type.STRING },
+              subject: { type: Type.STRING },
+              grade: { type: Type.NUMBER },
+              week: { type: Type.NUMBER },
+              lessonNum: { type: Type.NUMBER },
+              topic: { type: Type.STRING },
+              title: { type: Type.STRING },
+              dateRange: { type: Type.STRING },
+              specialCompetencies: {
+                type: Type.OBJECT,
+                properties: {
+                  healthCare: { type: Type.STRING },
+                  basicMovement: { type: Type.STRING },
+                  sportsCompetency: { type: Type.STRING },
+                  disabledStudents: { type: Type.STRING }
+                }
+              },
+              generalCompetencies: {
+                type: Type.OBJECT,
+                properties: {
+                  autonomy: { type: Type.STRING },
+                  collaboration: { type: Type.STRING },
+                  problemSolving: { type: Type.STRING },
+                  disabledStudents: { type: Type.STRING }
+                }
+              },
+              qualities: {
+                type: Type.OBJECT,
+                properties: {
+                  diligence: { type: Type.STRING },
+                  honesty: { type: Type.STRING },
+                  responsibility: { type: Type.STRING },
+                  disabledStudents: { type: Type.STRING }
+                }
+              },
+              integrations: {
+                type: Type.OBJECT,
+                properties: {
+                  digitalSkill: { type: Type.STRING },
+                  digitalDescription: { type: Type.STRING },
+                  lifeSkills: { type: Type.STRING },
+                  environmentalEducation: { type: Type.STRING }
+                }
+              },
+              locationEquipment: {
+                type: Type.OBJECT,
+                properties: {
+                  location: { type: Type.STRING },
+                  teacherTools: { type: Type.STRING },
+                  studentTools: { type: Type.STRING }
+                }
+              },
+              postLessonAdjustment: { type: Type.STRING }
+            }
+          }
+        }
+      });
+
+      if (response.text) {
+        const aiParsed = JSON.parse(response.text);
+        return res.json({
+          success: true,
+          source: 'gemini-ai',
+          analysis: aiParsed
+        });
+      }
+    } catch (e: any) {
+      console.warn('Multi-task AI lesson analysis fallback:', e?.message);
+    }
+  }
+
+  return res.json({
+    success: true,
+    source: 'heuristic',
+    analysis: extractedDraft || null
+  });
+});
 
 // Setup Vite middleware in dev or static files in production
 async function startServer() {

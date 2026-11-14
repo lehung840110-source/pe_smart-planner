@@ -7,6 +7,7 @@ import {
   resolveAccurateGameImage,
   resolveLessonSlotAssets,
   sanitizeVanDungRow,
+  sanitizePlanRowsVanDung,
   sanitizeRowColumn1Media,
   isInvalidColumn1AttachmentForRow
 } from './planAutoMatcher';
@@ -765,7 +766,12 @@ export function autoSyncCurriculumAndPlans(
       const isPracticeGroupRow =
         !isPracticeGameRow &&
         (cLower.includes('3.2.') || cLower.includes('tập theo tổ') || cLower.includes('3.1.') || cLower.includes('3.3.') || cLower.includes('3.4.'));
-      const isVanDungRow = cLower.includes('4.2.') || cLower.includes('vận dụng');
+      const hasCooldownInRow = cLower.includes('4.1.') || cLower.includes('4.1 ') || cLower.includes('hồi tĩnh');
+      const isSecondLastGranular = isGranularPlan && rIdx === plan.rows.length - 2;
+      const isCooldownOnlyRow =
+        hasCooldownInRow || (isSecondLastGranular && (cLower.includes('4.2') || cLower.includes('vận dụng')));
+      const isVanDungRow =
+        !isCooldownOnlyRow && (cLower.includes('4.2.') || cLower.includes('vận dụng'));
 
       // 1.2 Khởi động chung
       if (isKhoiDongChungRow) {
@@ -991,7 +997,7 @@ export function autoSyncCurriculumAndPlans(
       ...plan,
       topic: cleanTopic,
       title: masterTitle,
-      rows: newRows,
+      rows: sanitizePlanRowsVanDung(newRows, plan.grade),
       specialCompetencies: specialComp,
       generalCompetencies: generalComp,
       qualities: qualities

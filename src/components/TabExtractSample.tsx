@@ -20,7 +20,8 @@ import {
   MoveDown
 } from 'lucide-react';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
-import { LessonRow, SgkImageItem } from '../types/gdtc';
+import { LessonRow, SgkImageItem, UserCustomTemplate } from '../types/gdtc';
+import { customTemplateToMasterPlan } from '../utils/documentParser';
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationDiagram } from '../data/formationDiagrams';
@@ -29,6 +30,12 @@ interface TabExtractSampleProps {
   currentMasterPlan: MasterPlanItem;
   setCurrentMasterPlan: React.Dispatch<React.SetStateAction<MasterPlanItem>>;
   userImages: SgkImageItem[];
+  userCustomTemplates?: UserCustomTemplate[];
+  activeCustomTemplateId?: string | null;
+  onSelectCustomTemplate?: (tpl: UserCustomTemplate) => void;
+  onUpdateCustomTemplate?: (tpl: UserCustomTemplate) => void;
+  onDeleteCustomTemplate?: (id: string) => void;
+  onOpenImport?: () => void;
   onApplyMasterToGenerator: (plan: MasterPlanItem) => void;
   showToast: (msg: string) => void;
 }
@@ -37,6 +44,12 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
   currentMasterPlan,
   setCurrentMasterPlan,
   userImages,
+  userCustomTemplates = [],
+  activeCustomTemplateId = null,
+  onSelectCustomTemplate,
+  onUpdateCustomTemplate,
+  onDeleteCustomTemplate,
+  onOpenImport,
   onApplyMasterToGenerator,
   showToast,
 }) => {
@@ -44,6 +57,9 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
   const [selectedKey, setSelectedKey] = useState<string>('k1_t15');
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [showObjectivesAccordion, setShowObjectivesAccordion] = useState<boolean>(false);
+
+  const activeUserTemplate =
+    userCustomTemplates.find((t) => t.id === activeCustomTemplateId) || null;
 
   // Modals for picking formation or movement image
   const [targetRowForFormation, setTargetRowForFormation] = useState<number | null>(null);
@@ -61,6 +77,11 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
 
   // Revert back to original PDF state for current selected key
   const handleResetToOriginal = () => {
+    if (activeUserTemplate) {
+      setCurrentMasterPlan(customTemplateToMasterPlan(activeUserTemplate));
+      showToast(`Đã khôi phục nội dung gốc của mẫu người dùng "${activeUserTemplate.name}"!`);
+      return;
+    }
     if (
       window.confirm(
         'Khôi phục giáo án mẫu này về đúng nguyên bản 100% từ file PDF của thầy Lê Quốc Hưng (Trường TH & THCS Nghĩa Hiệp)?'
@@ -75,6 +96,41 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
   // Save current modifications as default template
   const handleSaveMasterTemplate = () => {
     setIsEditMode(false);
+    if (activeUserTemplate && onUpdateCustomTemplate) {
+      const safe = normalizeMasterPlan(currentMasterPlan);
+      onUpdateCustomTemplate({
+        ...activeUserTemplate,
+        title: safe.title,
+        topic: safe.topic,
+        grade: safe.grade,
+        week: safe.week,
+        lessonNum: safe.lessonNum,
+        rows: safe.rows,
+        specialCompetencies: {
+          healthCare: safe.specialCompetencies?.healthCare || '',
+          basicMovement: safe.specialCompetencies?.basicMovement || '',
+          sportsCompetency: safe.specialCompetencies?.sportsCompetency || '',
+          disabledStudents: safe.specialCompetencies?.disabledStudents || ''
+        },
+        generalCompetencies: {
+          autonomy: safe.generalCompetencies?.autonomy || '',
+          collaboration: safe.generalCompetencies?.collaboration || '',
+          problemSolving: safe.generalCompetencies?.problemSolving || '',
+          disabledStudents: safe.generalCompetencies?.disabledStudents || ''
+        },
+        qualities: {
+          diligence: safe.qualities?.diligence || '',
+          honesty: safe.qualities?.honesty || '',
+          responsibility: safe.qualities?.responsibility || '',
+          disabledStudents: safe.qualities?.disabledStudents || ''
+        },
+        locationEquipment: safe.locationEquipment,
+        integrations: safe.integrations,
+        updatedAt: Date.now()
+      });
+      showToast(`✨ Đã lưu chỉnh sửa vào Mẫu mới "${activeUserTemplate.name}"!`);
+      return;
+    }
     showToast('✨ Đã lưu trực tiếp vào Giáo án mẫu! Các bài dạy tiếp theo sẽ tuân thủ theo mẫu này.');
   };
 
@@ -281,8 +337,126 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
           >
             <Wand2 className="w-3.5 h-3.5" /> Sinh Giáo Án Tuần Tiếp
           </button>
+
+          {onOpenImport && (
+            <button
+              type="button"
+              onClick={onOpenImport}
+              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> Nạp & Phân Tích Mẫu Mới
+            </button>
+          )}
         </div>
       </div>
+
+      {/* User Imported Custom Templates Card */}
+      {userCustomTemplates.length > 0 && (
+        <div className="bg-white rounded-2xl border border-indigo-200 shadow-xs p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                <span>Mẫu giáo án mới từ người dùng ({userCustomTemplates.length})</span>
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Các giáo án thầy/cô vừa nạp và phân tích đa nhiệm (giữ nguyên toàn bộ 4 phần I–IV và bảng 4 cột). Chọn một mẫu để xem, sửa trực tiếp hoặc sinh bài mới.
+              </p>
+            </div>
+            {onOpenImport && (
+              <button
+                type="button"
+                onClick={onOpenImport}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nạp thêm mẫu mới
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {userCustomTemplates.map((tpl) => {
+              const isActive = tpl.id === activeCustomTemplateId;
+              return (
+                <div
+                  key={tpl.id}
+                  className={`rounded-xl border p-3 transition flex flex-col justify-between gap-2 ${
+                    isActive
+                      ? 'border-indigo-500 bg-indigo-50/60 shadow-xs'
+                      : 'border-slate-200 bg-slate-50/50 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-900 truncate" title={tpl.name}>
+                        {tpl.name}
+                      </span>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-white border border-slate-200 text-slate-700 shrink-0">
+                        K{tpl.grade} · T{tpl.week} · Tiết {tpl.lessonNum}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 truncate" title={tpl.title}>
+                      {tpl.title}
+                    </p>
+                    <p className="text-[10.5px] text-slate-500 tabular-nums">
+                      Nguồn: {tpl.sourceFileName} · {tpl.rows.length} hoạt động · {tpl.detectedSections.length} mục CV 5512
+                    </p>
+                    {tpl.analysisNotes && tpl.analysisNotes.length > 0 && (
+                      <p className="text-[10.5px] text-indigo-700 line-clamp-1">{tpl.analysisNotes.join(' · ')}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/70">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onSelectCustomTemplate) {
+                          onSelectCustomTemplate(tpl);
+                        } else {
+                          setCurrentMasterPlan(customTemplateToMasterPlan(tpl));
+                        }
+                        showToast(`Đã mở mẫu người dùng "${tpl.name}" để xem & chỉnh sửa.`);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition flex items-center gap-1 ${
+                        isActive
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-white border border-slate-300 text-slate-700 hover:border-indigo-400'
+                      }`}
+                    >
+                      {isActive ? <Check className="w-3 h-3" /> : <Edit3 className="w-3 h-3" />}
+                      <span>{isActive ? 'Đang hiển thị' : 'Xem & Sửa mẫu'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const mp = customTemplateToMasterPlan(tpl);
+                          onApplyMasterToGenerator(mp);
+                          showToast(`Đã nạp mẫu "${tpl.name}" vào Tab 5 để sinh giáo án!`);
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1"
+                      >
+                        <Wand2 className="w-3 h-3" /> Dùng mẫu này
+                      </button>
+                      {onDeleteCustomTemplate && (
+                        <button
+                          type="button"
+                          onClick={() => onDeleteCustomTemplate(tpl.id)}
+                          className="p-1 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition"
+                          title="Xóa mẫu người dùng này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Edit Mode Notice Bar */}
       {isEditMode && (

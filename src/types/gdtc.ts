@@ -105,3 +105,65 @@ export interface PpctAuditResult {
   isMatch: boolean;
   differenceNote?: string;
 }
+
+export interface UserCustomTemplate {
+  id: string;
+  name: string;
+  sourceFileName: string;
+  fileType: 'docx' | 'doc' | 'pdf' | 'html' | 'json' | 'text';
+  createdAt: number;
+  updatedAt: number;
+  grade: number;
+  week: number;
+  lessonNum: number;
+  topic: string;
+  title: string;
+  dateRange: string;
+  schoolName?: string;
+  departmentName?: string;
+  teacherName?: string;
+  approverPrincipal?: string;
+  approverHead?: string;
+  specialCompetencies: {
+    healthCare: string;
+    basicMovement: string;
+    sportsCompetency: string;
+    disabledStudents: string;
+  };
+  generalCompetencies: {
+    autonomy: string;
+    collaboration: string;
+    problemSolving: string;
+    disabledStudents: string;
+  };
+  qualities: {
+    diligence: string;
+    honesty: string;
+    responsibility: string;
+    disabledStudents: string;
+  };
+  integrations: {
+    digitalSkill: string;
+    digitalDescription: string;
+    lifeSkills: string;
+    trafficSafety?: string;
+    environmentalEducation?: string;
+  };
+  locationEquipment: {
+    location: string;
+    teacherTools: string;
+    studentTools: string;
+  };
+  rows: LessonRow[];
+  postLessonAdjustment: string;
+  signatures: {
+    locationDate: string;
+    bgh: string;
+    headTeacher: string;
+    teacher: string;
+  };
+  detectedSections: string[];
+  analysisNotes: string[];
+  rawTextExcerpt?: string;
+}
+

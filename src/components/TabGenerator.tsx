@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Sparkles,
   Wand2,
@@ -26,9 +26,10 @@ import {
   History,
   Save,
   Star,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from 'lucide-react';
-import { LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment } from '../types/gdtc';
+import { LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment, UserCustomTemplate } from '../types/gdtc';
 import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { PlanVersionHistoryModal } from './PlanVersionHistoryModal';
 import {
@@ -92,15 +93,21 @@ interface TabGeneratorProps {
     plan: MasterPlanItem,
     customLabel?: string,
     markAsBest?: boolean,
-    baselinePlan?: MasterPlanItem | null
+    baselinePlan?: MasterPlanItem | null,
+    forceNewVersion?: boolean
   ) => LessonPlanVersion | void;
   onLoadPlanVersion?: (planKey: string, versionId: string) => void;
   onToggleBestVersion?: (planKey: string, versionId: string) => void;
   onDeletePlanVersion?: (planKey: string, versionId: string) => void;
+  userCustomTemplates?: UserCustomTemplate[];
+  activeCustomTemplateId?: string | null;
+  onApplyCustomTemplate?: (tpl: UserCustomTemplate) => void;
   onSwitchToExport: () => void;
   onSwitchToMasterTemplate: () => void;
   onOpenImport?: () => void;
   onNavigateToScan?: (targetGrade: 1 | 3 | 5, targetPage?: number) => void;
+  isGuest?: boolean;
+  onRequireAuth?: (feature: string) => void;
   showToast: (msg: string) => void;
 }
 
@@ -126,15 +133,29 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   onLoadPlanVersion,
   onToggleBestVersion,
   onDeletePlanVersion,
+  userCustomTemplates = [],
+  activeCustomTemplateId = null,
+  onApplyCustomTemplate,
   onSwitchToExport,
   onSwitchToMasterTemplate,
+  onOpenImport,
   onNavigateToScan,
+  isGuest = false,
+  onRequireAuth,
   showToast,
 }) => {
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
   const [lastAutoMatch, setLastAutoMatch] = useState<AutoMatchResult | null>(null);
-  const [isEditMode, setIsEditMode] = useState<boolean>(true);
+  const [isEditMode, setIsEditMode] = useState<boolean>(!isGuest);
   const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isGuest) {
+      setIsEditMode(false);
+    }
+  }, [isGuest]);
+
+  const effectiveEditMode = !isGuest && isEditMode;
 
   const activePlanKey = useMemo(() => getPlanVersionKey(week, grade, lessonNum), [week, grade, lessonNum]);
 
@@ -254,6 +275,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // 1-Click: Auto-scan teacher's library and attach to all rows
   const handleAutoScanLibraryAndAttach = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Quét Thư viện & tự động gắn ảnh kỹ thuật');
+      return;
+    }
     const result = autoScanLibraryAndAttachToRows(lessonRows, images, grade, title);
     setLessonRows(result.updatedRows);
     showToast(
@@ -263,6 +288,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // 1-Click: Split activities into separate 1:1 horizontally aligned rows
   const handleSplitAndBalanceRows = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tách 3.1, 3.2, 3.3 & cân bằng cấu trúc 11 hoạt động');
+      return;
+    }
     const balanced = createBalancedGranularLessonRows(grade, title, images);
     setLessonRows(balanced);
     showToast(
@@ -272,6 +301,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // 1-Click: Rà soát & Chuẩn hóa sư phạm (Loại bỏ ảnh chèn sai, khớp đúng tranh kỹ thuật và sơ đồ SGK)
   const handleAuditAndFixPedagogicalRules = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Rà soát & chuẩn hóa sư phạm giáo án');
+      return;
+    }
     const result = autoScanLibraryAndAttachToRows(lessonRows, images, grade, title);
     setLessonRows(result.updatedRows);
     showToast(
@@ -281,6 +314,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // Gemini AI Custom Adaptation
   const handleAiRefine = async () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tinh chỉnh giáo án bằng Gemini AI');
+      return;
+    }
     setIsAiGenerating(true);
     showToast('Gemini AI đang hiệu chỉnh kịch bản theo yêu cầu chuẩn GDPT 2018...');
 
@@ -327,6 +364,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // Row update handlers
   const handleUpdateRow = (idx: number, field: keyof LessonRow, val: string) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Chỉnh sửa nội dung giáo án');
+      return;
+    }
     setLessonRows((prev) => {
       const updated = [...prev];
       updated[idx] = { ...updated[idx], [field]: val };
@@ -335,6 +376,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   };
 
   const handleAddRow = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Thêm dòng hoạt động mới vào giáo án');
+      return;
+    }
     setLessonRows((prev) => [
       ...prev,
       {
@@ -348,12 +393,20 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   };
 
   const handleDeleteRow = (idx: number) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Xóa dòng hoạt động trong giáo án');
+      return;
+    }
     if (lessonRows.length <= 1) return;
     setLessonRows((prev) => prev.filter((_, i) => i !== idx));
     showToast('Đã xóa dòng hoạt động.');
   };
 
   const handleMoveRow = (idx: number, dir: 'up' | 'down') => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Sắp xếp lại các dòng hoạt động');
+      return;
+    }
     const target = dir === 'up' ? idx - 1 : idx + 1;
     if (target < 0 || target >= lessonRows.length) return;
     setLessonRows((prev) => {
@@ -619,14 +672,83 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onSwitchToMasterTemplate}
-          className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
-        >
-          <FileCheck className="w-4 h-4 text-emerald-300" />
-          Sửa Trực Tiếp Giáo Án Mẫu
-        </button>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {onOpenImport && (
+            <button
+              type="button"
+              onClick={onOpenImport}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-xs"
+            >
+              <Sparkles className="w-4 h-4 text-amber-200" />
+              <span>Nạp &amp; Phân Tích Mẫu Mới</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+            </button>
+          )}
+          <button
+            onClick={onSwitchToMasterTemplate}
+            className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0"
+          >
+            <FileCheck className="w-4 h-4 text-emerald-300" />
+            <span>Sửa Trực Tiếp Giáo Án Mẫu</span>
+            {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
+          </button>
+        </div>
       </div>
+
+      {/* Custom User Templates Quick Bar */}
+      {userCustomTemplates.length > 0 && (
+        <div className="bg-white rounded-2xl border border-indigo-200 px-4 py-3 flex flex-wrap items-center justify-between gap-2.5 shadow-2xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-indigo-900 flex items-center gap-1.5 shrink-0">
+              <Sparkles className="w-4 h-4 text-indigo-600" />
+              Mẫu giáo án mới từ người dùng:
+            </span>
+            {userCustomTemplates.map((tpl) => {
+              const isAct = tpl.id === activeCustomTemplateId;
+              return (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => {
+                    if (isGuest && onRequireAuth) {
+                      onRequireAuth('Sử dụng mẫu giáo án mới từ người dùng');
+                      return;
+                    }
+                    onApplyCustomTemplate?.(tpl);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition flex items-center gap-1.5 ${
+                    isAct
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50'
+                  }`}
+                >
+                  <span>{tpl.name}</span>
+                  <span className={`text-[10px] px-1.5 py-0.2 rounded ${isAct ? 'bg-white/20 text-white' : 'bg-white text-slate-500 border border-slate-200'}`}>
+                    K{tpl.grade}·T{tpl.week} ({tpl.rows.length} dòng)
+                  </span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
+                </button>
+              );
+            })}
+          </div>
+          {onOpenImport && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Nạp thêm mẫu giáo án mới');
+                  return;
+                }
+                onOpenImport();
+              }}
+              className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 underline shrink-0 inline-flex items-center gap-1"
+            >
+              {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
+              <span>+ Nạp mẫu khác</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Week & Lesson Setup Card */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
@@ -733,7 +855,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                   title={`Mở trang ${sgkInfo.page} của SGK Lớp ${grade} để bóc tách hoặc đối chiếu`}
                 >
                   <BookOpen className="w-4 h-4 text-white" />
-                  📖 Mở SGK Điện Tử (Trang {sgkInfo.page})
+                  <span>📖 Mở SGK Điện Tử (Trang {sgkInfo.page})</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                 </button>
               )}
 
@@ -752,7 +875,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 title="Tách phần 3.1 (đồng loạt), 3.2 (tổ nhóm), 3.3 (cặp đôi) thành từng ô riêng, cân bằng Cột GV 100-120 từ giải quyết triệt để khoảng trắng"
               >
                 <Layers className="w-4 h-4 text-amber-300" />
-                ⚡ Tách 3.1, 3.2, 3.3 & Cân Bằng Các Ô (100-120 Từ)
+                <span>⚡ Tách 3.1, 3.2, 3.3 &amp; Cân Bằng Các Ô</span>
+                {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
               </button>
 
               <button
@@ -761,7 +885,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 title="Quét ảnh từ thư viện của bạn và tự động gắn vào các hoạt động"
               >
                 <Sparkles className="w-4 h-4 text-amber-300" />
-                ⚡ Quét Thư Viện Gắn Ảnh
+                <span>⚡ Quét Thư Viện Gắn Ảnh</span>
+                {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
               </button>
             </div>
           </div>
@@ -867,6 +992,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  if (isGuest && onRequireAuth) {
+                    onRequireAuth('Tự động chuẩn hóa khớp 100% SGK & PPCT');
+                    return;
+                  }
                   const match = generateNextWeekPlan(
                     grade,
                     week,
@@ -885,6 +1014,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               >
                 <Sparkles className="w-4 h-4 text-amber-200" />
                 <span>🛡️ Tự động Chuẩn hóa Khớp 100% Ngay</span>
+                {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
               </button>
             )}
 
@@ -895,7 +1025,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               title="Đồng bộ lại cấu trúc 11 hoạt động tương xứng 1:1 theo chiều ngang"
             >
               <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-              Đồng bộ 1:1
+              <span>Đồng bộ 1:1</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
             </button>
           </div>
         </div>
@@ -964,7 +1095,13 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           {unfinishedDraft && preferredVersion?.versionId !== unfinishedDraft.versionId && onLoadPlanVersion && (
             <button
               type="button"
-              onClick={() => onLoadPlanVersion(activePlanKey, unfinishedDraft.versionId)}
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Khôi phục bản nháp & quản lý phiên bản');
+                  return;
+                }
+                onLoadPlanVersion(activePlanKey, unfinishedDraft.versionId);
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-300 hover:bg-blue-100 whitespace-nowrap shrink-0 transition"
             >
               Tiếp tục bản nháp dở (v{unfinishedDraft.versionNumber})
@@ -974,7 +1111,13 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           {bestVersion && preferredVersion?.versionId !== bestVersion.versionId && onLoadPlanVersion && (
             <button
               type="button"
-              onClick={() => onLoadPlanVersion(activePlanKey, bestVersion.versionId)}
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Tải phiên bản hoàn hảo nhất');
+                  return;
+                }
+                onLoadPlanVersion(activePlanKey, bestVersion.versionId);
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 flex items-center gap-1 whitespace-nowrap shrink-0 transition"
             >
               <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
@@ -985,49 +1128,83 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           {onSaveOfficialVersion && (
             <button
               type="button"
-              onClick={() => onSaveOfficialVersion(currentPlanSnapshot)}
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Lưu phiên bản chính thức lên tài khoản');
+                  return;
+                }
+                onSaveOfficialVersion(
+                  currentPlanSnapshot,
+                  undefined,
+                  false,
+                  {
+                    ...currentPlanSnapshot,
+                    rows: createBalancedGranularLessonRows(grade, title, images)
+                  },
+                  true
+                );
+              }}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 whitespace-nowrap shrink-0 transition"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Lưu phiên bản mới</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
           )}
 
           <button
             type="button"
-            onClick={() => setIsVersionModalOpen(true)}
+            onClick={() => {
+              if (isGuest && onRequireAuth) {
+                onRequireAuth('Xem Lịch sử chỉnh sửa & Khôi phục phiên bản');
+                return;
+              }
+              setIsVersionModalOpen(true);
+            }}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white flex items-center gap-1.5 whitespace-nowrap shrink-0 transition tabular-nums"
           >
             <History className="w-3.5 h-3.5" />
-            <span>Lịch sử sửa & Phiên bản ({versionsForCurrent.length})</span>
+            <span>Lịch sử sửa &amp; Phiên bản ({versionsForCurrent.length})</span>
+            {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
           </button>
         </div>
       </div>
 
-      {/* 4-Column Table Direct Editor (Đã chuyển toàn bộ tính năng chỉnh sửa từ Tab Xem Trước sang đây) */}
+      {/* 4-Column Table Direct Editor */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
           <div>
             <h3 className="font-bold text-slate-900 text-xs flex items-center gap-2">
-              Bảng Tiến Trình Giảng Dạy Đã Sinh (Chỉnh Sửa Trực Tiếp Toàn Diện)
+              {effectiveEditMode
+                ? 'Bảng Tiến Trình Giảng Dạy Đã Sinh (Chỉnh Sửa Trực Tiếp Toàn Diện)'
+                : 'Bảng Tiến Trình Giảng Dạy Đã Sinh (Chế Độ Xem Trước)'}
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Hỗ trợ gõ sửa trực tiếp, chèn ảnh SGK và sơ đồ đội hình vào bất kỳ vị trí nào trong các cột và từng dòng văn bản
+              {isGuest
+                ? 'Đang ở Chế độ Khách (Xem trước). Đăng nhập để bật Chế độ sửa, chèn ảnh/sơ đồ và lưu phiên bản chính thức.'
+                : 'Hỗ trợ gõ sửa trực tiếp, chèn ảnh SGK và sơ đồ đội hình vào bất kỳ vị trí nào trong các cột và từng dòng văn bản'}
             </p>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setIsEditMode(!isEditMode)}
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Chỉnh sửa trực tiếp nội dung 4 cột');
+                  return;
+                }
+                setIsEditMode(!isEditMode);
+              }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${
-                isEditMode
+                effectiveEditMode
                   ? 'bg-blue-600 text-white shadow-2xs'
                   : 'bg-slate-200 hover:bg-slate-300 text-slate-800'
               }`}
             >
               <Edit3 className="w-3.5 h-3.5" />
-              {isEditMode ? 'Đang ở Chế Độ Sửa' : 'Bật Chế Độ Sửa'}
+              <span>{effectiveEditMode ? 'Đang ở Chế Độ Sửa' : 'Bật Chế Độ Sửa'}</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
             <button
@@ -1037,7 +1214,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               title="Tự động kiểm tra và loại bỏ các ảnh chèn sai vị trí, khớp đúng tranh kỹ thuật động tác mới theo chuẩn SGK"
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Rà Soát Chuẩn Sư Phạm
+              <span>Rà Soát Chuẩn Sư Phạm</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
             <button
@@ -1047,7 +1225,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
             >
               <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              {isAiGenerating ? 'AI đang xử lý...' : 'Gemini AI Tinh Chỉnh'}
+              <span>{isAiGenerating ? 'AI đang xử lý...' : 'Gemini AI Tinh Chỉnh'}</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
             <button
@@ -1055,7 +1234,9 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               onClick={handleAddRow}
               className="bg-blue-50 text-blue-700 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 transition"
             >
-              <Plus className="w-3.5 h-3.5" /> Thêm Dòng
+              <Plus className="w-3.5 h-3.5" />
+              <span>Thêm Dòng</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
             <button
@@ -1063,7 +1244,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               onClick={onSwitchToExport}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5"
             >
-              <Eye className="w-3.5 h-3.5" /> Xem Trước & In
+              <Eye className="w-3.5 h-3.5" /> Xem Trước &amp; In
             </button>
           </div>
         </div>
@@ -1112,115 +1293,128 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
                     {/* Cột 1: Nội dung / Kỹ thuật / Ảnh */}
                     <td className="p-2.5 align-top space-y-2">
-                      {/* Row management toolbar */}
-                      <div className="flex items-center justify-between bg-blue-50/90 border border-blue-200 px-2 py-1 rounded text-[10.5px]">
-                        <div className="flex items-center gap-1">
-                          <span className="px-1.5 py-0.5 bg-blue-700 text-white font-bold rounded text-[9px]">
-                            Dòng {idx + 1}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleAddRowBelow(idx)}
-                            className="p-0.5 text-emerald-700 hover:bg-emerald-100 rounded transition"
-                            title="Thêm 1 dòng mới bên dưới dòng này"
-                          >
-                            <PlusCircle className="w-3.5 h-3.5" />
-                          </button>
-                          {idx > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveRow(idx, 'up')}
-                              className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
-                              title="Chuyển dòng lên"
-                            >
-                              <MoveUp className="w-3 h-3" />
-                            </button>
+                      {effectiveEditMode ? (
+                        <>
+                          {/* Row management toolbar */}
+                          <div className="flex items-center justify-between bg-blue-50/90 border border-blue-200 px-2 py-1 rounded text-[10.5px]">
+                            <div className="flex items-center gap-1">
+                              <span className="px-1.5 py-0.5 bg-blue-700 text-white font-bold rounded text-[9px]">
+                                Dòng {idx + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleAddRowBelow(idx)}
+                                className="p-0.5 text-emerald-700 hover:bg-emerald-100 rounded transition"
+                                title="Thêm 1 dòng mới bên dưới dòng này"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5" />
+                              </button>
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveRow(idx, 'up')}
+                                  className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                                  title="Chuyển dòng lên"
+                                >
+                                  <MoveUp className="w-3 h-3" />
+                                </button>
+                              )}
+                              {idx < lessonRows.length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleMoveRow(idx, 'down')}
+                                  className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
+                                  title="Chuyển dòng xuống"
+                                >
+                                  <MoveDown className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteRow(idx)}
+                                className="p-0.5 text-red-600 hover:bg-red-100 rounded transition"
+                                title="Xóa dòng hoạt động này"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Inline Insertion at cursor for Column 1 */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'content',
+                                    type: 'image',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
+                                title="Chèn ảnh vào vị trí con trỏ hoặc dòng chữ đang chọn"
+                              >
+                                <ImageIcon className="w-3 h-3 text-amber-300" />
+                                <span>📷 Chèn ảnh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.content?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'content',
+                                    type: 'formation',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
+                                title="Chèn sơ đồ đội hình vào vị trí con trỏ"
+                              >
+                                <Compass className="w-3 h-3 text-amber-300" />
+                                <span>📐 Chèn sơ đồ</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <textarea
+                            rows={4}
+                            value={sanitizeInlineImageTagsInText(row.content)}
+                            onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
+                            className="w-full p-2 text-xs rounded-lg border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                            placeholder="Nhập nội dung hoạt động... (Có thể bấm 'Chèn ảnh' hoặc 'Chèn sơ đồ' để chèn trực tiếp tại con trỏ)"
+                          />
+
+                          {/* Live preview if inline tags exist in Column 1 */}
+                          {row.content && hasInlineMedia(row.content) && (
+                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
+                                👁️ Xem trước nội dung kèm hình ảnh:
+                              </p>
+                              <RichTextWithImages
+                                text={row.content}
+                                imageHeight={80}
+                                showCaptions={true}
+                                isEditMode={true}
+                                onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'content', rawTag)}
+                              />
+                            </div>
                           )}
-                          {idx < lessonRows.length - 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleMoveRow(idx, 'down')}
-                              className="p-0.5 text-slate-600 hover:bg-slate-200 rounded transition text-[10px]"
-                              title="Chuyển dòng xuống"
-                            >
-                              <MoveDown className="w-3 h-3" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRow(idx)}
-                            className="p-0.5 text-red-600 hover:bg-red-100 rounded transition"
-                            title="Xóa dòng hoạt động này"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-
-                        {/* Inline Insertion at cursor for Column 1 */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.content?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'content',
-                                type: 'image',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
-                            title="Chèn ảnh vào vị trí con trỏ hoặc dòng chữ đang chọn"
-                          >
-                            <ImageIcon className="w-3 h-3 text-amber-300" />
-                            <span>📷 Chèn ảnh</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.content?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'content',
-                                type: 'formation',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition shadow-2xs text-[10px]"
-                            title="Chèn sơ đồ đội hình vào vị trí con trỏ"
-                          >
-                            <Compass className="w-3 h-3 text-amber-300" />
-                            <span>📐 Chèn sơ đồ</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      <textarea
-                        rows={4}
-                        value={sanitizeInlineImageTagsInText(row.content)}
-                        onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
-                        className="w-full p-2 text-xs rounded-lg border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
-                        placeholder="Nhập nội dung hoạt động... (Có thể bấm 'Chèn ảnh' hoặc 'Chèn sơ đồ' để chèn trực tiếp tại con trỏ)"
-                      />
-
-                      {/* Live preview if inline tags exist in Column 1 */}
-                      {row.content && hasInlineMedia(row.content) && (
-                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
-                          <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">
-                            👁️ Xem trước nội dung kèm hình ảnh:
-                          </p>
+                        </>
+                      ) : (
+                        <div className="text-xs font-semibold text-slate-900 leading-relaxed">
                           <RichTextWithImages
                             text={row.content}
                             imageHeight={80}
                             showCaptions={true}
-                            isEditMode={true}
-                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'content', rawTag)}
+                            isEditMode={false}
                           />
                         </div>
                       )}
@@ -1263,37 +1457,41 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                   }}
                                   position="bottom"
                                 />
-                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => downloadSvgAsPng(cImg.url, `anh_cot1_dong_${idx + 1}.png`)}
-                                    className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                    title="Tải ảnh PNG xuống máy"
-                                  >
-                                    <Download className="w-3 h-3 text-emerald-400" /> PNG
-                                  </button>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setLessonRows((prev) => {
-                                      const updated = [...prev];
-                                      const cur = updated[idx]?.contentImages || [];
-                                      const next = cur.filter((_, i) => i !== cIdx);
-                                      updated[idx] = {
-                                        ...updated[idx],
-                                        contentImages: next,
-                                        contentImgUrl: next[0]?.url,
-                                        contentImgTitle: next[0]?.title
-                                      };
-                                      return updated;
-                                    });
-                                  }}
-                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                                  title="Xóa ảnh"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                                {effectiveEditMode && (
+                                  <>
+                                    <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => downloadSvgAsPng(cImg.url, `anh_cot1_dong_${idx + 1}.png`)}
+                                        className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                        title="Tải ảnh PNG xuống máy"
+                                      >
+                                        <Download className="w-3 h-3 text-emerald-400" /> PNG
+                                      </button>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setLessonRows((prev) => {
+                                          const updated = [...prev];
+                                          const cur = updated[idx]?.contentImages || [];
+                                          const next = cur.filter((_, i) => i !== cIdx);
+                                          updated[idx] = {
+                                            ...updated[idx],
+                                            contentImages: next,
+                                            contentImgUrl: next[0]?.url,
+                                            contentImgTitle: next[0]?.title
+                                          };
+                                          return updated;
+                                        });
+                                      }}
+                                      className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                      title="Xóa ảnh"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1310,7 +1508,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                           <div className="flex-1">
                             <p className="font-bold">Cảnh báo: Hình đang gắn chưa khớp mục này</p>
                             <p className="mt-0.5">
-                              Ảnh trò chơi không được đặt vào 1.2 Khởi động chung, và Sơ đồ đội hình thuộc Cột 4 (không thay cho ảnh SGK ở Cột 1). Bấm <strong>"Rà soát & Chuẩn hóa sư phạm"</strong> hoặc xóa để chọn lại đúng ảnh.
+                              Ảnh trò chơi không được đặt vào 1.2 Khởi động chung, và Sơ đồ đội hình thuộc Cột 4 (không thay cho ảnh SGK ở Cột 1).
                             </p>
                           </div>
                         </div>
@@ -1328,11 +1526,18 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                               {onNavigateToScan && missingNotice.suggestedPage && (
                                 <button
                                   type="button"
-                                  onClick={() => onNavigateToScan(grade as 1 | 3 | 5, missingNotice.suggestedPage)}
+                                  onClick={() => {
+                                    if (isGuest && onRequireAuth) {
+                                      onRequireAuth('Mở Tab 1 quét & bóc tách ảnh từ SGK');
+                                      return;
+                                    }
+                                    onNavigateToScan(grade as 1 | 3 | 5, missingNotice.suggestedPage);
+                                  }}
                                   className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
                                 >
                                   <BookOpen className="w-3 h-3" />
                                   <span>Mở Tab 1 trích xuất SGK Lớp {grade} (Trang {missingNotice.suggestedPage})</span>
+                                  {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                                 </button>
                               )}
                             </div>
@@ -1341,97 +1546,118 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       })()}
 
                       {/* Add column-level image to Column 1 */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setTargetColAttachment({
-                            rowIndex: idx,
-                            col: 'content',
-                            type: 'image'
-                          });
-                        }}
-                        className="w-full bg-blue-50/70 hover:bg-blue-100 text-blue-800 border border-dashed border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
-                      >
-                        <ImageIcon className="w-3 h-3 text-blue-600" />
-                        {contentImgs.length > 0 ? '+ Đính kèm thêm ảnh kỹ thuật vào Cột 1' : '+ Gắn ảnh kỹ thuật SGK (Cột 1)'}
-                      </button>
+                      {effectiveEditMode && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTargetColAttachment({
+                              rowIndex: idx,
+                              col: 'content',
+                              type: 'image'
+                            });
+                          }}
+                          className="w-full bg-blue-50/70 hover:bg-blue-100 text-blue-800 border border-dashed border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
+                        >
+                          <ImageIcon className="w-3 h-3 text-blue-600" />
+                          {contentImgs.length > 0 ? '+ Đính kèm thêm ảnh kỹ thuật vào Cột 1' : '+ Gắn ảnh kỹ thuật SGK (Cột 1)'}
+                        </button>
+                      )}
                     </td>
 
                     {/* Cột 2: LVĐ */}
                     <td className="p-2.5 text-center align-top font-semibold text-slate-800">
-                      <textarea
-                        rows={3}
-                        value={row.lvd}
-                        onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                        className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
-                      />
+                      {effectiveEditMode ? (
+                        <textarea
+                          rows={3}
+                          value={row.lvd}
+                          onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
+                          className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
+                        />
+                      ) : (
+                        <div className="whitespace-pre-line py-1 text-xs font-bold text-slate-800">
+                          {row.lvd}
+                        </div>
+                      )}
                     </td>
 
                     {/* Cột 3: Hoạt Động Giáo Viên */}
                     <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
-                      <div className="flex items-center justify-between bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
-                        <span className="font-bold text-emerald-800 text-[10px]">Cột 3: Kịch Bản GV</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.gv?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'gv',
-                                type: 'image',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
-                            title="Chèn ảnh vào vị trí con trỏ trong Hoạt động GV"
-                          >
-                            <ImageIcon className="w-3 h-3 text-amber-300" />
-                            <span>📷 Chèn ảnh</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.gv?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'gv',
-                                type: 'formation',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
-                            title="Chèn sơ đồ vị trí GV vào dòng này"
-                          >
-                            <Compass className="w-3 h-3 text-amber-300" />
-                            <span>📐 Chèn sơ đồ</span>
-                          </button>
-                        </div>
-                      </div>
+                      {effectiveEditMode ? (
+                        <>
+                          <div className="flex items-center justify-between bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
+                            <span className="font-bold text-emerald-800 text-[10px]">Cột 3: Kịch Bản GV</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'gv',
+                                    type: 'image',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                                title="Chèn ảnh vào vị trí con trỏ trong Hoạt động GV"
+                              >
+                                <ImageIcon className="w-3 h-3 text-amber-300" />
+                                <span>📷 Chèn ảnh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.gv?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'gv',
+                                    type: 'formation',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                                title="Chèn sơ đồ vị trí GV vào dòng này"
+                              >
+                                <Compass className="w-3 h-3 text-amber-300" />
+                                <span>📐 Chèn sơ đồ</span>
+                              </button>
+                            </div>
+                          </div>
 
-                      <textarea
-                        rows={7}
-                        value={sanitizeInlineImageTagsInText(row.gv)}
-                        onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
-                        className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
-                        placeholder="Nhập kịch bản hoạt động của giáo viên..."
-                      />
+                          <textarea
+                            rows={7}
+                            value={sanitizeInlineImageTagsInText(row.gv)}
+                            onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
+                            className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
+                            placeholder="Nhập kịch bản hoạt động của giáo viên..."
+                          />
 
-                      {/* Live preview if inline tags exist in Column 3 */}
-                      {row.gv && hasInlineMedia(row.gv) && (
-                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                          {/* Live preview if inline tags exist in Column 3 */}
+                          {row.gv && hasInlineMedia(row.gv) && (
+                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                              <RichTextWithImages
+                                text={row.gv}
+                                imageHeight={70}
+                                showCaptions={true}
+                                isEditMode={true}
+                                onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'gv', rawTag)}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-xs leading-relaxed text-slate-800">
                           <RichTextWithImages
                             text={row.gv}
                             imageHeight={70}
                             showCaptions={true}
-                            isEditMode={true}
-                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'gv', rawTag)}
+                            isEditMode={false}
                           />
                         </div>
                       )}
@@ -1450,26 +1676,28 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                 <p className="text-[9.5px] text-slate-600 font-medium text-center mt-0.5 truncate">
                                   {gImg.title}
                                 </p>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setLessonRows((prev) => {
-                                      const updated = [...prev];
-                                      const next = (updated[idx]?.gvImages || []).filter((_, i) => i !== gIdx);
-                                      updated[idx] = {
-                                        ...updated[idx],
-                                        gvImages: next,
-                                        gvImgUrl: next[0]?.url,
-                                        gvImgTitle: next[0]?.title
-                                      };
-                                      return updated;
-                                    });
-                                  }}
-                                  className="absolute top-1 right-1 bg-red-600 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                                  title="Xóa ảnh"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                                {effectiveEditMode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setLessonRows((prev) => {
+                                        const updated = [...prev];
+                                        const next = (updated[idx]?.gvImages || []).filter((_, i) => i !== gIdx);
+                                        updated[idx] = {
+                                          ...updated[idx],
+                                          gvImages: next,
+                                          gvImgUrl: next[0]?.url,
+                                          gvImgTitle: next[0]?.title
+                                        };
+                                        return updated;
+                                      });
+                                    }}
+                                    className="absolute top-1 right-1 bg-red-600 text-white p-0.5 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                    title="Xóa ảnh"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -1479,69 +1707,82 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
                     {/* Cột 4: Hoạt Động Học Sinh & Sơ Đồ Đội Hình */}
                     <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
-                      <div className="flex items-center justify-between bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">
-                        <span className="font-bold text-purple-800 text-[10px]">Cột 4: Hoạt Động HS</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.hs?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'hs',
-                                type: 'image',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
-                            title="Chèn ảnh vào vị trí con trỏ trong Hoạt động HS"
-                          >
-                            <ImageIcon className="w-3 h-3 text-amber-300" />
-                            <span>📷 Chèn ảnh</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
-                              const start = textarea?.selectionStart ?? (row.hs?.length || 0);
-                              const end = textarea?.selectionEnd ?? start;
-                              setTargetInlinePicker({
-                                rowIndex: idx,
-                                col: 'hs',
-                                type: 'formation',
-                                cursorStart: start,
-                                cursorEnd: end
-                              });
-                            }}
-                            className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
-                            title="Chèn sơ đồ đội hình vào vị trí con trỏ trong Hoạt động HS"
-                          >
-                            <Compass className="w-3 h-3 text-amber-300" />
-                            <span>📐 Chèn sơ đồ</span>
-                          </button>
-                        </div>
-                      </div>
+                      {effectiveEditMode ? (
+                        <>
+                          <div className="flex items-center justify-between bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">
+                            <span className="font-bold text-purple-800 text-[10px]">Cột 4: Hoạt Động HS</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'hs',
+                                    type: 'image',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                                title="Chèn ảnh vào vị trí con trỏ trong Hoạt động HS"
+                              >
+                                <ImageIcon className="w-3 h-3 text-amber-300" />
+                                <span>📷 Chèn ảnh</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const textarea = e.currentTarget.closest('td')?.querySelector('textarea');
+                                  const start = textarea?.selectionStart ?? (row.hs?.length || 0);
+                                  const end = textarea?.selectionEnd ?? start;
+                                  setTargetInlinePicker({
+                                    rowIndex: idx,
+                                    col: 'hs',
+                                    type: 'formation',
+                                    cursorStart: start,
+                                    cursorEnd: end
+                                  });
+                                }}
+                                className="px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold flex items-center gap-0.5 transition text-[10px]"
+                                title="Chèn sơ đồ đội hình vào vị trí con trỏ trong Hoạt động HS"
+                              >
+                                <Compass className="w-3 h-3 text-amber-300" />
+                                <span>📐 Chèn sơ đồ</span>
+                              </button>
+                            </div>
+                          </div>
 
-                      <textarea
-                        rows={4}
-                        value={sanitizeInlineImageTagsInText(row.hs)}
-                        onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
-                        className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
-                        placeholder="Nhập hoạt động của học sinh..."
-                      />
+                          <textarea
+                            rows={4}
+                            value={sanitizeInlineImageTagsInText(row.hs)}
+                            onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
+                            className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
+                            placeholder="Nhập hoạt động của học sinh..."
+                          />
 
-                      {/* Live preview if inline tags exist in Column 4 */}
-                      {row.hs && hasInlineMedia(row.hs) && (
-                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                          {/* Live preview if inline tags exist in Column 4 */}
+                          {row.hs && hasInlineMedia(row.hs) && (
+                            <div className="p-2 bg-slate-50 rounded-lg border border-slate-200 text-xs">
+                              <RichTextWithImages
+                                text={row.hs}
+                                imageHeight={80}
+                                showCaptions={true}
+                                isEditMode={true}
+                                onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'hs', rawTag)}
+                              />
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-xs leading-relaxed text-slate-800">
                           <RichTextWithImages
                             text={row.hs}
                             imageHeight={80}
                             showCaptions={true}
-                            isEditMode={true}
-                            onRemoveImage={(rawTag) => handleRemoveInlineTag(idx, 'hs', rawTag)}
+                            isEditMode={false}
                           />
                         </div>
                       )}
@@ -1549,44 +1790,46 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       {/* Multi-Diagram in Column 4 */}
                       <div className="space-y-2">
                         {/* Buttons to attach from Library & Open Studio */}
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTargetColAttachment({
-                                rowIndex: idx,
-                                col: 'hs',
-                                type: 'formation'
-                              });
-                            }}
-                            className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
-                          >
-                            <Users className="w-3 h-3 text-blue-600" />
-                            {hsImgs.length > 0 ? '+ Thêm từ Kho Sơ Đồ' : '+ Kho sơ đồ'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setStudioInitialDiagram(
-                                hsImgs[0]
-                                  ? {
-                                      id: `dh_row_${idx}`,
-                                      name: hsImgs[0].title || `Sơ đồ dòng ${idx + 1}`,
-                                      code: 'DH_CUSTOM',
-                                      phase: 'dong_loat',
-                                      description: row.hs,
-                                      svgDataUrl: hsImgs[0].url
-                                    }
-                                  : null
-                              );
-                              setTargetRowForStudio(idx);
-                            }}
-                            className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition shadow-2xs"
-                          >
-                            <Palette className="w-3 h-3 text-purple-600" />
-                            🎨 Studio tự vẽ
-                          </button>
-                        </div>
+                        {effectiveEditMode && (
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetColAttachment({
+                                  rowIndex: idx,
+                                  col: 'hs',
+                                  type: 'formation'
+                                });
+                              }}
+                              className="bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
+                            >
+                              <Users className="w-3 h-3 text-blue-600" />
+                              {hsImgs.length > 0 ? '+ Thêm từ Kho Sơ Đồ' : '+ Kho sơ đồ'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStudioInitialDiagram(
+                                  hsImgs[0]
+                                    ? {
+                                        id: `dh_row_${idx}`,
+                                        name: hsImgs[0].title || `Sơ đồ dòng ${idx + 1}`,
+                                        code: 'DH_CUSTOM',
+                                        phase: 'dong_loat',
+                                        description: row.hs,
+                                        svgDataUrl: hsImgs[0].url
+                                      }
+                                    : null
+                                );
+                                setTargetRowForStudio(idx);
+                              }}
+                              className="bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-300 py-1 px-2 rounded-md text-[10.5px] font-semibold flex items-center justify-center gap-1 transition shadow-2xs"
+                            >
+                              <Palette className="w-3 h-3 text-purple-600" />
+                              🎨 Studio tự vẽ
+                            </button>
+                          </div>
+                        )}
 
                         {/* Formation Diagram Preview in Column 4 */}
                         {hsImgs.length > 0 ? (
@@ -1607,63 +1850,69 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                       {diag.title}
                                     </p>
                                   )}
-                                  <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setStudioInitialDiagram({
-                                          id: diag.id || `dh_row_${idx}_${diagIdx}`,
-                                          name: diag.title || `Sơ đồ ${diagIdx + 1}`,
-                                          code: 'DH_CUSTOM',
-                                          phase: 'dong_loat',
-                                          description: row.hs,
-                                          svgDataUrl: diag.url
-                                        });
-                                        setTargetRowForStudio(idx);
-                                      }}
-                                      className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                      title="Chỉnh sửa sơ đồ này trong Studio"
-                                    >
-                                      <Edit3 className="w-3 h-3 text-white" /> Sửa
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => downloadSvgAsPng(diag.url, `so_do_dong_${idx + 1}_${diagIdx + 1}.png`)}
-                                      className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                      title="Tải sơ đồ PNG xuống máy"
-                                    >
-                                      <Download className="w-3 h-3 text-emerald-400" /> PNG
-                                    </button>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveFormationDiagram(idx, diagIdx)}
-                                    className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                                    title="Xóa sơ đồ này"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
+                                  {effectiveEditMode && (
+                                    <>
+                                      <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setStudioInitialDiagram({
+                                              id: diag.id || `dh_row_${idx}_${diagIdx}`,
+                                              name: diag.title || `Sơ đồ ${diagIdx + 1}`,
+                                              code: 'DH_CUSTOM',
+                                              phase: 'dong_loat',
+                                              description: row.hs,
+                                              svgDataUrl: diag.url
+                                            });
+                                            setTargetRowForStudio(idx);
+                                          }}
+                                          className="bg-blue-600 hover:bg-blue-700 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                          title="Chỉnh sửa sơ đồ này trong Studio"
+                                        >
+                                          <Edit3 className="w-3 h-3 text-white" /> Sửa
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => downloadSvgAsPng(diag.url, `so_do_dong_${idx + 1}_${diagIdx + 1}.png`)}
+                                          className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                          title="Tải sơ đồ PNG xuống máy"
+                                        >
+                                          <Download className="w-3 h-3 text-emerald-400" /> PNG
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveFormationDiagram(idx, diagIdx)}
+                                        className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                        title="Xóa sơ đồ này"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               ))}
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetColAttachment({
-                                  rowIndex: idx,
-                                  col: 'hs',
-                                  type: 'formation'
-                                });
-                              }}
-                              className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 transition"
-                              title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
-                            >
-                              <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
-                              <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
-                            </button>
+                            {effectiveEditMode && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTargetColAttachment({
+                                    rowIndex: idx,
+                                    col: 'hs',
+                                    type: 'formation'
+                                  });
+                                }}
+                                className="w-full py-1 px-2 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 rounded text-[10.5px] font-bold flex items-center justify-center gap-1 transition"
+                                title="Chèn thêm sơ đồ tập đồng loạt, tổ nhóm, cặp đôi hoặc cá nhân vào dòng này"
+                              >
+                                <PlusCircle className="w-3.5 h-3.5 text-blue-600" />
+                                <span>+ Thêm Sơ Đồ Khác (Đồng loạt / Tổ / Cặp / Cá nhân)</span>
+                              </button>
+                            )}
                           </div>
-                        ) : (
+                        ) : effectiveEditMode ? (
                           <div className="p-2 bg-blue-50/90 border border-dashed border-blue-300 rounded-xl text-center space-y-1">
                             <p className="text-[10px] text-blue-900 font-medium">
                               ⚠️ Chưa gắn sơ đồ đội hình cho hoạt động này
@@ -1682,7 +1931,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                               <Users className="w-3 h-3" /> Chọn sơ đồ đội hình
                             </button>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -1781,8 +2030,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               }
             }
           ]}
-          onSaveNewVersion={(plan, customLabel, markAsBest, baseline) =>
-            onSaveOfficialVersion(plan, customLabel, markAsBest, baseline)
+          onSaveNewVersion={(plan, customLabel, markAsBest, baseline, forceNew) =>
+            onSaveOfficialVersion(plan, customLabel, markAsBest, baseline, forceNew ?? true)
           }
           onLoadVersion={onLoadPlanVersion}
           onToggleBest={onToggleBestVersion}

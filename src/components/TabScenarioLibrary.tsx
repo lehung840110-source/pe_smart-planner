@@ -7,7 +7,8 @@ import {
   Edit2,
   ArrowRightCircle,
   Layers,
-  Sparkles
+  Sparkles,
+  Lock
 } from 'lucide-react';
 import { ScenarioItem } from '../types/gdtc';
 
@@ -17,6 +18,8 @@ interface TabScenarioLibraryProps {
   onOpenAddModal: () => void;
   onEditScenario: (sc: ScenarioItem) => void;
   onInsertToLesson: (sc: ScenarioItem) => void;
+  isGuest?: boolean;
+  onRequireAuth?: (feature: string) => void;
   showToast: (msg: string) => void;
 }
 
@@ -26,6 +29,8 @@ export const TabScenarioLibrary: React.FC<TabScenarioLibraryProps> = ({
   onOpenAddModal,
   onEditScenario,
   onInsertToLesson,
+  isGuest = false,
+  onRequireAuth,
   showToast,
 }) => {
   const [filterCategory, setFilterCategory] = useState<string>('all');
@@ -33,6 +38,10 @@ export const TabScenarioLibrary: React.FC<TabScenarioLibraryProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const handleDelete = (id: string) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Xóa kịch bản trong Thư viện');
+      return;
+    }
     setScenarios((prev) => prev.filter((s) => s.id !== id));
     showToast('Đã xóa kịch bản khỏi thư viện!');
   };
@@ -80,10 +89,18 @@ export const TabScenarioLibrary: React.FC<TabScenarioLibraryProps> = ({
           </div>
 
           <button
-            onClick={onOpenAddModal}
+            onClick={() => {
+              if (isGuest && onRequireAuth) {
+                onRequireAuth('Thêm kịch bản mới vào Thư viện');
+                return;
+              }
+              onOpenAddModal();
+            }}
             className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-2xs transition"
           >
-            <PlusCircle className="w-4 h-4" /> Thêm Kịch Bản Mới
+            <PlusCircle className="w-4 h-4" />
+            <span>Thêm Kịch Bản Mới</span>
+            {isGuest && <Lock className="w-3.5 h-3.5 text-amber-200" />}
           </button>
         </div>
 
@@ -171,16 +188,22 @@ export const TabScenarioLibrary: React.FC<TabScenarioLibraryProps> = ({
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => onEditScenario(sc)}
+                      onClick={() => {
+                        if (isGuest && onRequireAuth) {
+                          onRequireAuth('Chỉnh sửa kịch bản sư phạm');
+                          return;
+                        }
+                        onEditScenario(sc);
+                      }}
                       className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-50 transition"
-                      title="Sửa kịch bản"
+                      title={isGuest ? 'Đăng nhập để sửa kịch bản' : 'Sửa kịch bản'}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => handleDelete(sc.id)}
                       className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition"
-                      title="Xóa kịch bản"
+                      title={isGuest ? 'Đăng nhập để xóa kịch bản' : 'Xóa kịch bản'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -210,10 +233,18 @@ export const TabScenarioLibrary: React.FC<TabScenarioLibraryProps> = ({
 
               {/* Action */}
               <button
-                onClick={() => onInsertToLesson(sc)}
+                onClick={() => {
+                  if (isGuest && onRequireAuth) {
+                    onRequireAuth('Chèn kịch bản vào Kế hoạch bài dạy');
+                    return;
+                  }
+                  onInsertToLesson(sc);
+                }}
                 className="w-full bg-slate-100 hover:bg-blue-600 hover:text-white text-slate-700 text-xs font-semibold py-2 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
               >
-                <ArrowRightCircle className="w-3.5 h-3.5" /> Chèn Vào Kế Hoạch Bài Dạy Tuần Này
+                <ArrowRightCircle className="w-3.5 h-3.5" />
+                <span>Chèn Vào Kế Hoạch Bài Dạy Tuần Này</span>
+                {isGuest && <Lock className="w-3.5 h-3.5 text-amber-500" />}
               </button>
             </div>
           ))}

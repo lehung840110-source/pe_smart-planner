@@ -435,15 +435,80 @@ export function getBestVersionForPlan(
   return versions.find((v) => v.isStarredBest || v.status === 'best') || null;
 }
 
+const STRIPPED_MEDIA_TOKEN = '__STRIPPED_MEDIA__';
+
+function createCompactMirrorVersion(version: LessonPlanVersion): LessonPlanVersion {
+  const stripLargeUrl = (url?: string) =>
+    url && url.length > 12_000 ? STRIPPED_MEDIA_TOKEN : url;
+
+  return {
+    ...version,
+    snapshot: {
+      ...version.snapshot,
+      rows: (version.snapshot.rows || []).map((row) => ({
+        ...row,
+        contentImgUrl: stripLargeUrl(row.contentImgUrl),
+        gvImgUrl: stripLargeUrl(row.gvImgUrl),
+        hsImgUrl: stripLargeUrl(row.hsImgUrl),
+        contentImages: row.contentImages?.map((img) => ({ ...img, url: stripLargeUrl(img.url) || img.url })),
+        gvImages: row.gvImages?.map((img) => ({ ...img, url: stripLargeUrl(img.url) || img.url })),
+        hsImages: row.hsImages?.map((img) => ({ ...img, url: stripLargeUrl(img.url) || img.url }))
+      }))
+    }
+  };
+}
+
+function rehydrateStrippedMedia(
+  mirror: LessonPlanVersion,
+  dbFallback?: LessonPlanVersion | null
+): LessonPlanVersion {
+  if (!dbFallback?.snapshot?.rows) return mirror;
+  const dbRows = dbFallback.snapshot.rows;
+  return {
+    ...mirror,
+    snapshot: normalizeMasterPlan({
+      ...mirror.snapshot,
+      rows: (mirror.snapshot.rows || []).map((row, idx) => {
+        const refRow = dbRows[idx];
+        if (!refRow) return row;
+        return {
+          ...row,
+          contentImgUrl: row.contentImgUrl === STRIPPED_MEDIA_TOKEN ? refRow.contentImgUrl : row.contentImgUrl,
+          gvImgUrl: row.gvImgUrl === STRIPPED_MEDIA_TOKEN ? refRow.gvImgUrl : row.gvImgUrl,
+          hsImgUrl: row.hsImgUrl === STRIPPED_MEDIA_TOKEN ? refRow.hsImgUrl : row.hsImgUrl,
+          contentImages: row.contentImages?.map((img, i) => ({
+            ...img,
+            url: img.url === STRIPPED_MEDIA_TOKEN ? (refRow.contentImages?.[i]?.url || refRow.contentImgUrl || '') : img.url
+          })).filter((img) => Boolean(img.url) && img.url !== STRIPPED_MEDIA_TOKEN),
+          gvImages: row.gvImages?.map((img, i) => ({
+            ...img,
+            url: img.url === STRIPPED_MEDIA_TOKEN ? (refRow.gvImages?.[i]?.url || refRow.gvImgUrl || '') : img.url
+          })).filter((img) => Boolean(img.url) && img.url !== STRIPPED_MEDIA_TOKEN),
+          hsImages: row.hsImages?.map((img, i) => ({
+            ...img,
+            url: img.url === STRIPPED_MEDIA_TOKEN ? (refRow.hsImages?.[i]?.url || refRow.hsImgUrl || '') : img.url
+          })).filter((img) => Boolean(img.url) && img.url !== STRIPPED_MEDIA_TOKEN)
+        };
+      })
+    })
+  };
+}
+
 function mirrorLatestDraftToLocalStorage(planKey: string, version: LessonPlanVersion) {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const serialized = JSON.stringify(version);
+    let payloadToStore = version;
+    let serialized = JSON.stringify(payloadToStore);
+
+    if (serialized.length > 260_000) {
+      payloadToStore = createCompactMirrorVersion(version);
+      serialized = JSON.stringify(payloadToStore);
+    }
+
     const indexRaw = localStorage.getItem('gdtc_draft_index');
     const indexKeys: string[] = indexRaw ? JSON.parse(indexRaw) : [];
 
-    // Skip localStorage mirror for oversized snapshots containing heavy base64 payloads;
-    // IndexedDB already persists the full lossless snapshot safely.
+    // Still skip only if even text-only compact snapshot exceeds 260KB
     if (serialized.length > 260_000) {
       localStorage.removeItem(`${LS_DRAFT_PREFIX}${planKey}`);
       const filtered = indexKeys.filter((k) => k !== planKey);
@@ -499,11 +564,18 @@ export async function loadPlanVersionStoreDB(): Promise<PlanVersionStore> {
     for (const planKey of indexKeys) {
       const raw = localStorage.getItem(`${LS_DRAFT_PREFIX}${planKey}`);
       if (!raw) continue;
-      const mirrorVersion: LessonPlanVersion = JSON.parse(raw);
-      if (!mirrorVersion?.versionId || !mirrorVersion?.snapshot) continue;
+      const rawMirrorVersion: LessonPlanVersion = JSON.parse(raw);
+      if (!rawMirrorVersion?.versionId || !rawMirrorVersion?.snapshot) continue;
 
       const existingList = versionsByPlanKey[planKey] ? [...versionsByPlanKey[planKey]] : [];
-      const existingIdx = existingList.findIndex((v) => v.versionId === mirrorVersion.versionId);
+      const existingIdx = existingList.findIndex((v) => v.versionId === rawMirrorVersion.versionId);
+      const dbFallback =
+        (existingIdx >= 0 ? existingList[existingIdx] : null) ||
+        [...existingList].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] ||
+        null;
+
+      const mirrorVersion = rehydrateStrippedMedia(rawMirrorVersion, dbFallback);
+
       if (existingIdx >= 0) {
         if ((mirrorVersion.updatedAt || 0) > (existingList[existingIdx].updatedAt || 0)) {
           existingList[existingIdx] = mirrorVersion;

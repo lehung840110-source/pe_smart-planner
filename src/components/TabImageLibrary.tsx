@@ -26,7 +26,8 @@ import {
   Move,
   X,
   Edit3,
-  Compass
+  Compass,
+  Lock
 } from 'lucide-react';
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
@@ -53,6 +54,8 @@ interface TabImageLibraryProps {
   onOpenSelectCellModal: (img: SgkImageItem) => void;
   onAnalyzeVision?: (img: SgkImageItem) => void;
   onOpenSmartClean?: (img: SgkImageItem) => void;
+  isGuest?: boolean;
+  onRequireAuth?: (feature: string) => void;
   showToast: (msg: string) => void;
 }
 
@@ -62,6 +65,8 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   onOpenSelectCellModal,
   onAnalyzeVision,
   onOpenSmartClean,
+  isGuest = false,
+  onRequireAuth,
   showToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -145,6 +150,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
   // Single Delete
   const handleDeleteSingleImage = (id: string) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Xóa hình ảnh khỏi Thư viện');
+      return;
+    }
     deleteImageDB(id).catch(() => {});
     setImages((prev) => {
       const updated = prev.filter((img) => img.id !== id);
@@ -159,6 +168,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     id: string,
     updates: Partial<SgkImageItem>
   ) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Phân loại lại khối lớp / thư mục hình ảnh');
+      return;
+    }
     setImages((prev) => {
       const updated = prev.map((img) => (img.id === id ? { ...img, ...updates } : img));
       saveImagesDB(updated).catch(() => {});
@@ -169,6 +182,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
   // Direct PNG download of single image
   const handleDownloadSinglePng = (img: SgkImageItem) => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tải hình ảnh SGK về máy');
+      return;
+    }
     const a = document.createElement('a');
     a.href = img.imgUrl;
     const cleanTitle = (img.title || 'anh_gdtc')
@@ -184,7 +201,11 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
   // Batch move to another grade
   const handleBatchMoveGrade = (targetGrade: string) => {
-    if (selectedCount === 0) return alert('Vui lòng chọn ảnh trước khi chuyển khối!');
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Chuyển khối lớp hàng loạt cho hình ảnh');
+      return;
+    }
+    if (selectedCount === 0) return showToast('Vui lòng chọn ảnh trước khi chuyển khối!');
     setImages((prev) => {
       const updated = prev.map((img) => (img.selected ? { ...img, grade: targetGrade } : img));
       saveImagesDB(updated).catch(() => {});
@@ -195,7 +216,11 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
   // Batch move to another sub-folder
   const handleBatchMoveSubFolder = (targetFolder: SubFolderType) => {
-    if (selectedCount === 0) return alert('Vui lòng chọn ảnh trước khi chuyển thư mục!');
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Chuyển thư mục hàng loạt cho hình ảnh');
+      return;
+    }
+    if (selectedCount === 0) return showToast('Vui lòng chọn ảnh trước khi chuyển thư mục!');
     let newCat: ImageCategory = 'dong_tac';
     if (targetFolder === 'luyenTap') newCat = 'tap_luyen';
     else if (targetFolder === 'vanDung') newCat = 'van_dung';
@@ -217,9 +242,13 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
   // Canvas batch operations
   const handleBatchProcess = async (action: 'crop' | 'remove-bg' | 'watermark') => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Xử lý ảnh hàng loạt trên Canvas');
+      return;
+    }
     const selected = images.filter((i) => i.selected);
     if (selected.length === 0) {
-      alert('Vui lòng chọn ít nhất 1 hình ảnh để xử lý!');
+      showToast('Vui lòng chọn ít nhất 1 hình ảnh để xử lý!');
       return;
     }
 
@@ -262,6 +291,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   };
 
   const handleDeduplicateAndClean = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Dọn trùng lặp Thư viện ảnh');
+      return;
+    }
     const originalCount = images.length;
     const seen = new Set<string>();
     const cleaned: SgkImageItem[] = [];
@@ -286,13 +319,21 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   };
 
   const handleExportZip = () => {
-    if (images.length === 0) return alert('Thư viện chưa có hình ảnh nào để tải về!');
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tải ZIP toàn bộ Thư viện ảnh SGK');
+      return;
+    }
+    if (images.length === 0) return showToast('Thư viện chưa có hình ảnh nào để tải về!');
     downloadZipOfImages(images);
     showToast('Đang nén và tải về file ZIP thư viện ảnh SGK!');
   };
 
   const handleExportJson = () => {
-    if (images.length === 0) return alert('Thư viện chưa có dữ liệu để xuất JSON!');
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Xuất JSON dữ liệu Thư viện ảnh');
+      return;
+    }
+    if (images.length === 0) return showToast('Thư viện chưa có dữ liệu để xuất JSON!');
     downloadJsonFile(images);
     showToast('Đã xuất thành công file JSON thư viện!');
   };
@@ -300,7 +341,11 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   // Tự động quét và phân loại toàn bộ thư viện thành 6 thư mục chuẩn SGK:
   // Khởi động chung | Trò chơi khởi động | Kỹ thuật động tác | Luyện tập | Trò chơi vận động | Vận dụng
   const handleAutoClassifyAllImages = async () => {
-    if (images.length === 0) return alert('Thư viện chưa có hình ảnh nào!');
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tự động phân loại 6 thư mục cho ảnh SGK');
+      return;
+    }
+    if (images.length === 0) return showToast('Thư viện chưa có hình ảnh nào!');
     setIsProcessing(true);
     showToast('Đang phân tích và chuẩn hóa phân loại 6 thư mục cho toàn bộ thư viện...');
 
@@ -664,20 +709,41 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => setIsBatchUploadOpen(true)}
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Tải lên hàng loạt ảnh SGK / ZIP');
+                  return;
+                }
+                setIsBatchUploadOpen(true);
+              }}
               className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm active:scale-98"
               title="Tải lên cùng lúc nhiều ảnh, chọn thư mục hoặc giải nén từ file ZIP mà không cần quét lại từ đầu"
             >
-              <Upload className="w-4 h-4 text-sky-200" /> Tải Hàng Loạt Ảnh (ZIP / Nhiều Ảnh)
+              <Upload className="w-4 h-4 text-sky-200" />
+              <span>Tải Hàng Loạt Ảnh (ZIP / Nhiều Ảnh)</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
 
-            <label className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shadow-2xs">
+            <label
+              onClick={(e) => {
+                if (isGuest && onRequireAuth) {
+                  e.preventDefault();
+                  onRequireAuth('Thêm ảnh mới vào Thư viện');
+                }
+              }}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shadow-2xs"
+            >
               <Upload className="w-3.5 h-3.5" /> Thêm 1 Ảnh
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
               <input
                 type="file"
                 accept="image/*"
                 className="hidden"
                 onChange={(e) => {
+                  if (isGuest && onRequireAuth) {
+                    onRequireAuth('Thêm ảnh mới vào Thư viện');
+                    return;
+                  }
                   if (e.target.files && e.target.files[0]) {
                     handleUploadSingleImage(e.target.files[0]);
                   }
@@ -691,6 +757,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               title="Loại bỏ các ảnh trùng lặp để thư viện luôn gọn gàng và không bị làm đầy ngoài ý muốn"
             >
               <Eraser className="w-3.5 h-3.5 text-amber-600" /> Dọn Trùng Lặp
+              {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
             <button
@@ -700,6 +767,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               title="Tự động phân loại thư mục Động tác mới vs Luyện tập cho tất cả ảnh trong thư viện"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" /> ⚡ Tự Động Phân Loại Thư Mục
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
 
             <button
@@ -707,6 +775,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
             >
               <Download className="w-4 h-4" /> Tải ZIP
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
 
             <button
@@ -714,6 +783,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               className="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
             >
               <FileJson className="w-4 h-4" /> Xuất JSON
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
           </div>
         </div>
@@ -883,7 +953,13 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
             {selectedCount > 0 && (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsConfirmDeleteOpen(true)}
+                  onClick={() => {
+                    if (isGuest && onRequireAuth) {
+                      onRequireAuth('Xóa hàng loạt hình ảnh');
+                      return;
+                    }
+                    setIsConfirmDeleteOpen(true);
+                  }}
                   className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition shadow-xs"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
@@ -1326,7 +1402,13 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                           </h4>
                           <button
                             type="button"
-                            onClick={() => setEditingImageItem(img)}
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Chỉnh sửa thông tin hình ảnh');
+                                return;
+                              }
+                              setEditingImageItem(img);
+                            }}
                             className="p-1 text-slate-400 hover:text-amber-700 hover:bg-amber-50 rounded transition shrink-0"
                             title="Sửa chữa thủ công thông tin hình ảnh này"
                           >
@@ -1394,29 +1476,49 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
-                            onClick={() => setEditingImageItem(img)}
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Chỉnh sửa thông tin hình ảnh');
+                                return;
+                              }
+                              setEditingImageItem(img);
+                            }}
                             className="w-full bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
                             title="Sửa chữa thủ công tên ảnh, bài học, khối lớp, thư mục, số trang hoặc thay thế tệp ảnh mới"
                           >
                             <Edit3 className="w-3.5 h-3.5 text-amber-700" />
                             <span>✏️ Sửa Thông Tin</span>
+                            {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => setImageToImageModalItem(img)}
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Tái tạo hình ảnh bằng A.I');
+                                return;
+                              }
+                              setImageToImageModalItem(img);
+                            }}
                             className="w-full bg-gradient-to-r from-fuchsia-600 via-indigo-600 to-blue-600 hover:from-fuchsia-700 hover:to-blue-700 text-white text-xs font-bold py-1.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-2xs"
                             title="Tái tạo hình ảnh mới chuẩn SGK 2D bằng Dola A.I, ChatGPT hoặc phục chế làm nét"
                           >
                             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>🦄 Tái Tạo Ảnh A.I (Dola / GPT)</span>
+                            <span>🦄 Tái Tạo Ảnh A.I</span>
+                            {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                           </button>
                         </div>
 
                         <div className="grid grid-cols-3 gap-1.5">
                           {onOpenSmartClean && (
                             <button
-                              onClick={() => onOpenSmartClean(img)}
+                              onClick={() => {
+                                if (isGuest && onRequireAuth) {
+                                  onRequireAuth('Cắt xử lý & làm sạch ảnh thông minh');
+                                  return;
+                                }
+                                onOpenSmartClean(img);
+                              }}
                               className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
                               title="Cắt xén kéo chuột hoặc tẩy chi tiết thừa"
                             >
@@ -1435,7 +1537,13 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
                           {onAnalyzeVision && (
                             <button
-                              onClick={() => onAnalyzeVision(img)}
+                              onClick={() => {
+                                if (isGuest && onRequireAuth) {
+                                  onRequireAuth('Phân tích động tác bằng Gemini Vision AI');
+                                  return;
+                                }
+                                onAnalyzeVision(img);
+                              }}
                               className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10.5px] font-bold py-1.5 rounded-lg transition flex items-center justify-center gap-1"
                               title="AI phân tích thị giác đọc động tác"
                             >
@@ -1447,21 +1555,35 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                         <div className="grid grid-cols-2 gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setStudioRefImage(img)}
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Tạo sơ đồ trò chơi trong Studio');
+                                return;
+                              }
+                              setStudioRefImage(img);
+                            }}
                             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-2xs"
                             title="Phân tích ảnh này để dựng sơ đồ trò chơi đội hình tương tác và lưu vào Kho"
                           >
                             <Compass className="w-3.5 h-3.5 text-amber-200" />
                             <span>Tạo Sơ Đồ Trò Chơi</span>
+                            {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                           </button>
 
                           <button
                             type="button"
-                            onClick={() => onOpenSelectCellModal(img)}
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Gắn ảnh vào Kế hoạch bài dạy');
+                                return;
+                              }
+                              onOpenSelectCellModal(img);
+                            }}
                             className="w-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-2 rounded-xl transition flex items-center justify-center gap-1 shadow-2xs"
                           >
                             <PlusCircle className="w-3.5 h-3.5" />
                             <span>Gắn Vào Giáo Án</span>
+                            {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                           </button>
                         </div>
                       </div>
