@@ -9,7 +9,6 @@ import {
   ExternalLink,
   Upload,
   Image as ImageIcon,
-  Key,
   CheckCircle2,
   SlidersHorizontal,
   Replace,
@@ -22,7 +21,8 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { SgkImageItem, SubFolderType, ImageCategory } from '../types/gdtc';
-import { generateSgk2dSequenceSvg, generateFormationSvg, MovementBeats } from '../utils/sgkVectorGenerator';
+import { generateFormationSvg } from '../utils/sgkVectorGenerator';
+import { buildHdSceneSpecFromKeyword, generateHdSgkSvg, renderSvgToHdPngDataUrl } from '../utils/hdSgkIllustrator';
 import { enhanceSgkImage } from '../utils/imageEnhancer';
 
 interface ImageToImageModalProps {
@@ -69,10 +69,6 @@ export const ImageToImageModal: React.FC<ImageToImageModalProps> = ({
   const [isCallingApi, setIsCallingApi] = useState<boolean>(false);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
-  // API Keys stored in localStorage
-  const [openAiApiKey, setOpenAiApiKey] = useState<string>(() => localStorage.getItem('gdtc_openai_key') || '');
-  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem('gdtc_gemini_key') || '');
-  const [selectedApiProvider, setSelectedApiProvider] = useState<'openai' | 'gemini'>('openai');
   const [selectedAiTool, setSelectedAiTool] = useState<'dola' | 'chatgpt' | 'gemini'>('dola');
   const [dolaMode, setDolaMode] = useState<'image_to_image' | 'text_to_image'>('image_to_image');
   const [isImageCopied, setIsImageCopied] = useState<boolean>(false);
@@ -251,20 +247,21 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
 - Bố cục nằm ngang tuần tự gồm các hình học sinh trên nền trắng sạch tinh (#ffffff) phục vụ in ấn giáo án.
 - TUYỆT ĐỐI KHÔNG TẠO HÌNH 3D ĐẤT NẶN HAY BÚP BÊ NHỰA.`;
 
-  // 1. Phục Chế & Làm Nét Ảnh SGK Gốc (Khuyên dùng nhất)
+  // 1. Phục Chế & Làm Nét 3x Ảnh SGK Gốc (Khuyên dùng nhất)
   const handleRestoreAndSharpen = async () => {
     setIsRestoring(true);
-    showToast('✨ Đang phục chế và làm sắc nét ảnh gốc SGK (khử mờ, nền trắng tinh, tăng độ phân giải 2x)...');
+    showToast('✨ Đang phục chế và làm sắc nét 3x ảnh gốc SGK (khử mờ, nền trắng tinh)...');
 
     try {
       const restored = await enhanceSgkImage(sourceImage.imgUrl, {
         sharpenAmount: 1.4,
         contrastBoost: 1.25,
-        cleanBackground: true
+        cleanBackground: true,
+        scaleFactor: 3
       });
       setGeneratedImageUrl(restored);
       setGenerationSource('restored_sgk_hd');
-      showToast('✅ Đã phục chế thành công! Ảnh giữ nguyên 100% kỹ thuật chuẩn của Bộ GD&ĐT.');
+      showToast('✅ Đã phục chế 3x siêu nét! Giữ nguyên 100% kỹ thuật chuẩn của Bộ GD&ĐT.');
     } catch (err: any) {
       showToast('Lỗi phục chế ảnh: ' + err?.message);
     } finally {
@@ -272,29 +269,31 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
     }
   };
 
-  // 2. Generate Internal 2D Vector SGK Diagram / Sequence
-  const handleGenerateLocal2d = () => {
+  // 2. Generate Internal 2K HD 2D Vector SGK Diagram / Sequence
+  const handleGenerateLocal2d = async () => {
     try {
       if (generationType === 'formation') {
         const rawSvg = generateFormationSvg(movementName, targetGrade);
-        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
-        setGeneratedImageUrl(dataUrl);
-        setGenerationSource('local_formation_svg');
-        showToast('⚡ Đã sinh thành công Sơ đồ Đội hình 4 hàng ngang giãn cách chuẩn SGK!');
+        const pngDataUrl = await renderSvgToHdPngDataUrl(rawSvg, 2400, false);
+        setGeneratedImageUrl(pngDataUrl);
+        setGenerationSource('local_formation_2k');
+        showToast('⚡ Đã sinh Sơ đồ Đội hình 2K sắc nét chuẩn SGK!');
       } else {
-        const customBeats: MovementBeats = {
-          ttcb,
-          nhip1,
-          nhip2,
-          nhip3,
-          nhip4,
-          nhip58
-        };
-        const rawSvg = generateSgk2dSequenceSvg(movementName, targetGrade, 'single', 'male', customBeats);
-        const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
-        setGeneratedImageUrl(dataUrl);
-        setGenerationSource('local_2d_svg');
-        showToast('⚡ Đã sinh thành công Tranh Phân Thế 2D chuẩn kỹ thuật từng nhịp!');
+        const baseSpec = buildHdSceneSpecFromKeyword(movementName, {
+          grade: targetGrade === '3' ? '3' : targetGrade === '5' ? '5' : '1',
+          sceneMode: 'sequence_5',
+        });
+        const captions = [ttcb, nhip1, nhip2, nhip3, nhip4];
+        baseSpec.poses = baseSpec.poses.map((p, idx) => ({
+          ...p,
+          caption: captions[idx] || p.caption
+        }));
+        if (nhip58) baseSpec.bottomNote = nhip58;
+        const rawSvg = generateHdSgkSvg(baseSpec, { background: 'pure_white' });
+        const pngDataUrl = await renderSvgToHdPngDataUrl(rawSvg, 2400, false);
+        setGeneratedImageUrl(pngDataUrl);
+        setGenerationSource('local_2d_hd_2k');
+        showToast('⚡ Đã sinh Tranh Phân Thế 2K (2400px) sắc nét từng nhịp!');
       }
     } catch (err: any) {
       showToast('Lỗi sinh tranh: ' + err?.message);
@@ -397,53 +396,44 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
     }
   };
 
-  // Call API (OpenAI DALL-E or Gemini)
+  // Compose & render brand-new 2K HD illustration via Gemini 4 Hydrogen pose synthesis (no paid key needed)
   const handleCallApi = async () => {
-    const key = selectedApiProvider === 'openai' ? openAiApiKey : geminiApiKey;
-    if (!key.trim()) {
-      showToast(`Vui lòng nhập API Key cho ${selectedApiProvider === 'openai' ? 'OpenAI (DALL-E 3)' : 'Google Gemini'}!`);
-      return;
-    }
-
-    if (selectedApiProvider === 'openai') {
-      localStorage.setItem('gdtc_openai_key', openAiApiKey);
-    } else {
-      localStorage.setItem('gdtc_gemini_key', geminiApiKey);
-    }
-
     setIsCallingApi(true);
-    showToast(`Đang kết nối API ${selectedApiProvider === 'openai' ? 'OpenAI DALL-E 3' : 'Gemini'} để tạo tranh...`);
+    showToast('✨ Đang phân tích kỹ thuật và dựng mới tranh 2K (2400px) chuẩn SGK...');
 
     try {
       const descPayload = generationType === 'formation'
         ? `Sơ đồ đội hình: ${movementName}. GV hướng dẫn phía trước, 4 hàng ngang học sinh đứng so le cự ly 1 sải tay.`
         : `TTCB: ${ttcb}. Nhịp 1: ${nhip1}. Nhịp 2: ${nhip2}. Nhịp 3: ${nhip3}. Nhịp 4: ${nhip4}. ${nhip58}`;
 
-      const res = await fetch('/api/ai/generate-3d-cartoon', {
+      const res = await fetch('/api/ai/compose-hd-illustration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           movementName,
           grade: targetGrade,
-          description: descPayload,
-          sourceImageBase64: sourceImage.imgUrl,
-          style: 'sgk_vector',
-          provider: selectedApiProvider,
-          openAiApiKey: selectedApiProvider === 'openai' ? openAiApiKey : undefined,
-          geminiApiKey: selectedApiProvider === 'gemini' ? geminiApiKey : undefined
+          sceneMode: generationType === 'formation' ? 'group_game' : 'sequence_5',
+          gender: 'male',
+          equipment: hasStick ? 'stick' : 'none',
+          customDescription: descPayload,
         })
       });
 
       const data = await res.json();
-      if (data.success && data.imageUrl) {
-        setGeneratedImageUrl(data.imageUrl);
-        setGenerationSource(data.source || 'api');
-        showToast('✨ Đã nhận kết quả ảnh sinh từ API!');
-      } else {
-        throw new Error(data.error || 'API không thể tạo ảnh');
-      }
+      const spec = data?.success && !data.useLocalPreset && data.spec
+        ? data.spec
+        : buildHdSceneSpecFromKeyword(movementName, {
+            grade: targetGrade === '3' ? '3' : targetGrade === '5' ? '5' : '1',
+            sceneMode: generationType === 'formation' ? 'group_game' : 'sequence_5',
+            equipment: hasStick ? 'stick' : 'none'
+          });
+      const svg = generateHdSgkSvg(spec, { background: 'pure_white' });
+      const png2k = await renderSvgToHdPngDataUrl(svg, 2400, false);
+      setGeneratedImageUrl(png2k);
+      setGenerationSource(data?.source || 'hd_2k_studio');
+      showToast('✨ Đã tạo mới thành công ảnh 2K (2400px) sắc nét!');
     } catch (err: any) {
-      showToast('Lỗi gọi API tạo ảnh: ' + err?.message);
+      showToast('Lỗi tạo ảnh 2K: ' + err?.message);
     } finally {
       setIsCallingApi(false);
     }
@@ -832,7 +822,9 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
                 className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
                 <option value="1">Khối Lớp 1</option>
+                <option value="2">Khối Lớp 2</option>
                 <option value="3">Khối Lớp 3</option>
+                <option value="4">Khối Lớp 4</option>
                 <option value="5">Khối Lớp 5</option>
               </select>
             </div>
@@ -1065,8 +1057,8 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Key className="w-4 h-4 text-purple-600" />
-                <span>Cách 4: API Tự Động</span>
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span>Cách 4: Dựng Mới Ảnh 2K</span>
               </button>
             </div>
 
@@ -1461,70 +1453,27 @@ Phong cách: Bản vẽ sơ đồ sư phạm 2D phẳng, đường nét mạch l
               </div>
             )}
 
-            {/* TAB 4: API AUTOMATION */}
+            {/* TAB 4: AI 2K HD SYNTHESIS (ZERO API KEY NEEDED) */}
             {activeTab === 'api' && (
-              <div className="p-4 space-y-4">
-                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
-                  <h5 className="font-bold text-purple-900 text-xs">
-                    ⚡ Tự động gọi API (OpenAI DALL-E 3 hoặc Google Gemini)
-                  </h5>
-                  <p className="text-[11px] text-purple-700 mt-0.5">
-                    Nhập API Key lưu bảo mật trên máy để tự động sinh ảnh qua API.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
-                    onClick={() => setSelectedApiProvider('openai')}
-                    className={`p-3 rounded-xl border cursor-pointer transition ${
-                      selectedApiProvider === 'openai'
-                        ? 'border-purple-600 bg-purple-50/70 ring-1 ring-purple-500'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-bold text-slate-900 text-xs">OpenAI DALL-E 3</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-purple-100 text-purple-800 rounded font-bold">Tranh SGK Cực Đẹp</span>
-                    </div>
-                    <input
-                      type="password"
-                      placeholder="sk-proj-..."
-                      value={openAiApiKey}
-                      onChange={(e) => setOpenAiApiKey(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs"
-                    />
+              <div className="p-4 space-y-3">
+                <div className="p-3.5 bg-purple-50 rounded-xl border border-purple-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <h5 className="font-bold text-purple-900 text-xs flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                      Dựng Mới Hoàn Toàn Ảnh 2K (2400px) Chuẩn SGK — Không cần API Key
+                    </h5>
+                    <p className="text-[11px] text-purple-700 mt-0.5 leading-relaxed">
+                      Hệ thống tự phân tích thông số nhịp động tác bạn vừa nhập để vẽ lại nhân vật học sinh chuẩn đồng phục trên nền trắng tinh độ phân giải 2400px, sẵn sàng thay thế ảnh scan mờ.
+                    </p>
                   </div>
 
-                  <div
-                    onClick={() => setSelectedApiProvider('gemini')}
-                    className={`p-3 rounded-xl border cursor-pointer transition ${
-                      selectedApiProvider === 'gemini'
-                        ? 'border-blue-600 bg-blue-50/70 ring-1 ring-blue-500'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="font-bold text-slate-900 text-xs">Google Gemini AI</span>
-                      <span className="text-[10px] px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">Nhanh Chóng</span>
-                    </div>
-                    <input
-                      type="password"
-                      placeholder="AIzaSy..."
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-2">
                   <button
                     disabled={isCallingApi}
                     onClick={handleCallApi}
-                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition"
+                    className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-xs transition shrink-0"
                   >
-                    <Key className="w-3.5 h-3.5" />
-                    <span>{isCallingApi ? 'Đang Sinh Tranh Qua API...' : 'Bắt Đầu Sinh Tranh Qua API'}</span>
+                    <Wand2 className="w-4 h-4 text-amber-300" />
+                    <span>{isCallingApi ? 'Đang Dựng Ảnh 2K...' : '✨ Dựng Mới Ảnh 2K Ngay'}</span>
                   </button>
                 </div>
               </div>

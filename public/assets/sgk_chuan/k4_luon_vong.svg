@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgK4Ln" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#faf5ff"/>
+    </linearGradient>
+    <filter id="shK4Ln" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="360" fill="url(#bgK4Ln)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#e9d5ff" stroke-width="1.5" rx="15"/>
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#f3e8ff" stroke="#c084fc" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="700" fill="#7e22ce">
+    ĐỘNG TÁC LƯỜN VỚI VÒNG – BÀI THỂ DỤC (SGK GDTC LỚP 4)
+  </text>
+  <line x1="30" y1="285" x2="770" y2="285" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4"/>
+
+  <rect x="40" y="60" width="160" height="260" rx="10" fill="#fff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shK4Ln)"/>
+  <rect x="40" y="60" width="160" height="28" rx="10" fill="#f1f5f9"/>
+  <text x="120" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">TTCB (Cầm vòng trước)</text>
+  <g transform="translate(120, 185)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#7e22ce" stroke-width="2"/>
+    <ellipse cx="0" cy="4" rx="22" ry="20" fill="none" stroke="#f59e0b" stroke-width="4.5"/>
+    <line x1="-14" y1="-50" x2="-21" y2="0" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-50" x2="21" y2="0" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#312e81"/>
+    <line x1="-7" y1="15" x2="-7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-8" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+    <ellipse cx="8" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+  </g>
+  <text x="120" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#64748b">Thân thẳng, mắt nhìn trước</text>
+
+  <!-- Nhịp 1 -->
+  <rect x="225" y="60" width="160" height="260" rx="10" fill="#fff" stroke="#e9d5ff" stroke-width="1.5" filter="url(#shK4Ln)"/>
+  <rect x="225" y="60" width="160" height="28" rx="10" fill="#f3e8ff"/>
+  <text x="305" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#7e22ce">Nhịp 1: Bước trái, vòng lên cao</text>
+  <g transform="translate(305, 185)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#7e22ce" stroke-width="2"/>
+    <ellipse cx="0" cy="-94" rx="22" ry="18" fill="none" stroke="#f59e0b" stroke-width="4.5"/>
+    <line x1="-13" y1="-52" x2="-22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="13" y1="-52" x2="22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L16 15 L3 15 L0 -2 L-3 15 L-16 15 Z" fill="#312e81"/>
+    <line x1="-11" y1="15" x2="-18" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="11" y1="15" x2="14" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-19" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+    <ellipse cx="15" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+  </g>
+  <text x="305" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#7e22ce">Bước trái rộng vai, giơ vòng lên cao</text>
+
+  <!-- Nhịp 2 -->
+  <rect x="410" y="60" width="160" height="260" rx="10" fill="#fff" stroke="#e9d5ff" stroke-width="1.5" filter="url(#shK4Ln)"/>
+  <rect x="410" y="60" width="160" height="28" rx="10" fill="#f3e8ff"/>
+  <text x="490" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#7e22ce">Nhịp 2: Nghiêng lườn trái</text>
+  <g transform="translate(490, 185)">
+    <g transform="rotate(-18, 0, -10)">
+      <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+      <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+      <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#7e22ce" stroke-width="2"/>
+      <ellipse cx="0" cy="-94" rx="22" ry="18" fill="none" stroke="#f59e0b" stroke-width="4.5"/>
+      <line x1="-13" y1="-52" x2="-22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="13" y1="-52" x2="22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    </g>
+    <path d="M-12 -10 L12 -10 L16 15 L3 15 L0 -2 L-3 15 L-16 15 Z" fill="#312e81"/>
+    <line x1="-11" y1="15" x2="-18" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="11" y1="15" x2="14" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-19" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+    <ellipse cx="15" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+  </g>
+  <text x="490" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#7e22ce">Kéo căng lườn phải, hai gối thẳng</text>
+
+  <!-- Nhịp 6 -->
+  <rect x="595" y="60" width="165" height="260" rx="10" fill="#fff" stroke="#e9d5ff" stroke-width="1.5" filter="url(#shK4Ln)"/>
+  <rect x="595" y="60" width="165" height="28" rx="10" fill="#f3e8ff"/>
+  <text x="677" y="79" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#7e22ce">Nhịp 6: Nghiêng lườn phải</text>
+  <g transform="translate(677, 185)">
+    <g transform="rotate(18, 0, -10)">
+      <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+      <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+      <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#7e22ce" stroke-width="2"/>
+      <ellipse cx="0" cy="-94" rx="22" ry="18" fill="none" stroke="#f59e0b" stroke-width="4.5"/>
+      <line x1="-13" y1="-52" x2="-22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="13" y1="-52" x2="22" y2="-92" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    </g>
+    <path d="M-12 -10 L12 -10 L16 15 L3 15 L0 -2 L-3 15 L-16 15 Z" fill="#312e81"/>
+    <line x1="-11" y1="15" x2="-14" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="11" y1="15" x2="18" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-15" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+    <ellipse cx="19" cy="74" rx="7" ry="4" fill="#7e22ce"/>
+  </g>
+  <text x="677" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#7e22ce">Nhịp 4 &amp; 8 thu chân về TTCB</text>
+</svg>

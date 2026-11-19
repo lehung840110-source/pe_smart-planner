@@ -4,7 +4,7 @@
  * Supports official 7-column timetable: Thứ | Tiết | Lớp | Bài học | PPCT | ND Tích hợp/điều chỉnh | ĐDDH
  */
 
-import { WeeklyMasterScheduleRow } from '../types/gdtc';
+import { GradeLevel, WeeklyMasterScheduleRow } from '../types/gdtc';
 
 export interface WeekDateInfo {
   week: number;
@@ -15,7 +15,7 @@ export interface WeekDateInfo {
 }
 
 export interface WeeklyGradePpctInfo {
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   week: number;
   periods: number[];      // e.g. [15, 16] or [17, 18]
   periodLabel: string;    // "Tiết 17, 18"
@@ -59,18 +59,33 @@ export function getWeekDateInfo(week: number, baseYear: number = 2026): WeekDate
   };
 }
 
-import { defaultGrade1Ppct, defaultGrade3Ppct, defaultGrade5Ppct } from '../data/defaultPpctData';
+import {
+  defaultGrade1Ppct,
+  defaultGrade2Ppct,
+  defaultGrade3Ppct,
+  defaultGrade4Ppct,
+  defaultGrade5Ppct
+} from '../data/defaultPpctData';
 
 /**
  * Calculates curriculum distribution (PPCT) periods for a given grade and week.
- * Dynamically queries official PPCT data across all 35 weeks for Grades 1, 3, and 5.
+ * Dynamically queries official PPCT data across all 35 weeks for Grades 1, 2, 3, 4, and 5.
  */
-export function getGradePpctInfo(grade: 1 | 3 | 5, week: number): WeeklyGradePpctInfo {
+export function getGradePpctInfo(grade: GradeLevel, week: number): WeeklyGradePpctInfo {
   const p1 = (week - 1) * 2 + 1;
   const p2 = (week - 1) * 2 + 2;
   const periods = [p1, p2];
 
-  const ppctList = grade === 1 ? defaultGrade1Ppct : grade === 3 ? defaultGrade3Ppct : defaultGrade5Ppct;
+  const ppctList =
+    grade === 1
+      ? defaultGrade1Ppct
+      : grade === 2
+      ? defaultGrade2Ppct
+      : grade === 3
+      ? defaultGrade3Ppct
+      : grade === 4
+      ? defaultGrade4Ppct
+      : defaultGrade5Ppct;
   const matched = ppctList.filter((item) => item.week === week);
   const first = matched[0];
 
@@ -78,7 +93,15 @@ export function getGradePpctInfo(grade: 1 | 3 | 5, week: number): WeeklyGradePpc
   let rawTitle = first ? first.lessonTitle : '';
   if (!rawTitle) {
     rawTitle = week === 9
-      ? (grade === 1 ? 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng' : grade === 3 ? 'Bài 1: Động tác vươn thở, động tác tay, động tác chân' : 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy')
+      ? (grade === 1
+          ? 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng'
+          : grade === 2
+          ? 'Bài 2: Động tác chân, động tác lườn'
+          : grade === 3
+          ? 'Bài 1: Động tác vươn thở, động tác tay, động tác chân'
+          : grade === 4
+          ? 'Bài 2: Động tác chân, động tác lườn với vòng thể dục'
+          : 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy')
       : `Bài học thể dục Tuần ${week}`;
   }
   // Strip trailing (tiết 1), (tiết 2) and clean title
@@ -337,6 +360,50 @@ export const defaultWeek9Schedule: WeeklyMasterScheduleRow[] = [
     ppct: 18,
     integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
     equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+  },
+  {
+    id: 'w9_row_17',
+    dayOfWeek: 'Thứ 3 – Sáng',
+    period: 1,
+    className: '2A1',
+    grade: 2,
+    lessonTitle: 'Bài 2: Động tác chân, động tác lườn (tiết 1)',
+    ppct: 17,
+    integrationNotes: '- Tích hợp năng lực số (3.1TC1a): Quan sát hình ảnh/video trình tự nhịp động tác chân, lườn an toàn theo hướng dẫn GV.',
+    equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+  },
+  {
+    id: 'w9_row_18',
+    dayOfWeek: 'Thứ 5 – Sáng',
+    period: 1,
+    className: '2A1',
+    grade: 2,
+    lessonTitle: 'Bài 2: Động tác chân, động tác lườn (tiết 2)',
+    ppct: 18,
+    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh.',
+    equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+  },
+  {
+    id: 'w9_row_19',
+    dayOfWeek: 'Thứ 4 – Sáng',
+    period: 1,
+    className: '4A1',
+    grade: 4,
+    lessonTitle: 'Bài 2: Động tác chân, động tác lườn với vòng thể dục (tiết 1)',
+    ppct: 17,
+    integrationNotes: '- Tích hợp năng lực số (4.1TC1a / 6.1TC2a): Quan sát học liệu số và phân tích tư thế giữ vòng thăng bằng qua hình ảnh minh họa.',
+    equipment: 'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
+  },
+  {
+    id: 'w9_row_20',
+    dayOfWeek: 'Thứ 4 – Chiều',
+    period: 1,
+    className: '4A1',
+    grade: 4,
+    lessonTitle: 'Bài 2: Động tác chân, động tác lườn với vòng thể dục (tiết 2)',
+    ppct: 18,
+    integrationNotes: '- Tích hợp bảo vệ môi trường: Thu dọn vòng thể dục ngăn nắp sau tập, giữ sân bãi sạch đẹp.',
+    equipment: 'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
   }
 ];
 
@@ -351,7 +418,9 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
   const p1 = (week - 1) * 2 + 1;
   const p2 = (week - 1) * 2 + 2;
   const g1Info = getGradePpctInfo(1, week);
+  const g2Info = getGradePpctInfo(2, week);
   const g3Info = getGradePpctInfo(3, week);
+  const g4Info = getGradePpctInfo(4, week);
   const g5Info = getGradePpctInfo(5, week);
   const themes = getWeeklyIntegrationThemes(week);
 
@@ -531,6 +600,50 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       ppct: p2,
       integrationNotes: `- ${themes.qpanTheme}`,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+    },
+    {
+      id: `w${week}_17`,
+      dayOfWeek: 'Thứ 3 – Sáng',
+      period: 1,
+      className: '2A1',
+      grade: 2,
+      lessonTitle: `${g2Info.defaultTitle} (tiết 1)`,
+      ppct: p1,
+      integrationNotes: `- ${themes.digitalTheme}`,
+      equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+    },
+    {
+      id: `w${week}_18`,
+      dayOfWeek: 'Thứ 5 – Sáng',
+      period: 1,
+      className: '2A1',
+      grade: 2,
+      lessonTitle: `${g2Info.defaultTitle} (tiết 2)`,
+      ppct: p2,
+      integrationNotes: `- ${themes.qpanTheme}`,
+      equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+    },
+    {
+      id: `w${week}_19`,
+      dayOfWeek: 'Thứ 4 – Sáng',
+      period: 1,
+      className: '4A1',
+      grade: 4,
+      lessonTitle: `${g4Info.defaultTitle} (tiết 1)`,
+      ppct: p1,
+      integrationNotes: `- ${themes.digitalTheme}`,
+      equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
+    },
+    {
+      id: `w${week}_20`,
+      dayOfWeek: 'Thứ 4 – Chiều',
+      period: 1,
+      className: '4A1',
+      grade: 4,
+      lessonTitle: `${g4Info.defaultTitle} (tiết 2)`,
+      ppct: p2,
+      integrationNotes: `- ${themes.envTheme}`,
+      equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
     }
   ];
 }
@@ -585,8 +698,10 @@ export function parseUploadedWeeklyPlanTable(content: string): {
       const integrationNotes = tds[offset + 4] || '';
       const equipment = tds[offset + 5] || 'SGK, Tranh ảnh, dụng cụ TL';
 
-      let grade: 1 | 3 | 5 = 1;
-      if (className.startsWith('3')) grade = 3;
+      let grade: GradeLevel = 1;
+      if (className.startsWith('2')) grade = 2;
+      else if (className.startsWith('3')) grade = 3;
+      else if (className.startsWith('4')) grade = 4;
       else if (className.startsWith('5')) grade = 5;
 
       rows.push({
@@ -622,8 +737,10 @@ export function parseUploadedWeeklyPlanTable(content: string): {
         const integrationNotes = parts[4] || '';
         const equipment = parts[5] || 'SGK, Tranh ảnh, dụng cụ TL';
 
-        let grade: 1 | 3 | 5 = 1;
-        if (className.startsWith('3')) grade = 3;
+        let grade: GradeLevel = 1;
+        if (className.startsWith('2')) grade = 2;
+        else if (className.startsWith('3')) grade = 3;
+        else if (className.startsWith('4')) grade = 4;
         else if (className.startsWith('5')) grade = 5;
 
         rows.push({

@@ -56,15 +56,15 @@ export const TabIntro: React.FC<TabIntroProps> = ({
       icon: Clock,
       color: 'text-blue-600 bg-blue-50 border-blue-200',
       title: 'Giảm 80% thời gian soạn giáo án đa khối mỗi tuần',
-      problem: 'Giáo viên GDTC tiểu học thường dạy đồng thời Khối 1, Khối 3, Khối 5 (6 tiết/tuần + bảng kế hoạch dạy học chung 7 cột), cắt dán thủ công rất mất công.',
-      solution: 'Hệ thống tự động đồng bộ Phân phối chương trình (PPCT) cả 3 khối theo từng tuần, sinh đồng loạt giáo án chuẩn Công văn 5512 chỉ với một thao tác.'
+      problem: 'Giáo viên GDTC tiểu học thường dạy đồng thời nhiều khối từ Khối 1 đến Khối 5 (lên tới 10 tiết chuẩn/tuần + bảng kế hoạch dạy học chung 7 cột), cắt dán thủ công rất mất công.',
+      solution: 'Hệ thống tự động đồng bộ Phân phối chương trình (PPCT) cả 5 khối theo từng tuần, sinh đồng loạt giáo án chuẩn Công văn 5512 chỉ với một thao tác.'
     },
     {
       icon: Images,
       color: 'text-emerald-600 bg-emerald-50 border-emerald-200',
       title: 'Khắc phục tình trạng thiếu tranh động tác & nhầm sơ đồ',
       problem: 'Tìm tranh sách giáo khoa đúng từng động tác, tách bạch khởi động chung với trò chơi và vẽ sơ đồ đội hình dễ nhìn tốn rất nhiều thời gian.',
-      solution: 'Tích hợp trình quét cắt trực tiếp từ SGK điện tử theo 6 thư mục phân loại nghiêm ngặt cùng Studio tự vẽ và kho 32+ sơ đồ phân biệt riêng cho Khối 1, Khối 3, Khối 5.'
+      solution: 'Tích hợp trình quét cắt trực tiếp từ SGK điện tử theo 6 thư mục phân loại nghiêm ngặt cùng Studio tự vẽ và kho sơ đồ phân biệt riêng cho cả 5 khối (Khối 1, 2, 3, 4, 5).'
     },
     {
       icon: ShieldCheck,
@@ -87,7 +87,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
       badge: 'Tab 1',
       memberOnly: true,
       title: 'Quét & Bóc Tách SGK Điện Tử',
-      desc: 'Nhảy nhanh đến đúng trang SGK Khối 1, 3, 5; khoanh vùng cắt ảnh sắc nét và phân loại vào đúng 6 thư mục (Khởi động, Trò chơi KĐ, Động tác mới, Luyện tập, Trò chơi VĐ, Vận dụng).',
+      desc: 'Nhảy nhanh đến đúng trang SGK Khối 1, 2, 3, 4, 5; khoanh vùng cắt ảnh sắc nét và phân loại vào đúng 6 thư mục (Khởi động, Trò chơi KĐ, Động tác mới, Luyện tập, Trò chơi VĐ, Vận dụng).',
       icon: ScanLine,
       actionLabel: 'Mở Tab 1',
       onClick: () => onNavigateTab('tab-scan')
@@ -128,7 +128,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
     {
       badge: 'Tab 6',
       title: 'Xem Trước A4, Sửa & Xuất Word / PDF',
-      desc: 'Xem gộp cả 3 khối kèm lịch dạy tuần 7 cột hoặc xem riêng từng khối/mẫu người dùng; tùy chỉnh cỡ chữ, cỡ ảnh và xuất Word (.DOC/.DOCX) hoặc in PDF A4 nguyên vẹn.',
+      desc: 'Xem gộp cả 5 khối kèm lịch dạy tuần 7 cột hoặc xem riêng từng khối/mẫu người dùng; tùy chỉnh cỡ chữ, cỡ ảnh và xuất Word (.DOC/.DOCX) hoặc in PDF A4 nguyên vẹn.',
       icon: Printer,
       actionLabel: 'Mở Tab 6',
       onClick: () => onNavigateTab('tab-export')
@@ -136,8 +136,8 @@ export const TabIntro: React.FC<TabIntroProps> = ({
     {
       badge: 'Công cụ',
       memberOnly: true,
-      title: 'Studio Tự Vẽ & Đổi Kiểu Đội Hình K1/3/5',
-      desc: 'Thiết kế sơ đồ mới từ hình ảnh trò chơi tham chiếu hoặc tùy chọn kiểu đội hình đặc trưng riêng cho Khối 1, Khối 3, Khối 5 tránh trùng lặp.',
+      title: 'Studio Tự Vẽ & Đổi Kiểu Đội Hình K1–K5',
+      desc: 'Thiết kế sơ đồ mới từ hình ảnh trò chơi tham chiếu hoặc tùy chọn kiểu đội hình đặc trưng riêng cho từng khối (Khối 1, 2, 3, 4, 5) tránh trùng lặp.',
       icon: Palette,
       actionLabel: 'Mở Studio Đội Hình',
       onClick: () => (onOpenFormationStudio ? onOpenFormationStudio() : onNavigateTab('tab-export'))
@@ -192,8 +192,8 @@ export const TabIntro: React.FC<TabIntroProps> = ({
       summary: 'Mọi chỉnh sửa đều được lưu nháp tự động và có thể chốt phiên bản hoàn hảo nhất.',
       details: [
         'Tại Tab 5 hoặc Tab 6 (bật "Chỉnh Sửa Giáo Án"), gõ sửa trực tiếp nội dung 4 cột, thêm/xóa dòng hoặc bấm chèn ảnh/sơ đồ đội hình.',
-        'Muốn thay đổi phong cách đội hình riêng cho Khối 1, 3, 5, vào Tab 6 bấm "Đổi Kiểu Đội Hình K1/3/5".',
-        'Sau khi ưng ý, bấm "Lưu phiên bản" (từng tiết) hoặc "Lưu Bộ 3 Khối" (cả tuần) để chốt bản chính thức mới nhất.'
+        'Muốn thay đổi phong cách đội hình riêng cho từng khối (1–5), vào Tab 6 bấm "Đổi Kiểu Đội Hình K1–K5".',
+        'Sau khi ưng ý, bấm "Lưu phiên bản" (từng tiết) hoặc "Lưu Bộ 5 Khối" (cả tuần) để chốt bản chính thức mới nhất.'
       ],
       ctaLabel: 'Đi tới Tab 5 · Soạn & Sửa',
       onCta: () => onNavigateTab('tab-generator')
@@ -203,7 +203,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
       title: 'Xem trước trang in A4, Xuất file Word (.DOC/.DOCX) hoặc Lưu PDF',
       summary: 'Đảm bảo hình ảnh nhúng 100%, không lỗi font và sẵn sàng nộp ký duyệt hoặc in dạy.',
       details: [
-        'Vào Tab 6 (Xem Trước & In), chọn chế độ xem mong muốn: Gộp cả 3 khối (kèm bảng 16 tiết), từng Khối 1/3/5, Tiết lẻ, hoặc Mẫu mới từ người dùng.',
+        'Vào Tab 6 (Xem Trước & In), chọn chế độ xem mong muốn: Gộp cả 5 khối (kèm bảng lịch tuần), từng Khối 1–5, Tiết lẻ, hoặc Mẫu mới từ người dùng.',
         'Điều chỉnh phông chữ (Times New Roman 12pt/13pt) và cỡ ảnh chuẩn (95px) để bố cục cân đối trên khổ giấy A4.',
         'Bấm "Tải Word (.DOCX)" / "Tải Word (.DOC)" để chỉnh thêm trong Microsoft Word hoặc bấm "Lưu PDF / In A4" để xuất bản PDF.'
       ],
@@ -228,7 +228,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             </h2>
 
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
-              Ứng dụng được xây dựng từ thực tiễn giảng dạy môn Giáo dục Thể chất tại trường phổ thông, giúp thầy cô giải quyết trọn vẹn từ khâu bóc tách hình ảnh SGK, thiết kế sơ đồ đội hình từng khối, soạn giáo án đúng chuẩn Công văn 5512 đến xuất file Word và in A4 đồng loạt cả 3 khối trong vài phút.
+              Ứng dụng được xây dựng từ thực tiễn giảng dạy môn Giáo dục Thể chất tại trường phổ thông, giúp thầy cô giải quyết trọn vẹn từ khâu bóc tách hình ảnh SGK, thiết kế sơ đồ đội hình từng khối, soạn giáo án đúng chuẩn Công văn 5512 đến xuất file Word và in A4 đồng loạt cả 5 khối trong vài phút.
             </p>
 
             <div className="flex flex-wrap items-center gap-2.5 pt-2">
@@ -297,7 +297,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               <div className="flex items-start gap-2">
                 <Layers className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Chuyên môn:</strong> Bộ môn Giáo dục Thể chất (Khối 1, Khối 3, Khối 5 — GDPT 2018)
+                  <strong>Chuyên môn:</strong> Bộ môn Giáo dục Thể chất (Khối 1, 2, 3, 4, 5 — GDPT 2018)
                 </span>
               </div>
               <div className="flex items-start gap-2">
@@ -415,7 +415,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Xem trước bản A4 theo từng khối hoặc gộp 3 khối ở Tab 6.</span>
+                <span>Xem trước bản A4 theo từng khối hoặc gộp cả 5 khối ở Tab 6.</span>
               </li>
             </ul>
           </div>
@@ -436,7 +436,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Lưu phiên bản cuối, Lịch sử sửa, Studio Đội Hình &amp; Đổi kiểu K1/3/5.</span>
+                <span>Lưu phiên bản cuối, Lịch sử sửa, Studio Đội Hình &amp; Đổi kiểu K1–K5.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />

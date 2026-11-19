@@ -17,7 +17,7 @@ import {
   ShieldCheck,
   ArrowRight
 } from 'lucide-react';
-import { PpctItem, PpctAuditResult, WeeklyMasterScheduleRow } from '../types/gdtc';
+import { GradeLevel, PpctItem, PpctAuditResult, WeeklyMasterScheduleRow } from '../types/gdtc';
 import {
   parsePpctFile,
   parsePpctFromHtmlOrText,
@@ -48,7 +48,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
   showToast
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'audit' | 'upload' | 'browse'>('audit');
-  const [selectedGrade, setSelectedGrade] = useState<1 | 3 | 5>(1);
+  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(1);
   const [filterWeek, setFilterWeek] = useState<number>(currentWeek);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [uploadGrade, setUploadGrade] = useState<number>(0); // 0 = all grades auto-detect
@@ -82,7 +82,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
   const handleFileChange = async (file: File) => {
     setIsProcessingFile(true);
     try {
-      const explicitGrade = uploadGrade === 0 ? undefined : (uploadGrade as 1 | 3 | 5);
+      const explicitGrade = uploadGrade === 0 ? undefined : (uploadGrade as GradeLevel);
       const parsed = await parsePpctFile(file, explicitGrade);
       if (parsed.length === 0) {
         showToast('⚠️ Không trích xuất được tiết học nào từ file. Vui lòng kiểm tra định dạng bảng.');
@@ -112,7 +112,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
       showToast('Vui lòng dán nội dung bảng phân phối chương trình!');
       return;
     }
-    const explicitGrade = uploadGrade === 0 ? undefined : (uploadGrade as 1 | 3 | 5);
+    const explicitGrade = uploadGrade === 0 ? undefined : (uploadGrade as GradeLevel);
     const parsed = parsePpctFromHtmlOrText(pastePpctText, explicitGrade);
     if (parsed.length === 0) {
       showToast('⚠️ Không phân tích được dòng nào. Đảm bảo có các cột: Tuần, Tiết, Tên bài học.');
@@ -141,7 +141,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
 
   // Restore Default PPCT
   const handleRestoreDefault = () => {
-    if (confirm('Khôi phục phân phối chương trình chuẩn Bộ GD&ĐT cho cả 3 khối (K1, K3, K5 - 70 tiết)?')) {
+    if (confirm('Khôi phục phân phối chương trình chuẩn Bộ GD&ĐT cho cả 5 khối (K1, K2, K3, K4, K5 - 70 tiết)?')) {
       onUpdatePpctList(defaultAllPpctData);
       saveStoredPpctData(defaultAllPpctData);
       showToast('Đã khôi phục PPCT chuẩn GDPT 2018 (70 tiết/khối)!');
@@ -159,14 +159,14 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
                 <BookOpen className="w-5 h-5 text-emerald-600" />
               </div>
               <h3 className="font-bold text-base sm:text-lg text-slate-900">
-                Phân Phối Chương Trình (PPCT) & Rà Soát Giáo Án 3 Khối
+                Phân Phối Chương Trình (PPCT) & Rà Soát Giáo Án 5 Khối
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
                 GDPT 2018 · 70 Tiết / Khối
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Quản lý phân phối chương trình Khối 1, 3, 5; rà soát và đối chiếu thời khóa biểu tuần thực tế với PPCT gốc để đảm bảo đúng tiến độ.
+              Quản lý phân phối chương trình Khối 1, 2, 3, 4, 5; rà soát và đối chiếu thời khóa biểu tuần thực tế với PPCT gốc để đảm bảo đúng tiến độ.
             </p>
           </div>
           <button
@@ -209,7 +209,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
             }`}
           >
             <Upload className="w-4 h-4" />
-            <span>2. Tải Lên / Cập Nhật PPCT 3 Khối</span>
+            <span>2. Tải Lên / Cập Nhật PPCT 5 Khối</span>
           </button>
 
           <button
@@ -347,7 +347,7 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
                 <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
                 <div className="text-xs text-blue-900 space-y-1">
                   <p className="font-bold">
-                    Quy cách nạp Phân phối chương trình (PPCT) cả 3 khối:
+                    Quy cách nạp Phân phối chương trình (PPCT) cả 5 khối:
                   </p>
                   <p>
                     Hỗ trợ tệp <strong>Word (.docx)</strong>, <strong>Excel/Bảng text</strong> chứa danh sách các tuần (1–35) và tiết học (1–70). Các cột thông thường: <em>Tuần, Tiết, Tên bài học, Ghi chú tích hợp (QPAN, Năng lực số, Môi trường), Thiết bị dạy học</em>.
@@ -363,9 +363,11 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
                   onChange={(e) => setUploadGrade(parseInt(e.target.value, 10))}
                   className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-blue-800 text-xs"
                 >
-                  <option value={0}>Tự động nhận diện (Cả 3 khối K1, K3, K5)</option>
+                  <option value={0}>Tự động nhận diện (Cả 5 khối K1–K5)</option>
                   <option value={1}>Khối 1 (70 tiết)</option>
+                  <option value={2}>Khối 2 (70 tiết)</option>
                   <option value={3}>Khối 3 (70 tiết)</option>
+                  <option value={4}>Khối 4 (70 tiết)</option>
                   <option value={5}>Khối 5 (70 tiết)</option>
                 </select>
               </div>
@@ -436,31 +438,26 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3 flex-wrap">
                   {/* Grade Tabs */}
-                  <div className="flex items-center rounded-lg border border-slate-300 bg-white p-0.5">
-                    <button
-                      onClick={() => setSelectedGrade(1)}
-                      className={`px-3 py-1 rounded-md font-bold text-xs transition ${
-                        selectedGrade === 1 ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Khối 1
-                    </button>
-                    <button
-                      onClick={() => setSelectedGrade(3)}
-                      className={`px-3 py-1 rounded-md font-bold text-xs transition ${
-                        selectedGrade === 3 ? 'bg-emerald-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Khối 3
-                    </button>
-                    <button
-                      onClick={() => setSelectedGrade(5)}
-                      className={`px-3 py-1 rounded-md font-bold text-xs transition ${
-                        selectedGrade === 5 ? 'bg-purple-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      Khối 5
-                    </button>
+                  <div className="flex items-center flex-wrap gap-0.5 rounded-lg border border-slate-300 bg-white p-0.5">
+                    {(
+                      [
+                        { g: 1 as GradeLevel, activeCls: 'bg-blue-600 text-white shadow-2xs' },
+                        { g: 2 as GradeLevel, activeCls: 'bg-sky-600 text-white shadow-2xs' },
+                        { g: 3 as GradeLevel, activeCls: 'bg-emerald-600 text-white shadow-2xs' },
+                        { g: 4 as GradeLevel, activeCls: 'bg-amber-600 text-white shadow-2xs' },
+                        { g: 5 as GradeLevel, activeCls: 'bg-purple-600 text-white shadow-2xs' }
+                      ]
+                    ).map(({ g, activeCls }) => (
+                      <button
+                        key={g}
+                        onClick={() => setSelectedGrade(g)}
+                        className={`px-3 py-1 rounded-md font-bold text-xs whitespace-nowrap shrink-0 transition ${
+                          selectedGrade === g ? activeCls : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        Khối {g}
+                      </button>
+                    ))}
                   </div>
 
                   {/* Week Selector */}

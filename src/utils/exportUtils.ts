@@ -193,7 +193,20 @@ interface EmbeddedImageMime {
  * 5. In .docx format, packages via OpenXML zip with altChunk.
  * 6. Exact formatting matching Vietnamese Ministry of Education & GDPT 2018 guidelines (Times New Roman, A4 margins).
  */
-export async function exportCleanWordDocxFromData(options: ExportWordDataOptions) {
+export interface BuiltWordExportPackage {
+  html: string;
+  docxBlob: Blob;
+  docBlob: Blob;
+}
+
+/**
+ * Builds the complete lesson plan document package (clean HTML with inline PNG images,
+ * OpenXML .docx Blob, and MHTML .doc Blob) without triggering an automatic browser download.
+ * Used by both local Word export and direct Google Docs / Google Drive upload.
+ */
+export async function buildWordExportPackage(
+  options: ExportWordDataOptions
+): Promise<BuiltWordExportPackage> {
   const {
     plans,
     scheduleRows,
@@ -202,7 +215,7 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
     includeSchedule = true,
     weeklyThemes,
     filename = `KHDH_GDTC_Tuan_${week}.doc`,
-    format = 'doc',
+    format = 'docx',
     approvalDate,
     dateRange: customDateRangeOption,
     imageMaxHeightPt = 80
@@ -699,14 +712,12 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
     </html>
   `;
 
-  // 5. Output file according to format:
-  if (isDocx) {
-    // Produce genuine OpenXML .docx file with altChunk
-    const zip = new JSZip();
+  // 5. Build OpenXML .docx Blob (using inline base64 HTML chunk)
+  const zip = new JSZip();
 
-    zip.file(
-      '[Content_Types].xml',
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  zip.file(
+    '[Content_Types].xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
@@ -714,19 +725,19 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
   <Default Extension="html" ContentType="text/html"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 </Types>`
-    );
+  );
 
-    zip.file(
-      '_rels/.rels',
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  zip.file(
+    '_rels/.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
 </Relationships>`
-    );
+  );
 
-    zip.file(
-      'word/document.xml',
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  zip.file(
+    'word/document.xml',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <w:body>
@@ -737,66 +748,92 @@ export async function exportCleanWordDocxFromData(options: ExportWordDataOptions
     </w:sectPr>
   </w:body>
 </w:document>`
-    );
+  );
 
-    zip.file(
-      'word/_rels/document.xml.rels',
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+  zip.file(
+    'word/_rels/document.xml.rels',
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Id="htmlChunk" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk" Target="afchunk.htm"/>
 </Relationships>`
-    );
+  );
 
-    zip.file('word/afchunk.htm', '\ufeff' + wordHtml);
-
-    const docxBlob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(docxBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename.endsWith('.docx') ? filename : `${filename}.docx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  } else {
-    // Produce standard MHTML multipart/related document with Content-Location mapping
-    // This allows Microsoft Word to display 100% of embedded PNG images offline
-    const boundary = '----=_NextPart_GDTC_DOC_BUNDLE_' + Date.now();
-
-    let mhtml = 'MIME-Version: 1.0\r\n';
-    mhtml += `Content-Type: multipart/related; boundary="${boundary}"\r\n\r\n`;
-
-    // Part 1: Main HTML text
-    mhtml += `--${boundary}\r\n`;
-    mhtml += 'Content-Type: text/html; charset="utf-8"\r\n';
-    mhtml += 'Content-Transfer-Encoding: 8bit\r\n';
-    mhtml += 'Content-Location: file:///C:/document.htm\r\n\r\n';
-    mhtml += wordHtml + '\r\n\r\n';
-
-    // Part 2..N: Embedded rasterized PNG images
+  // Ensure inline base64 HTML is always available for DOCX and Google Docs conversion
+  let inlineHtml = wordHtml;
+  if (!isDocx) {
     for (const imgItem of embeddedImages) {
-      mhtml += `--${boundary}\r\n`;
-      mhtml += 'Content-Type: image/png\r\n';
-      mhtml += 'Content-Transfer-Encoding: base64\r\n';
-      mhtml += `Content-Location: ${imgItem.location}\r\n\r\n`;
-      mhtml += imgItem.base64Data + '\r\n\r\n';
+      inlineHtml = inlineHtml.split(imgItem.location).join(imgItem.rawBase64Url);
     }
-
-    // End boundary
-    mhtml += `--${boundary}--\r\n`;
-
-    const docBlob = new Blob([mhtml], {
-      type: 'application/msword;charset=utf-8'
-    });
-    const url = URL.createObjectURL(docBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename.endsWith('.doc') ? filename : `${filename}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
+
+  zip.file('word/afchunk.htm', '\ufeff' + inlineHtml);
+  const docxBlob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  });
+
+  // 6. Build MHTML .doc Blob
+  let mhtmlHtml = wordHtml;
+  if (isDocx) {
+    for (const imgItem of embeddedImages) {
+      mhtmlHtml = mhtmlHtml.split(imgItem.rawBase64Url).join(imgItem.location);
+    }
+  }
+  const boundary = '----=_NextPart_GDTC_DOC_BUNDLE_' + Date.now();
+  let mhtml = 'MIME-Version: 1.0\r\n';
+  mhtml += `Content-Type: multipart/related; boundary="${boundary}"\r\n\r\n`;
+  mhtml += `--${boundary}\r\n`;
+  mhtml += 'Content-Type: text/html; charset="utf-8"\r\n';
+  mhtml += 'Content-Transfer-Encoding: 8bit\r\n';
+  mhtml += 'Content-Location: file:///C:/document.htm\r\n\r\n';
+  mhtml += mhtmlHtml + '\r\n\r\n';
+
+  for (const imgItem of embeddedImages) {
+    mhtml += `--${boundary}\r\n`;
+    mhtml += 'Content-Type: image/png\r\n';
+    mhtml += 'Content-Transfer-Encoding: base64\r\n';
+    mhtml += `Content-Location: ${imgItem.location}\r\n\r\n`;
+    mhtml += imgItem.base64Data + '\r\n\r\n';
+  }
+  mhtml += `--${boundary}--\r\n`;
+
+  const docBlob = new Blob([mhtml], {
+    type: 'application/msword;charset=utf-8'
+  });
+
+  return {
+    html: inlineHtml,
+    docxBlob,
+    docBlob
+  };
+}
+
+export async function exportCleanWordDocxFromData(options: ExportWordDataOptions) {
+  const {
+    week,
+    filename = `KHDH_GDTC_Tuan_${week}.doc`,
+    format = 'doc'
+  } = options;
+  const isDocx = format === 'docx' || filename.toLowerCase().endsWith('.docx');
+  const pkg = await buildWordExportPackage({ ...options, format: isDocx ? 'docx' : 'doc' });
+
+  const targetBlob = isDocx ? pkg.docxBlob : pkg.docBlob;
+  const targetName = isDocx
+    ? filename.endsWith('.docx')
+      ? filename
+      : `${filename}.docx`
+    : filename.endsWith('.doc')
+    ? filename
+    : `${filename}.doc`;
+
+  const url = URL.createObjectURL(targetBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = targetName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 /**

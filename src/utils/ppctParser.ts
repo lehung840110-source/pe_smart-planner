@@ -1,13 +1,13 @@
 import mammoth from 'mammoth';
-import { PpctItem, PpctAuditResult, WeeklyMasterScheduleRow } from '../types/gdtc';
+import { GradeLevel, PpctItem, PpctAuditResult, WeeklyMasterScheduleRow } from '../types/gdtc';
 import { WeeklyIntegrationThemes } from './academicCalendar';
 
 /**
- * Universal PPCT Parser & Auditor for GDTC Grades 1, 3, 5
+ * Universal PPCT Parser & Auditor for GDTC Grades 1, 2, 3, 4, 5
  * Allows importing pacing guide from Word (.docx), tables, text, and auditing weekly schedules.
  */
 
-export async function parsePpctFile(file: File, targetGrade?: 1 | 3 | 5): Promise<PpctItem[]> {
+export async function parsePpctFile(file: File, targetGrade?: GradeLevel): Promise<PpctItem[]> {
   const fileName = file.name.toLowerCase();
   let content = '';
 
@@ -22,7 +22,7 @@ export async function parsePpctFile(file: File, targetGrade?: 1 | 3 | 5): Promis
   return parsePpctFromHtmlOrText(content, targetGrade);
 }
 
-export function parsePpctFromHtmlOrText(content: string, explicitGrade?: 1 | 3 | 5): PpctItem[] {
+export function parsePpctFromHtmlOrText(content: string, explicitGrade?: GradeLevel): PpctItem[] {
   const items: PpctItem[] = [];
 
   // 1. Try parsing HTML table rows if contains <table> or <tr>
@@ -32,13 +32,15 @@ export function parsePpctFromHtmlOrText(content: string, explicitGrade?: 1 | 3 |
     const trs = doc.querySelectorAll('tr');
 
     let currentTopic = 'BÀI TẬP THỂ DỤC PHÁT TRIỂN CHUNG';
-    let currentGrade: 1 | 3 | 5 = explicitGrade || 1;
+    let currentGrade: GradeLevel = explicitGrade || 1;
 
     trs.forEach((tr, trIdx) => {
       const text = tr.textContent || '';
       // Check if row indicates a grade
       if (text.match(/khối\s*1|lớp\s*1/i)) currentGrade = 1;
+      else if (text.match(/khối\s*2|lớp\s*2/i)) currentGrade = 2;
       else if (text.match(/khối\s*3|lớp\s*3/i)) currentGrade = 3;
+      else if (text.match(/khối\s*4|lớp\s*4/i)) currentGrade = 4;
       else if (text.match(/khối\s*5|lớp\s*5/i)) currentGrade = 5;
 
       // Check if row is a Topic header
@@ -93,12 +95,14 @@ export function parsePpctFromHtmlOrText(content: string, explicitGrade?: 1 | 3 |
   if (items.length === 0) {
     const lines = content.split('\n').filter((l) => l.trim().length > 0);
     let currentTopic = 'BÀI TẬP THỂ DỤC PHÁT TRIỂN CHUNG';
-    let currentGrade: 1 | 3 | 5 = explicitGrade || 1;
+    let currentGrade: GradeLevel = explicitGrade || 1;
 
     lines.forEach((line) => {
       const lower = line.toLowerCase();
       if (lower.includes('khối 1') || lower.includes('lớp 1')) currentGrade = 1;
+      else if (lower.includes('khối 2') || lower.includes('lớp 2')) currentGrade = 2;
       else if (lower.includes('khối 3') || lower.includes('lớp 3')) currentGrade = 3;
+      else if (lower.includes('khối 4') || lower.includes('lớp 4')) currentGrade = 4;
       else if (lower.includes('khối 5') || lower.includes('lớp 5')) currentGrade = 5;
 
       if (lower.startsWith('chủ đề') || lower.startsWith('chương:')) {

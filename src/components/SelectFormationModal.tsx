@@ -29,7 +29,7 @@ import {
 } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { FormationStudioModal } from './FormationStudioModal';
-import { SgkImageItem } from '../types/gdtc';
+import { GradeLevel, SgkImageItem } from '../types/gdtc';
 
 interface SelectFormationModalProps {
   isOpen: boolean;
@@ -51,7 +51,7 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
   // Bỏ tab 'all' (Tất Cả) theo yêu cầu người dùng, mặc định vào Khởi Động & Nhận Lớp
   const [selectedPhase, setSelectedPhase] = useState<string>('khoi_dong');
   const [gradeFilter, setGradeFilter] = useState<string>(() =>
-    grade === 1 || grade === 3 || grade === 5 ? String(grade) : 'all'
+    grade && [1, 2, 3, 4, 5].includes(grade) ? String(grade) : 'all'
   );
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [courtTheme, setCourtTheme] = useState<'clean' | 'turf' | 'court'>('clean');
@@ -82,7 +82,7 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
       if (targetRowIndex >= 0) {
         setSelectedRow(targetRowIndex);
       }
-      if (grade === 1 || grade === 3 || grade === 5) {
+      if (grade && [1, 2, 3, 4, 5].includes(grade)) {
         setGradeFilter(String(grade));
       } else {
         setGradeFilter('all');
@@ -224,10 +224,10 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
           code: 'DH_AI',
           phase: (data.phase as any) || (selectedPhase === 'custom' ? 'tro_choi' : (selectedPhase as any)),
           grade:
-            gradeFilter === '1' || gradeFilter === '3' || gradeFilter === '5'
-              ? (Number(gradeFilter) as 1 | 3 | 5)
-              : grade === 1 || grade === 3 || grade === 5
-              ? grade
+            ['1', '2', '3', '4', '5'].includes(gradeFilter)
+              ? (Number(gradeFilter) as GradeLevel)
+              : grade && [1, 2, 3, 4, 5].includes(grade)
+              ? (grade as GradeLevel)
               : 'all',
           description: data.description || aiPrompt,
           svgDataUrl: data.svgDataUrl
@@ -375,19 +375,21 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
 
           {/* Khối Filter Bar + Size/Density Controls */}
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] font-bold text-slate-600">Kiểu theo Khối:</span>
               {[
                 { id: 'all', label: 'Tất cả Khối' },
                 { id: '1', label: 'Khối 1' },
+                { id: '2', label: 'Khối 2' },
                 { id: '3', label: 'Khối 3' },
+                { id: '4', label: 'Khối 4' },
                 { id: '5', label: 'Khối 5' }
               ].map((gTab) => (
                 <button
                   key={gTab.id}
                   type="button"
                   onClick={() => setGradeFilter(gTab.id)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap shrink-0 transition cursor-pointer ${
                     gradeFilter === gTab.id
                       ? 'bg-slate-900 text-white shadow-2xs'
                       : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'

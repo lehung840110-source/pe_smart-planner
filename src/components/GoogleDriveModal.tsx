@@ -14,32 +14,39 @@ import {
   HardDrive,
   FileCheck,
   Copy,
-  Check
+  Check,
+  Eye,
+  BookOpenCheck
 } from 'lucide-react';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { User } from 'firebase/auth';
 import {
   googleSignIn,
   logoutGoogle,
-  initAuth,
-  getAccessToken
+  initAuth
 } from '../services/googleAuth';
 import {
   listDriveFiles,
   getOrCreateAppFolder,
   uploadFileToDrive,
+  uploadHtmlAsGoogleDoc,
+  getGoogleDocPreview,
   downloadDriveFileContent,
   deleteDriveFile,
-  DriveFileItem
+  isGoogleDocFile,
+  getGoogleDocEditUrl,
+  DriveFileItem,
+  GoogleDocPreviewData
 } from '../services/googleDriveService';
 
 interface GoogleDriveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // Optional current plan data payload for quick backup
+  // Optional current plan data payload for quick backup & Google Docs export
   currentPlanData?: {
     week: number;
     title: string;
+    generateGoogleDocHtml: () => Promise<string>;
     generateDocxBlob: () => Promise<Blob>;
     generateJsonBlob: () => Blob;
   };
@@ -57,11 +64,21 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const [files, setFiles] = useState<DriveFileItem[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
   const [appFolderId, setAppFolderId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    type: 'success' | 'error' | 'info';
+    text: string;
+    docLink?: string;
+    createdFile?: DriveFileItem;
+  } | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadActionLabel, setUploadActionLabel] = useState<string>('');
   const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
   const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
   const [scopeError, setScopeError] = useState<boolean>(false);
+
+  // Google Docs inline preview viewer state
+  const [previewDoc, setPreviewDoc] = useState<GoogleDocPreviewData | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
 
   // File to delete confirmation modal state (MANDATORY User Confirmation for destructive ops)
   const [fileToDelete, setFileToDelete] = useState<DriveFileItem | null>(null);
@@ -89,31 +106,33 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
     }
   }, [isOpen, user]);
 
+  const checkScopeError = (err: any): boolean => {
+    const msg = String(err?.message || '');
+    return (
+      msg.includes('insufficient authentication scopes') ||
+      msg.includes('insufficient') ||
+      msg.includes('PERMISSION_DENIED') ||
+      (msg.includes('403') && msg.toLowerCase().includes('permission'))
+    );
+  };
+
   const loadFiles = async () => {
     setIsLoadingFiles(true);
-    setStatusMessage(null);
     setScopeError(false);
     try {
       const folderId = await getOrCreateAppFolder();
       setAppFolderId(folderId);
 
-      // List files in the SmartPlan folder as well as any relevant GDTC documents
       const query = `'${folderId}' in parents and trashed = false`;
       const driveFiles = await listDriveFiles(query, 50);
       setFiles(driveFiles);
     } catch (err: any) {
       console.error(err);
-      const isScopeDenied =
-        err?.message?.includes('insufficient authentication scopes') ||
-        err?.message?.includes('insufficient') ||
-        err?.message?.includes('PERMISSION_DENIED') ||
-        (err?.message?.includes('403') && err?.message?.toLowerCase().includes('permission'));
-
-      if (isScopeDenied) {
+      if (checkScopeError(err)) {
         setScopeError(true);
         setStatusMessage({
           type: 'error',
-          text: 'Tài khoản chưa cấp quyền Google Drive (Lỗi 403). Vui lòng bấm "Cấp lại quyền Google Drive" bên dưới.'
+          text: 'Tài khoản chưa cấp đủ quyền Google Drive / Google Docs (Lỗi 403). Vui lòng bấm "Cấp lại quyền Google Workspace" bên dưới.'
         });
       } else {
         setStatusMessage({
@@ -139,7 +158,6 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           type: 'success',
           text: `Đăng nhập thành công: ${res.user.displayName || res.user.email}`
         });
-        // Note: loadFiles() is triggered by useEffect([isOpen, user])
       }
     } catch (err: any) {
       console.error(err);
@@ -148,7 +166,8 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         (typeof err?.message === 'string' && err.message.toLowerCase().includes('unauthorized-domain'));
 
       if (isUnauthorized) {
-        const currentDomain = typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app';
+        const currentDomain =
+          typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app';
         setUnauthorizedDomain(currentDomain);
         setStatusMessage({
           type: 'error',
@@ -185,7 +204,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       console.error(err);
       setStatusMessage({
         type: 'error',
-        text: err?.message || 'Cấp quyền Google Drive thất bại'
+        text: err?.message || 'Cấp quyền Google Drive & Docs thất bại'
       });
     } finally {
       setIsLoggingIn(false);
@@ -193,7 +212,9 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   };
 
   const handleCopyCurrentDomain = () => {
-    const domain = unauthorizedDomain || (typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app');
+    const domain =
+      unauthorizedDomain ||
+      (typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app');
     if (navigator.clipboard) {
       navigator.clipboard.writeText(domain);
       setCopiedDomain(true);
@@ -206,23 +227,59 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       await logoutGoogle();
       setUser(null);
       setFiles([]);
+      setPreviewDoc(null);
       setStatusMessage({ type: 'info', text: 'Đã đăng xuất khỏi tài khoản Google' });
     } catch (err: any) {
       console.error(err);
     }
   };
 
-  // Upload current plan as Word document to Google Drive
+  // Save current full-formatted lesson plan natively as Google Docs (tables + images preserved!)
+  const handleSaveAsGoogleDoc = async () => {
+    if (!currentPlanData) return;
+    setIsUploading(true);
+    setUploadActionLabel('Đang tạo tệp Google Docs (kèm bảng & hình ảnh)...');
+    setStatusMessage(null);
+    try {
+      const folderId = appFolderId || (await getOrCreateAppFolder());
+      const htmlContent = await currentPlanData.generateGoogleDocHtml();
+      const docTitle = `KHBD_GDTC_Tuan_${currentPlanData.week}_${new Date().toISOString().slice(0, 10)}`;
+
+      const created = await uploadHtmlAsGoogleDoc(docTitle, htmlContent, folderId);
+      const editUrl = getGoogleDocEditUrl(created);
+
+      setStatusMessage({
+        type: 'success',
+        text: `Đã lưu giáo án "${created.name}" thành Google Docs thành công!`,
+        docLink: editUrl,
+        createdFile: created
+      });
+      await loadFiles();
+    } catch (err: any) {
+      console.error(err);
+      if (checkScopeError(err)) setScopeError(true);
+      setStatusMessage({
+        type: 'error',
+        text: `Lưu lên Google Docs thất bại: ${err?.message || err}`
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadActionLabel('');
+    }
+  };
+
+  // Upload current plan as real Word (.docx) document to Google Drive
   const handleUploadCurrentWord = async () => {
     if (!currentPlanData) return;
     setIsUploading(true);
+    setUploadActionLabel('Đang xuất & tải file Word (.docx)...');
     setStatusMessage(null);
     try {
       const folderId = appFolderId || (await getOrCreateAppFolder());
       const docxBlob = await currentPlanData.generateDocxBlob();
       const filename = `KHBD_GDTC_Tuan_${currentPlanData.week}_${new Date().toISOString().slice(0, 10)}.docx`;
 
-      await uploadFileToDrive(
+      const created = await uploadFileToDrive(
         filename,
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         docxBlob,
@@ -231,17 +288,20 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
 
       setStatusMessage({
         type: 'success',
-        text: `Đã lưu kế hoạch bài dạy "${filename}" vào Google Drive thành công!`
+        text: `Đã lưu file Word đầy đủ "${filename}" vào Google Drive thành công!`,
+        docLink: created.webViewLink
       });
       await loadFiles();
     } catch (err: any) {
       console.error(err);
+      if (checkScopeError(err)) setScopeError(true);
       setStatusMessage({
         type: 'error',
-        text: `Lưu vào Google Drive thất bại: ${err?.message || err}`
+        text: `Lưu file Word vào Google Drive thất bại: ${err?.message || err}`
       });
     } finally {
       setIsUploading(false);
+      setUploadActionLabel('');
     }
   };
 
@@ -249,18 +309,14 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   const handleUploadCurrentJson = async () => {
     if (!currentPlanData) return;
     setIsUploading(true);
+    setUploadActionLabel('Đang sao lưu JSON...');
     setStatusMessage(null);
     try {
       const folderId = appFolderId || (await getOrCreateAppFolder());
       const jsonBlob = currentPlanData.generateJsonBlob();
       const filename = `Backup_SmartPlan_Tuan_${currentPlanData.week}_${new Date().toISOString().slice(0, 10)}.json`;
 
-      await uploadFileToDrive(
-        filename,
-        'application/json',
-        jsonBlob,
-        folderId
-      );
+      await uploadFileToDrive(filename, 'application/json', jsonBlob, folderId);
 
       setStatusMessage({
         type: 'success',
@@ -269,21 +325,51 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       await loadFiles();
     } catch (err: any) {
       console.error(err);
+      if (checkScopeError(err)) setScopeError(true);
       setStatusMessage({
         type: 'error',
         text: `Sao lưu thất bại: ${err?.message || err}`
       });
     } finally {
       setIsUploading(false);
+      setUploadActionLabel('');
     }
   };
 
-  // Download and import file into application
+  // View Google Doc live content directly inside the app via Google Docs API + Drive HTML Export
+  const handlePreviewGoogleDoc = async (fileItem: DriveFileItem) => {
+    setIsLoadingPreview(true);
+    setStatusMessage({ type: 'info', text: `Đang tải nội dung Google Docs "${fileItem.name}"...` });
+    try {
+      const data = await getGoogleDocPreview(fileItem);
+      setPreviewDoc(data);
+      setStatusMessage(null);
+    } catch (err: any) {
+      console.error(err);
+      if (checkScopeError(err)) setScopeError(true);
+      setStatusMessage({
+        type: 'error',
+        text: `Không thể xem trước Google Docs: ${err?.message || err}`
+      });
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // Download (or export Google Doc to DOCX) and import file into application
   const handleImportFromDrive = async (fileItem: DriveFileItem) => {
     try {
       setStatusMessage({ type: 'info', text: `Đang tải "${fileItem.name}" từ Google Drive...` });
-      const blob = await downloadDriveFileContent(fileItem.id);
-      const file = new File([blob], fileItem.name, { type: fileItem.mimeType });
+      const blob = await downloadDriveFileContent(fileItem.id, fileItem.mimeType);
+      const isNativeDoc = isGoogleDocFile(fileItem);
+      const importName = isNativeDoc
+        ? `${fileItem.name.replace(/\.docx$/i, '')}.docx`
+        : fileItem.name;
+      const importMime = isNativeDoc
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : fileItem.mimeType;
+
+      const file = new File([blob], importName, { type: importMime });
 
       if (onImportFileContent) {
         onImportFileContent(file);
@@ -294,6 +380,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
       }
     } catch (err: any) {
       console.error(err);
+      if (checkScopeError(err)) setScopeError(true);
       setStatusMessage({
         type: 'error',
         text: `Không thể đọc tệp: ${err?.message || err}`
@@ -311,6 +398,9 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         type: 'success',
         text: `Đã xoá tệp "${fileToDelete.name}" khỏi Google Drive.`
       });
+      if (previewDoc?.documentId === fileToDelete.id) {
+        setPreviewDoc(null);
+      }
       setFileToDelete(null);
       await loadFiles();
     } catch (err: any) {
@@ -324,11 +414,36 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
     }
   };
 
+  const getFileBadge = (file: DriveFileItem) => {
+    if (isGoogleDocFile(file)) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 shrink-0">
+          Google Docs
+        </span>
+      );
+    }
+    if (file.name.toLowerCase().endsWith('.docx') || file.mimeType.includes('wordprocessingml')) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 shrink-0">
+          Word .DOCX
+        </span>
+      );
+    }
+    if (file.name.toLowerCase().endsWith('.json') || file.mimeType.includes('json')) {
+      return (
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 shrink-0">
+          Backup .JSON
+        </span>
+      );
+    }
+    return null;
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-3xl w-full flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full flex flex-col max-h-[92vh] overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white">
           <div className="flex items-center gap-3">
@@ -337,13 +452,13 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-                Đồng bộ Google Drive™
+                Google Drive & Google Docs™
                 <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-semibold">
                   Google Workspace
                 </span>
               </h3>
               <p className="text-xs text-slate-500">
-                Lưu trữ giáo án, sao lưu trực tiếp và mở lại kế hoạch bài dạy từ đám mây
+                Lưu giáo án đầy đủ bảng & hình ảnh trực tiếp thành Google Docs, xem trực tuyến và đồng bộ trên mọi thiết bị
               </p>
             </div>
           </div>
@@ -358,7 +473,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         {/* Status notification banner */}
         {statusMessage && (
           <div
-            className={`px-6 py-2.5 text-xs font-medium flex items-center gap-2 border-b ${
+            className={`px-6 py-2.5 text-xs font-medium flex flex-wrap items-center gap-2 border-b ${
               statusMessage.type === 'success'
                 ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                 : statusMessage.type === 'error'
@@ -374,9 +489,30 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
               <RefreshCw className="w-4 h-4 shrink-0 text-blue-600 animate-spin" />
             )}
             <span className="flex-1">{statusMessage.text}</span>
+            {statusMessage.createdFile && isGoogleDocFile(statusMessage.createdFile) && (
+              <button
+                type="button"
+                onClick={() => handlePreviewGoogleDoc(statusMessage.createdFile!)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-emerald-300 text-emerald-800 hover:bg-emerald-100 font-bold text-[11px]"
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Xem trước ngay</span>
+              </button>
+            )}
+            {statusMessage.docLink && (
+              <a
+                href={statusMessage.docLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px]"
+              >
+                <span>Mở trên Google Docs</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
             <button
               onClick={() => setStatusMessage(null)}
-              className="text-xs underline hover:opacity-80 ml-2"
+              className="text-xs underline hover:opacity-80 ml-1"
             >
               Đóng
             </button>
@@ -385,7 +521,6 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
 
         {/* Body content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {/* User Auth Section */}
           {!user ? (
             <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-6 text-center space-y-4">
               <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
@@ -393,10 +528,10 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
               </div>
               <div className="max-w-md mx-auto space-y-1">
                 <h4 className="text-base font-bold text-slate-800">
-                  Kết nối với Google Drive của bạn
+                  Kết nối Google Drive & Google Docs của bạn
                 </h4>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Đăng nhập tài khoản Google để tự động đồng bộ kế hoạch bài dạy, tải file giáo án Word lên kho Drive và nạp lại khi cần thiết trên mọi thiết bị.
+                  Đăng nhập tài khoản Google để lưu giáo án trực tiếp thành Google Docs (giữ nguyên bảng biểu & hình ảnh minh họa), xem trước ngay trong ứng dụng hoặc mở chỉnh sửa trên docs.google.com.
                 </p>
               </div>
 
@@ -416,10 +551,9 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
                   </svg>
                 )}
-                <span>{isLoggingIn ? 'Đang kết nối Google...' : 'Đăng nhập với Google'}</span>
+                <span>{isLoggingIn ? 'Đang kết nối Google...' : 'Sign in with Google / Đăng nhập Google'}</span>
               </button>
 
-              {/* Unauthorized Domain Diagnostic & Step-by-Step Guide Card */}
               {unauthorizedDomain && (
                 <div className="mt-4 p-4 text-left bg-amber-50 border border-amber-300 rounded-xl shadow-xs space-y-3">
                   <div className="flex items-start gap-2.5">
@@ -431,12 +565,16 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                         Cần thêm tên miền vào Firebase Authentication
                       </h5>
                       <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-                        Ứng dụng đang mở tại <span className="font-mono font-semibold bg-amber-100 px-1 py-0.5 rounded text-amber-950">{unauthorizedDomain}</span> nhưng miền này chưa được thêm vào mục <b>Authorized domains</b> của dự án Firebase <span className="font-mono font-semibold text-slate-800">{firebaseConfig.projectId}</span>.
+                        Ứng dụng đang mở tại{' '}
+                        <span className="font-mono font-semibold bg-amber-100 px-1 py-0.5 rounded text-amber-950">
+                          {unauthorizedDomain}
+                        </span>{' '}
+                        nhưng miền này chưa được thêm vào mục <b>Authorized domains</b> của dự án Firebase{' '}
+                        <span className="font-mono font-semibold text-slate-800">{firebaseConfig.projectId}</span>.
                       </p>
                     </div>
                   </div>
 
-                  {/* Copy Domain bar */}
                   <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-amber-200">
                     <div className="flex-1 font-mono text-xs text-slate-700 truncate px-1">
                       {unauthorizedDomain}
@@ -460,18 +598,6 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                     </button>
                   </div>
 
-                  {/* 30-Second Walkthrough */}
-                  <div className="text-[11px] text-amber-900 space-y-1.5 bg-amber-100/60 p-3 rounded-lg border border-amber-200/70">
-                    <p className="font-bold text-amber-950">Các bước xử lý nhanh (khoảng 30 giây):</p>
-                    <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
-                      <li>Bấm nút <b>"Mở Firebase Console"</b> bên dưới để đến trang cài đặt Authentication.</li>
-                      <li>Cuộn xuống mục <b>"Authorized domains"</b> (Miền được ủy quyền).</li>
-                      <li>Bấm <b>"Add domain"</b> rồi dán <code className="bg-white px-1 py-0.2 rounded font-mono font-semibold">{unauthorizedDomain}</code> (hoặc <code className="bg-white px-1 py-0.2 rounded font-mono font-semibold">vercel.app</code>) vào và nhấn lưu.</li>
-                      <li>Quay lại đây và bấm nút <b>"Đăng nhập với Google"</b> lại để đồng bộ.</li>
-                    </ol>
-                  </div>
-
-                  {/* Direct Link to Firebase Console */}
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     <a
                       href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
@@ -482,7 +608,6 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                       <span>Mở Cài đặt Firebase Console</span>
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
-
                     <button
                       type="button"
                       onClick={handleSignIn}
@@ -492,11 +617,6 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                       <RefreshCw className={`w-3.5 h-3.5 ${isLoggingIn ? 'animate-spin text-blue-600' : ''}`} />
                       <span>Thử đăng nhập lại</span>
                     </button>
-                  </div>
-
-                  {/* Offline / Direct Word alternative */}
-                  <div className="text-[11px] text-slate-600 bg-white/80 p-2.5 rounded-lg border border-slate-200 leading-relaxed">
-                    💡 <b>Giải pháp sao lưu không cần mạng:</b> Thầy/Cô có thể bấm nút <b>"Sao Lưu / Khôi Phục"</b> (.json) hoặc <b>"Xuất file Word"</b> (.docx) ở góc trên thanh công cụ chính để tải giáo án về máy tính hoặc kéo thả trực tiếp lên Google Drive bất kỳ lúc nào mà không bắt buộc phải liên kết tài khoản ngay.
                   </div>
                 </div>
               )}
@@ -551,68 +671,68 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                     <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                       <h5 className="text-xs font-bold text-red-900">
-                        Chưa cấp quyền truy cập Google Drive (Lỗi 403)
+                        Chưa cấp đủ quyền truy cập Google Drive & Google Docs (Lỗi 403)
                       </h5>
                       <p className="text-[11px] text-red-800 leading-relaxed">
-                        Tài khoản <span className="font-semibold text-slate-800">{user.email}</span> đã đăng nhập nhưng chưa cấp quyền đọc/ghi Google Drive (Request had insufficient authentication scopes). Google yêu cầu Thầy/Cô tích chọn cho phép ứng dụng truy cập Drive để đọc và tạo thư mục giáo án.
+                        Tài khoản <span className="font-semibold text-slate-800">{user.email}</span> cần tích chọn đầy đủ các ô quyền Google Drive, Google Docs và Gmail tại cửa sổ xác nhận Google.
                       </p>
                     </div>
                   </div>
-
-                  <div className="bg-white/90 p-3 rounded-lg border border-red-200 text-[11px] text-slate-700 space-y-1.5">
-                    <p className="font-bold text-slate-900">👉 Hướng dẫn cấp quyền nhanh:</p>
-                    <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
-                      <li>Bấm nút <b>"Cấp lại quyền Google Drive"</b> màu đỏ bên dưới.</li>
-                      <li>Tại cửa sổ Google mở ra, hãy <b>tích chọn vào các ô vuông cấp quyền Google Drive</b> (Xem, chỉnh sửa, tạo tệp).</li>
-                      <li>Bấm <b>"Tiếp tục"</b> để hoàn tất.</li>
-                    </ol>
-                  </div>
-
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={handleReauth}
                       disabled={isLoggingIn}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition active:scale-98"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg shadow-xs transition"
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${isLoggingIn ? 'animate-spin' : ''}`} />
-                      <span>{isLoggingIn ? 'Đang kết nối lại...' : 'Cấp lại quyền Google Drive'}</span>
-                    </button>
-
-                    <button
-                      onClick={handleSignOut}
-                      className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition"
-                    >
-                      Đăng xuất tài khoản
+                      <span>{isLoggingIn ? 'Đang kết nối lại...' : 'Cấp lại quyền Google Workspace'}</span>
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Quick Action: Upload current plan to Drive */}
+              {/* Quick Action: Save directly to Google Docs / Drive */}
               {currentPlanData && (
                 <div className="p-4 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl text-white shadow-sm space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div>
                       <h4 className="font-bold text-xs uppercase tracking-wider text-blue-100">
-                        Sao lưu nhanh vào Google Drive
+                        Lưu nhanh lên Google Docs & Google Drive
                       </h4>
-                      <p className="text-xs text-white/90 font-medium mt-0.5">
+                      <p className="text-xs text-white/95 font-medium mt-0.5">
                         Kế hoạch Tuần {currentPlanData.week}: {currentPlanData.title}
                       </p>
                     </div>
-                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-semibold">
+                    <span className="text-[10px] bg-white/20 px-2.5 py-0.5 rounded-full font-semibold">
                       Thư mục: SmartPlan GDTC Pro
                     </span>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2.5 pt-1">
                     <button
+                      onClick={handleSaveAsGoogleDoc}
+                      disabled={isUploading}
+                      className="flex items-center gap-2 px-4 py-2 bg-white text-blue-700 hover:bg-blue-50 font-bold text-xs rounded-lg shadow-xs transition active:scale-98 disabled:opacity-50"
+                    >
+                      <BookOpenCheck className="w-4 h-4 text-blue-600" />
+                      <span>
+                        {isUploading && uploadActionLabel.includes('Google Docs')
+                          ? uploadActionLabel
+                          : 'Lưu thành Google Docs (Xem & Sửa trực tuyến)'}
+                      </span>
+                    </button>
+
+                    <button
                       onClick={handleUploadCurrentWord}
                       disabled={isUploading}
-                      className="flex items-center gap-2 px-3.5 py-2 bg-white text-blue-700 hover:bg-blue-50 font-semibold text-xs rounded-lg shadow-xs transition active:scale-98 disabled:opacity-50"
+                      className="flex items-center gap-2 px-3.5 py-2 bg-indigo-800/70 hover:bg-indigo-800 text-white font-semibold text-xs rounded-lg transition active:scale-98 disabled:opacity-50 border border-indigo-400/40"
                     >
-                      <UploadCloud className="w-4 h-4 text-blue-600" />
-                      <span>{isUploading ? 'Đang tải lên...' : 'Lưu File Word (.docx) lên Drive'}</span>
+                      <UploadCloud className="w-4 h-4 text-blue-200" />
+                      <span>
+                        {isUploading && uploadActionLabel.includes('Word')
+                          ? uploadActionLabel
+                          : 'Lưu File Word (.docx)'}
+                      </span>
                     </button>
 
                     <button
@@ -621,9 +741,71 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                       className="flex items-center gap-2 px-3.5 py-2 bg-blue-700/80 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition active:scale-98 disabled:opacity-50 border border-blue-400/40"
                     >
                       <FileCheck className="w-4 h-4 text-amber-300" />
-                      <span>{isUploading ? 'Đang lưu...' : 'Sao lưu Toàn diện (.json)'}</span>
+                      <span>
+                        {isUploading && uploadActionLabel.includes('JSON')
+                          ? uploadActionLabel
+                          : 'Sao lưu Toàn diện (.json)'}
+                      </span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Inline Google Docs Live Preview Panel */}
+              {(isLoadingPreview || previewDoc) && (
+                <div className="border border-blue-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                  <div className="px-4 py-2.5 bg-blue-50 border-b border-blue-200 flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <BookOpenCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {isLoadingPreview ? 'Đang mở bản xem trước Google Docs...' : previewDoc?.title}
+                        </p>
+                        {previewDoc && (
+                          <p className="text-[10px] text-slate-500">
+                            Đọc trực tiếp từ Google Docs ({previewDoc.tableCount} bảng biểu · {previewDoc.paragraphCount} đoạn văn)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {previewDoc && (
+                        <a
+                          href={previewDoc.webViewLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] transition"
+                        >
+                          <span>Mở & Sửa trên Google Docs</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDoc(null)}
+                        className="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-[11px]"
+                      >
+                        Đóng xem trước
+                      </button>
+                    </div>
+                  </div>
+                  {isLoadingPreview ? (
+                    <div className="py-10 text-center text-xs text-slate-500 space-y-2">
+                      <RefreshCw className="w-5 h-5 animate-spin mx-auto text-blue-600" />
+                      <p>Đang tải nội dung tài liệu từ Google Docs API...</p>
+                    </div>
+                  ) : previewDoc?.htmlContent ? (
+                    <iframe
+                      title={`Xem trước ${previewDoc.title}`}
+                      srcDoc={previewDoc.htmlContent}
+                      sandbox="allow-same-origin"
+                      className="w-full h-80 bg-white border-0"
+                    />
+                  ) : previewDoc ? (
+                    <div className="p-4 text-xs text-slate-700 whitespace-pre-line max-h-64 overflow-y-auto">
+                      {previewDoc.plainTextSummary || 'Tài liệu đã sẵn sàng. Bấm "Mở & Sửa trên Google Docs" để xem đầy đủ.'}
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -632,10 +814,10 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-slate-800 flex items-center gap-2">
                     <FolderOpen className="w-4 h-4 text-amber-500" />
-                    <span>Tệp trên Google Drive ({files.length})</span>
+                    <span>Tệp Google Docs & Drive ({files.length})</span>
                   </h4>
                   <span className="text-[11px] text-slate-400">
-                    Tự động đồng bộ với thư mục SmartPlan GDTC Pro
+                    Thư mục: SmartPlan GDTC Pro
                   </span>
                 </div>
 
@@ -647,65 +829,83 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                 ) : files.length === 0 ? (
                   <div className="py-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 space-y-1">
                     <p className="text-xs font-medium text-slate-600">
-                      Chưa có tệp giáo án nào trong thư mục Google Drive
+                      Chưa có tệp giáo án nào trong thư mục SmartPlan GDTC Pro
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      Nhấn nút "Lưu File Word (.docx) lên Drive" ở trên để đưa kế hoạch bài dạy đầu tiên lên đám mây.
+                      Nhấn nút "Lưu thành Google Docs" ở trên để tạo và xem giáo án trực tuyến ngay.
                     </p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white max-h-64 overflow-y-auto custom-scrollbar">
-                    {files.map((file) => (
-                      <div
-                        key={file.id}
-                        className="p-3 flex items-center justify-between hover:bg-slate-50 transition group"
-                      >
-                        <div className="flex items-center gap-3 min-w-0 pr-2">
-                          <FileText className="w-4 h-4 text-blue-600 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-slate-800 truncate" title={file.name}>
-                              {file.name}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString('vi-VN') : ''}
-                            </p>
+                    {files.map((file) => {
+                      const isDoc = isGoogleDocFile(file);
+                      const openUrl = getGoogleDocEditUrl(file);
+                      return (
+                        <div
+                          key={file.id}
+                          className="p-3 flex items-center justify-between gap-2 hover:bg-slate-50 transition group"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <FileText className={`w-4 h-4 shrink-0 ${isDoc ? 'text-blue-600' : 'text-slate-500'}`} />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-xs font-semibold text-slate-800 truncate" title={file.name}>
+                                  {file.name}
+                                </p>
+                                {getFileBadge(file)}
+                              </div>
+                              <p className="text-[10px] text-slate-400">
+                                {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString('vi-VN') : ''}
+                              </p>
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {file.webViewLink && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isDoc && (
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewGoogleDoc(file)}
+                                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition"
+                                title="Xem trước nội dung Google Docs trực tiếp trong ứng dụng"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Xem</span>
+                              </button>
+                            )}
+
                             <a
-                              href={file.webViewLink}
+                              href={openUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md hover:bg-blue-50 transition"
-                              title="Mở trên Google Drive"
+                              className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded-md transition"
+                              title={isDoc ? 'Mở & chỉnh sửa trên Google Docs' : 'Mở trên Google Drive'}
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3 h-3" />
+                              <span className="hidden sm:inline">{isDoc ? 'Google Docs' : 'Mở'}</span>
                             </a>
-                          )}
 
-                          {onImportFileContent && (
+                            {onImportFileContent && (
+                              <button
+                                onClick={() => handleImportFromDrive(file)}
+                                className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition"
+                                title="Tải và mở kế hoạch bài dạy này vào ứng dụng"
+                              >
+                                <Download className="w-3 h-3" />
+                                <span>Nạp vào App</span>
+                              </button>
+                            )}
+
                             <button
-                              onClick={() => handleImportFromDrive(file)}
-                              className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-md transition"
-                              title="Tải và mở kế hoạch bài dạy này vào ứng dụng"
+                              onClick={() => setFileToDelete(file)}
+                              className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition"
+                              title="Xoá tệp khỏi Google Drive"
                             >
-                              <Download className="w-3 h-3" />
-                              <span>Nạp vào App</span>
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
-
-                          <button
-                            onClick={() => setFileToDelete(file)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition"
-                            title="Xoá tệp khỏi Google Drive"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -715,7 +915,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
 
         {/* Footer */}
         <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-          <span>Quyền bảo mật: Chỉ truy cập tệp do SmartPlan GDTC Pro tạo ra hoặc được cấp quyền</span>
+          <span>Đồng bộ trực tiếp với Google Drive & Google Docs (thư mục SmartPlan GDTC Pro)</span>
           <button
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 font-semibold text-slate-700 rounded-lg transition"

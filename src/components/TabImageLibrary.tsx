@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Download,
   FileJson,
@@ -27,7 +27,9 @@ import {
   X,
   Edit3,
   Compass,
-  Lock
+  Lock,
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
@@ -36,13 +38,18 @@ import { Database, Wand2, Eraser } from 'lucide-react';
 import {
   SgkLessonFolder,
   getEffectiveSgkCurriculumTree,
+  getSgkTreeOverrides,
+  saveSgkTreeLessonOverride,
+  resetSgkTreeLessonOverride,
   doesImageBelongToSgkLesson,
-  findSgkLessonByPage
+  findSgkLessonByPage,
+  SGK_TREE_OVERRIDES_EVENT
 } from '../data/sgkCurriculumTree';
 import { deleteImageDB, saveImagesDB } from '../utils/db';
 import { ImageToImageModal } from './ImageToImageModal';
 import { BatchImageUploadModal } from './BatchImageUploadModal';
 import { EditImageModal } from './EditImageModal';
+import { CreateHdImageModal } from './CreateHdImageModal';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { FormationStudioModal } from './FormationStudioModal';
@@ -70,25 +77,82 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   showToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [filterGrade, setFilterGrade] = useState<string>('all'); // 'all' | '1' | '3' | '5'
+  const [filterGrade, setFilterGrade] = useState<string>('all'); // 'all' | '1' | '2' | '3' | '4' | '5'
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
   const [selectedLessonId, setSelectedLessonId] = useState<string>('all');
   const [selectedSubFolder, setSelectedSubFolder] = useState<string>('all'); // 'all' | 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung'
   const [imageToImageModalItem, setImageToImageModalItem] = useState<SgkImageItem | null>(null);
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState<boolean>(false);
+  const [isCreateHdOpen, setIsCreateHdOpen] = useState<boolean>(false);
   const [studioRefImage, setStudioRefImage] = useState<SgkImageItem | null>(null);
 
-  const effectiveTree = useMemo(() => getEffectiveSgkCurriculumTree(), [images]);
+  const [treeRevision, setTreeRevision] = useState<number>(0);
+  const effectiveTree = useMemo(() => getEffectiveSgkCurriculumTree(), [images, treeRevision]);
+  const treeOverridesMap = useMemo(() => getSgkTreeOverrides(), [treeRevision]);
+  const [inlineTreeEdit, setInlineTreeEdit] = useState<{
+    lessonId: string;
+    field: 'lessonName' | 'warmupGame' | 'practiceGame';
+    value: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleSyncOverrides = () => setTreeRevision((r) => r + 1);
+    window.addEventListener(SGK_TREE_OVERRIDES_EVENT, handleSyncOverrides);
+    return () => window.removeEventListener(SGK_TREE_OVERRIDES_EVENT, handleSyncOverrides);
+  }, []);
+
+  const handleStartInlineTreeEdit = (
+    e: React.MouseEvent,
+    lessonId: string,
+    field: 'lessonName' | 'warmupGame' | 'practiceGame',
+    currentValue: string
+  ) => {
+    e.stopPropagation();
+    setInlineTreeEdit({ lessonId, field, value: currentValue });
+  };
+
+  const handleCommitInlineTreeEdit = () => {
+    if (!inlineTreeEdit) return;
+    const trimmed = inlineTreeEdit.value.trim();
+    if (!trimmed) {
+      showToast('Vui lòng nhập tên hợp lệ trước khi lưu!');
+      return;
+    }
+    if (inlineTreeEdit.field === 'warmupGame') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, { warmupGameName: trimmed });
+      showToast(`✅ Đã đổi tên Trò chơi khởi động thành "${trimmed}"!`);
+    } else if (inlineTreeEdit.field === 'practiceGame') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, { practiceGameName: trimmed });
+      showToast(`✅ Đã đổi tên Trò chơi vận động thành "${trimmed}"!`);
+    } else if (inlineTreeEdit.field === 'lessonName') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, { lessonName: trimmed });
+      showToast(`✅ Đã đổi tên bài học thành "${trimmed}"!`);
+    }
+    setTreeRevision((r) => r + 1);
+    setInlineTreeEdit(null);
+  };
+
+  const handleResetLessonOverride = (e: React.MouseEvent, lessonId: string) => {
+    e.stopPropagation();
+    resetSgkTreeLessonOverride(lessonId);
+    setTreeRevision((r) => r + 1);
+    if (inlineTreeEdit?.lessonId === lessonId) setInlineTreeEdit(null);
+    showToast('↩️ Đã khôi phục tên gốc cho bài học này!');
+  };
 
   // Tree expanded state
   const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({
     '1': true,
+    '2': true,
     '3': true,
+    '4': true,
     '5': true
   });
   const [expandedLessons, setExpandedLessons] = useState<Record<string, boolean>>({
     'k1_cd2_b1': true,
+    'k2_cd2_b1': true,
     'k3_cd1_b4': true,
+    'k4_cd2_b1': true,
     'k5_cd2_b1': true
   });
 
@@ -672,17 +736,19 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const activeBreadcrumbText = useMemo(() => {
     const parts = [];
     if (filterGrade !== 'all') parts.push(`Khối ${filterGrade}`);
-    if (selectedLessonId !== 'all') {
-      const folder = effectiveTree.find((f) => f.id === selectedLessonId);
-      if (folder) parts.push(folder.lessonName);
-    }
+    const folder = selectedLessonId !== 'all' ? effectiveTree.find((f) => f.id === selectedLessonId) : undefined;
+    if (folder) parts.push(folder.lessonName);
     if (selectedSubFolder !== 'all') {
       if (selectedSubFolder === 'kyThuat') parts.push('🏃 Động tác kỹ thuật');
       else if (selectedSubFolder === 'luyenTap') parts.push('👥 Luyện tập');
       else if (selectedSubFolder === 'vanDung') parts.push('🎯 Vận dụng');
-      else if (selectedSubFolder === 'troChoiKhoiDong') parts.push('🎮 Trò chơi khởi động');
-      else if (selectedSubFolder === 'troChoi') parts.push('🎮 Trò chơi vận động');
-      else if (selectedSubFolder === 'khoiDong') parts.push('⚡ Khởi động chung');
+      else if (selectedSubFolder === 'troChoiKhoiDong') {
+        const wName = folder?.subFolders.troChoiKhoiDong.items[0]?.gameName;
+        parts.push(wName ? `🔥 TC khởi động: ${wName}` : '🔥 Trò chơi khởi động');
+      } else if (selectedSubFolder === 'troChoi') {
+        const pName = folder?.subFolders.troChoi.items[0]?.gameName;
+        parts.push(pName ? `🎮 TC vận động: ${pName}` : '🎮 Trò chơi vận động');
+      } else if (selectedSubFolder === 'khoiDong') parts.push('⚡ Khởi động chung');
     }
     return parts.length > 0 ? parts.join(' > ') : 'Tất cả hình ảnh SGK';
   }, [filterGrade, selectedLessonId, selectedSubFolder, effectiveTree]);
@@ -708,6 +774,23 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                if (isGuest && onRequireAuth) {
+                  onRequireAuth('Tạo mới ảnh minh họa chất lượng cao 2K/4K');
+                  return;
+                }
+                setIsCreateHdOpen(true);
+              }}
+              className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
+              title="Vẽ mới hoàn toàn tranh minh họa chuẩn SGK độ phân giải 2K/4K sắc nét, không cần cắt ảnh mờ"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Tạo Ảnh Mới (2K/4K)</span>
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+            </button>
+
             <button
               onClick={() => {
                 if (isGuest && onRequireAuth) {
@@ -813,7 +896,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               setFilterGrade('1');
               setSelectedLessonId('all');
             }}
-            className={`px-3 py-1.5 rounded-xl font-bold transition border ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition border whitespace-nowrap shrink-0 ${
               filterGrade === '1'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -824,10 +907,24 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
           <button
             onClick={() => {
+              setFilterGrade('2');
+              setSelectedLessonId('all');
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition border whitespace-nowrap shrink-0 ${
+              filterGrade === '2'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            Khối 2 ({countByGrade('2')})
+          </button>
+
+          <button
+            onClick={() => {
               setFilterGrade('3');
               setSelectedLessonId('all');
             }}
-            className={`px-3 py-1.5 rounded-xl font-bold transition border ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition border whitespace-nowrap shrink-0 ${
               filterGrade === '3'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -838,10 +935,24 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
           <button
             onClick={() => {
+              setFilterGrade('4');
+              setSelectedLessonId('all');
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition border whitespace-nowrap shrink-0 ${
+              filterGrade === '4'
+                ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+            }`}
+          >
+            Khối 4 ({countByGrade('4')})
+          </button>
+
+          <button
+            onClick={() => {
               setFilterGrade('5');
               setSelectedLessonId('all');
             }}
-            className={`px-3 py-1.5 rounded-xl font-bold transition border ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition border whitespace-nowrap shrink-0 ${
               filterGrade === '5'
                 ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
                 : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
@@ -966,26 +1077,17 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                   <span>Xóa {selectedCount} ảnh</span>
                 </button>
 
-                <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 text-[11px]">
+                <div className="flex flex-wrap items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 text-[11px]">
                   <span className="text-slate-500 font-semibold px-1">Chuyển sang:</span>
-                  <button
-                    onClick={() => handleBatchMoveGrade('1')}
-                    className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded font-bold"
-                  >
-                    Khối 1
-                  </button>
-                  <button
-                    onClick={() => handleBatchMoveGrade('3')}
-                    className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded font-bold"
-                  >
-                    Khối 3
-                  </button>
-                  <button
-                    onClick={() => handleBatchMoveGrade('5')}
-                    className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded font-bold"
-                  >
-                    Khối 5
-                  </button>
+                  {(['1', '2', '3', '4', '5'] as const).map((gVal) => (
+                    <button
+                      key={gVal}
+                      onClick={() => handleBatchMoveGrade(gVal)}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded font-bold whitespace-nowrap shrink-0"
+                    >
+                      Khối {gVal}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}
@@ -1033,7 +1135,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Tree Directory Sidebar */}
         <div className="lg:col-span-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col max-h-[800px]">
-          <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
             <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
               <FolderTree className="w-4 h-4 text-blue-600" />
               <span>CÂY THƯ MỤC BÀI HỌC SGK</span>
@@ -1051,6 +1153,10 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               </button>
             )}
           </div>
+          <p className="text-[10.5px] text-slate-500 mb-2 flex items-center gap-1 leading-snug">
+            <Edit3 className="w-3 h-3 text-blue-500 shrink-0" />
+            <span>Bấm biểu tượng bút hoặc nháy đúp vào tên trò chơi / bài học để đổi tên thủ công khớp SGK.</span>
+          </p>
 
           {/* Root: Tất cả */}
           <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 text-xs pr-1">
@@ -1075,8 +1181,8 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               </span>
             </div>
 
-            {/* Tree Nodes by Grade: 1, 3, 5 */}
-            {([1, 3, 5] as const).map((g) => {
+            {/* Tree Nodes by Grade: 1, 2, 3, 4, 5 */}
+            {([1, 2, 3, 4, 5] as const).map((g) => {
               const gradeStr = String(g);
               const isGradeExpanded = !!expandedGrades[gradeStr];
               const isGradeActive = filterGrade === gradeStr && selectedLessonId === 'all';
@@ -1131,48 +1237,123 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                         const isLessonExpanded = !!expandedLessons[lesson.id];
                         const isLessonActive = selectedLessonId === lesson.id && selectedSubFolder === 'all';
                         const lCount = countByLesson(lesson.id);
+                        const warmupGameTitle =
+                          lesson.subFolders.troChoiKhoiDong.items[0]?.gameName || 'Trò chơi khởi động';
+                        const practiceGameTitle =
+                          lesson.subFolders.troChoi.items[0]?.gameName || 'Trò chơi vận động';
+                        const hasCustomOverride = Boolean(
+                          treeOverridesMap[lesson.id] && Object.keys(treeOverridesMap[lesson.id]).length > 0
+                        );
+                        const isEditingLessonName =
+                          inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'lessonName';
+                        const isEditingWarmup =
+                          inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'warmupGame';
+                        const isEditingPractice =
+                          inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'practiceGame';
 
                         return (
                           <div key={lesson.id} className="space-y-1">
                             {/* Lesson Node */}
-                            <div
-                              className={`p-1.5 rounded-lg flex items-center justify-between cursor-pointer transition text-[11px] ${
-                                isLessonActive
-                                  ? 'bg-blue-100/70 text-blue-900 font-bold'
-                                  : 'hover:bg-slate-50 text-slate-700'
-                              }`}
-                            >
+                            {isEditingLessonName ? (
                               <div
-                                className="flex items-center gap-1.5 flex-1 truncate"
-                                onClick={() => {
-                                  setFilterGrade(gradeStr);
-                                  setSelectedLessonId(lesson.id);
-                                  setSelectedSubFolder('all');
-                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                className="p-1 rounded-lg bg-white border border-blue-400 flex items-center gap-1 shadow-2xs"
                               >
-                                <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                <span className="truncate">{lesson.lessonName}</span>
-                              </div>
-
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-[9px] px-1 bg-slate-100 text-slate-600 rounded font-semibold">
-                                  {lCount}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleLessonExpand(lesson.id);
+                                <input
+                                  type="text"
+                                  autoFocus
+                                  value={inlineTreeEdit.value}
+                                  onChange={(e) =>
+                                    setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                                    if (e.key === 'Escape') setInlineTreeEdit(null);
                                   }}
-                                  className="p-0.5 hover:bg-slate-200 rounded"
+                                  className="flex-1 min-w-0 text-[11px] font-semibold text-slate-900 px-1.5 py-0.5 focus:outline-none"
+                                  placeholder="Nhập tên bài học..."
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleCommitInlineTreeEdit}
+                                  title="Lưu"
+                                  className="p-1 rounded bg-blue-600 text-white shrink-0"
                                 >
-                                  {isLessonExpanded ? (
-                                    <ChevronDown className="w-3 h-3 text-slate-400" />
-                                  ) : (
-                                    <ChevronRight className="w-3 h-3 text-slate-400" />
-                                  )}
+                                  <Check className="w-3 h-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setInlineTreeEdit(null)}
+                                  title="Hủy"
+                                  className="p-1 rounded bg-slate-100 text-slate-600 shrink-0"
+                                >
+                                  <X className="w-3 h-3" />
                                 </button>
                               </div>
-                            </div>
+                            ) : (
+                              <div
+                                className={`group p-1.5 rounded-lg flex items-center justify-between cursor-pointer transition text-[11px] ${
+                                  isLessonActive
+                                    ? 'bg-blue-100/70 text-blue-900 font-bold'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div
+                                  className="flex items-center gap-1.5 flex-1 truncate"
+                                  onClick={() => {
+                                    setFilterGrade(gradeStr);
+                                    setSelectedLessonId(lesson.id);
+                                    setSelectedSubFolder('all');
+                                  }}
+                                  onDoubleClick={(e) =>
+                                    handleStartInlineTreeEdit(e, lesson.id, 'lessonName', lesson.lessonName)
+                                  }
+                                  title={lesson.lessonName}
+                                >
+                                  <Folder className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                  <span className="truncate">{lesson.lessonName}</span>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {hasCustomOverride && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => handleResetLessonOverride(e, lesson.id)}
+                                      title="Khôi phục tên gốc cho bài học này"
+                                      className="p-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-800"
+                                    >
+                                      <RotateCcw className="w-2.5 h-2.5" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={(e) =>
+                                      handleStartInlineTreeEdit(e, lesson.id, 'lessonName', lesson.lessonName)
+                                    }
+                                    title="Đổi tên bài học thủ công"
+                                    className="p-0.5 rounded text-slate-400 hover:text-blue-700 hover:bg-blue-100 opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <span className="text-[9px] px-1 bg-slate-100 text-slate-600 rounded font-semibold">
+                                    {lCount}
+                                  </span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleLessonExpand(lesson.id);
+                                    }}
+                                    className="p-0.5 hover:bg-slate-200 rounded"
+                                  >
+                                    {isLessonExpanded ? (
+                                      <ChevronDown className="w-3 h-3 text-slate-400" />
+                                    ) : (
+                                      <ChevronRight className="w-3 h-3 text-slate-400" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
                             {/* 6 Standard Sub-folders inside each Lesson */}
                             {isLessonExpanded && (
@@ -1196,24 +1377,86 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                                   </span>
                                 </div>
 
-                                {/* 2. Trò chơi khởi động */}
-                                <div
-                                  onClick={() => {
-                                    setFilterGrade(gradeStr);
-                                    setSelectedLessonId(lesson.id);
-                                    setSelectedSubFolder('troChoiKhoiDong');
-                                  }}
-                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
-                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoiKhoiDong'
-                                      ? 'bg-purple-600 text-white font-bold'
-                                      : 'hover:bg-purple-50 text-slate-600'
-                                  }`}
-                                >
-                                  <span>🔥 Trò chơi khởi động</span>
-                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
-                                    {countBySubFolder(lesson.id, 'troChoiKhoiDong')}
-                                  </span>
-                                </div>
+                                {/* 2. Trò chơi khởi động (Hiển thị tên + Sửa thủ công trực tiếp) */}
+                                {isEditingWarmup ? (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded bg-white border border-purple-400 shadow-2xs space-y-1"
+                                  >
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={inlineTreeEdit.value}
+                                      onChange={(e) =>
+                                        setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                                        if (e.key === 'Escape') setInlineTreeEdit(null);
+                                      }}
+                                      className="w-full px-1.5 py-0.5 border border-slate-300 rounded text-[10.5px] font-semibold text-slate-900 focus:outline-none focus:border-purple-500"
+                                      placeholder="Tên trò chơi khởi động..."
+                                    />
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInlineTreeEdit(null)}
+                                        className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9.5px] font-semibold"
+                                      >
+                                        Hủy
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCommitInlineTreeEdit}
+                                        className="px-1.5 py-0.5 rounded bg-purple-600 text-white text-[9.5px] font-bold flex items-center gap-0.5"
+                                      >
+                                        <Check className="w-2.5 h-2.5" /> Lưu
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => {
+                                      setFilterGrade(gradeStr);
+                                      setSelectedLessonId(lesson.id);
+                                      setSelectedSubFolder('troChoiKhoiDong');
+                                    }}
+                                    onDoubleClick={(e) =>
+                                      handleStartInlineTreeEdit(e, lesson.id, 'warmupGame', warmupGameTitle)
+                                    }
+                                    className={`group p-1 rounded cursor-pointer flex items-center justify-between gap-1 transition ${
+                                      selectedLessonId === lesson.id && selectedSubFolder === 'troChoiKhoiDong'
+                                        ? 'bg-purple-600 text-white font-bold'
+                                        : 'hover:bg-purple-50 text-slate-600'
+                                    }`}
+                                  >
+                                    <span
+                                      className="truncate"
+                                      title={`Trò chơi khởi động: ${warmupGameTitle} (Nháy đúp hoặc bấm bút để đổi tên)`}
+                                    >
+                                      🔥 TC khởi động: <strong>{warmupGameTitle}</strong>
+                                    </span>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[9px] opacity-80 font-semibold tabular-nums">
+                                        {countBySubFolder(lesson.id, 'troChoiKhoiDong')}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) =>
+                                          handleStartInlineTreeEdit(e, lesson.id, 'warmupGame', warmupGameTitle)
+                                        }
+                                        title="Đổi tên Trò chơi khởi động khớp SGK"
+                                        className={`p-0.5 rounded transition ${
+                                          selectedLessonId === lesson.id && selectedSubFolder === 'troChoiKhoiDong'
+                                            ? 'text-purple-100 hover:bg-purple-700'
+                                            : 'text-purple-600 hover:bg-purple-100'
+                                        }`}
+                                      >
+                                        <Edit3 className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* 3. Kỹ thuật động tác */}
                                 <div
@@ -1253,24 +1496,86 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                                   </span>
                                 </div>
 
-                                {/* 5. Trò chơi vận động */}
-                                <div
-                                  onClick={() => {
-                                    setFilterGrade(gradeStr);
-                                    setSelectedLessonId(lesson.id);
-                                    setSelectedSubFolder('troChoi');
-                                  }}
-                                  className={`p-1 rounded cursor-pointer flex items-center justify-between transition ${
-                                    selectedLessonId === lesson.id && selectedSubFolder === 'troChoi'
-                                      ? 'bg-rose-600 text-white font-bold'
-                                      : 'hover:bg-rose-50 text-slate-600'
-                                  }`}
-                                >
-                                  <span>🎮 Trò chơi vận động</span>
-                                  <span className="text-[9px] opacity-80 font-semibold tabular-nums">
-                                    {countBySubFolder(lesson.id, 'troChoi')}
-                                  </span>
-                                </div>
+                                {/* 5. Trò chơi vận động (Hiển thị tên + Sửa thủ công trực tiếp) */}
+                                {isEditingPractice ? (
+                                  <div
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-1.5 rounded bg-white border border-rose-400 shadow-2xs space-y-1"
+                                  >
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={inlineTreeEdit.value}
+                                      onChange={(e) =>
+                                        setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                                        if (e.key === 'Escape') setInlineTreeEdit(null);
+                                      }}
+                                      className="w-full px-1.5 py-0.5 border border-slate-300 rounded text-[10.5px] font-semibold text-slate-900 focus:outline-none focus:border-rose-500"
+                                      placeholder="Tên trò chơi vận động..."
+                                    />
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setInlineTreeEdit(null)}
+                                        className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 text-[9.5px] font-semibold"
+                                      >
+                                        Hủy
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCommitInlineTreeEdit}
+                                        className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9.5px] font-bold flex items-center gap-0.5"
+                                      >
+                                        <Check className="w-2.5 h-2.5" /> Lưu
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => {
+                                      setFilterGrade(gradeStr);
+                                      setSelectedLessonId(lesson.id);
+                                      setSelectedSubFolder('troChoi');
+                                    }}
+                                    onDoubleClick={(e) =>
+                                      handleStartInlineTreeEdit(e, lesson.id, 'practiceGame', practiceGameTitle)
+                                    }
+                                    className={`group p-1 rounded cursor-pointer flex items-center justify-between gap-1 transition ${
+                                      selectedLessonId === lesson.id && selectedSubFolder === 'troChoi'
+                                        ? 'bg-rose-600 text-white font-bold'
+                                        : 'hover:bg-rose-50 text-slate-600'
+                                    }`}
+                                  >
+                                    <span
+                                      className="truncate"
+                                      title={`Trò chơi vận động: ${practiceGameTitle} (Nháy đúp hoặc bấm bút để đổi tên)`}
+                                    >
+                                      🎮 TC vận động: <strong>{practiceGameTitle}</strong>
+                                    </span>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <span className="text-[9px] opacity-80 font-semibold tabular-nums">
+                                        {countBySubFolder(lesson.id, 'troChoi')}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) =>
+                                          handleStartInlineTreeEdit(e, lesson.id, 'practiceGame', practiceGameTitle)
+                                        }
+                                        title="Đổi tên Trò chơi vận động khớp SGK"
+                                        className={`p-0.5 rounded transition ${
+                                          selectedLessonId === lesson.id && selectedSubFolder === 'troChoi'
+                                            ? 'text-rose-100 hover:bg-rose-700'
+                                            : 'text-rose-600 hover:bg-rose-100'
+                                        }`}
+                                      >
+                                        <Edit3 className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
 
                                 {/* 6. Vận dụng */}
                                 <div
@@ -1334,7 +1639,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               </div>
               <p className="font-bold text-slate-700 text-sm">Thư mục này chưa có hình ảnh nào.</p>
               <p className="text-slate-500 max-w-md mx-auto">
-                Hãy mở tab <strong>"1. Quét & Bóc Tách SGK"</strong>, chọn trang sách của Khối {filterGrade === 'all' ? '1, 3, hoặc 5' : filterGrade} và dùng chuột quét vùng ảnh để tự động lưu vào đây.
+                Hãy mở tab <strong>"1. Quét & Bóc Tách SGK"</strong>, chọn trang sách của Khối {filterGrade === 'all' ? '1, 2, 3, 4 hoặc 5' : filterGrade} và dùng chuột quét vùng ảnh để tự động lưu vào đây.
               </p>
             </div>
           ) : (
@@ -1440,7 +1745,9 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                             className="w-full bg-slate-50 border border-slate-200 rounded p-1 text-slate-800 font-semibold focus:outline-none"
                           >
                             <option value="1">Khối 1</option>
+                            <option value="2">Khối 2</option>
                             <option value="3">Khối 3</option>
+                            <option value="4">Khối 4</option>
                             <option value="5">Khối 5</option>
                           </select>
                         </div>
@@ -1696,6 +2003,28 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           }}
         />
       )}
+      {/* Studio Create Brand-New HD/2K/4K Image Modal */}
+      <CreateHdImageModal
+        isOpen={isCreateHdOpen}
+        onClose={() => setIsCreateHdOpen(false)}
+        defaultGrade={filterGrade === 'all' ? '1' : filterGrade}
+        onSaveToLibrary={(newImg) => {
+          setImages((prev) => {
+            const updated = [newImg, ...prev];
+            saveImagesDB(updated).catch(() => {});
+            return updated;
+          });
+        }}
+        onSaveAndAttachToLesson={(newImg) => {
+          setImages((prev) => {
+            const updated = [newImg, ...prev];
+            saveImagesDB(updated).catch(() => {});
+            return updated;
+          });
+          onOpenSelectCellModal(newImg);
+        }}
+        showToast={showToast}
+      />
     </div>
   );
 };

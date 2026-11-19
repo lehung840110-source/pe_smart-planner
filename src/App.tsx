@@ -21,7 +21,13 @@ import { AuthModal } from './components/AuthModal';
 import { LockedFeatureGate } from './components/LockedFeatureGate';
 import { FormationDiagram, saveCustomFormationToStorage, standardFormationDiagrams } from './data/formationDiagrams';
 import { ParsedLessonFileResult, parseLessonFile, customTemplateToMasterPlan } from './utils/documentParser';
-import { exportWordDocument } from './utils/exportUtils';
+import { exportWordDocument, buildWordExportPackage } from './utils/exportUtils';
+import {
+  findMatchingGameSlotsAcrossPlans,
+  applyGameImageToMatchingPlans,
+  extractGameNameFromRowText,
+  doGameNamesMatch
+} from './utils/planAutoMatcher';
 import { useAuth } from './contexts/AuthContext';
 import {
   defaultSchoolSettings,
@@ -31,7 +37,7 @@ import {
 } from './data/defaultData';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from './data/masterTemplateTuan8';
 import { masterPlansTuan9 } from './data/masterTemplateTuan9';
-import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate } from './types/gdtc';
+import { GradeLevel, SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate } from './types/gdtc';
 import {
   getAllImagesDB,
   saveImageDB,
@@ -78,7 +84,7 @@ export default function App() {
   const [scenarios, setScenarios] = useState<ScenarioItem[]>(defaultScenarios);
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>(defaultSchoolSettings);
   const [currentMasterPlan, setCurrentMasterPlan] = useState<MasterPlanItem>(masterPlansTuan8.k1_t15);
-  // Synchronized All-Grades Master Plans Dictionary (K1, K3, K5 across weeks)
+  // Synchronized All-Grades Master Plans Dictionary (K1-K5 across weeks)
   const [allMasterPlans, setAllMasterPlans] = useState<Record<string, MasterPlanItem>>(() => {
     return {
       ...JSON.parse(JSON.stringify(masterPlansTuan8)),
@@ -122,15 +128,25 @@ export default function App() {
 
   // Google Drive Modal State
   const [isGoogleDriveOpen, setIsGoogleDriveOpen] = useState<boolean>(false);
+  const [googleDriveBundle, setGoogleDriveBundle] = useState<{
+    week: number;
+    title: string;
+    plans: MasterPlanItem[];
+    scheduleRows?: any[];
+    includeSchedule: boolean;
+    settings: SchoolSettings;
+    approvalDate?: string;
+    dateRange?: string;
+  } | null>(null);
 
   // Backup & Restore Modal State
   const [isBackupRestoreOpen, setIsBackupRestoreOpen] = useState<boolean>(false);
 
   // SGK Page Jump State
-  const [scanInitialGrade, setScanInitialGrade] = useState<1 | 3 | 5 | undefined>(undefined);
+  const [scanInitialGrade, setScanInitialGrade] = useState<GradeLevel | undefined>(undefined);
   const [scanInitialPage, setScanInitialPage] = useState<number | undefined>(undefined);
 
-  const handleNavigateToScanFromLesson = (targetGrade: 1 | 3 | 5, targetPage?: number) => {
+  const handleNavigateToScanFromLesson = (targetGrade: GradeLevel, targetPage?: number) => {
     if (isGuest) {
       requireAuth('Quét & bóc tách ảnh trực tiếp từ SGK (Tab 1)');
       return;
@@ -759,7 +775,7 @@ export default function App() {
       const currentPlanSnapshot: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_k${grade}_t${lessonNum}_w${week}`,
-        grade: grade as 1 | 3 | 5,
+        grade: grade as GradeLevel,
         week,
         lessonNum,
         topic,
@@ -803,7 +819,7 @@ export default function App() {
       return;
     }
 
-    const ppct = getGradePpctInfo(nextGrade as 1 | 3 | 5, nextWeek);
+    const ppct = getGradePpctInfo(nextGrade as GradeLevel, nextWeek);
     const isSecondPeriod = ppct.periods[1] === nextLessonNum;
     const nextTitle = `${ppct.defaultTitle} (${isSecondPeriod ? 'Tiết 2' : 'Tiết 1'})`;
     const freshRows = createBalancedGranularLessonRows(nextGrade, nextTitle, images);
@@ -842,7 +858,7 @@ export default function App() {
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_k${grade}_t${lessonNum}_w${week}`,
-        grade: grade as 1 | 3 | 5,
+        grade: grade as GradeLevel,
         week,
         lessonNum,
         topic,
@@ -865,7 +881,7 @@ export default function App() {
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_k${grade}_t${lessonNum}_w${week}`,
-        grade: grade as 1 | 3 | 5,
+        grade: grade as GradeLevel,
         week,
         lessonNum,
         topic,
@@ -897,7 +913,7 @@ export default function App() {
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_${key}_w${week}`,
-        grade: grade as 1 | 3 | 5,
+        grade: grade as GradeLevel,
         week,
         lessonNum,
         topic,
@@ -931,7 +947,7 @@ export default function App() {
     const syncedPlan: MasterPlanItem = normalizeMasterPlan({
       ...currentMasterPlan,
       id: `plan_${key}_w${week}`,
-      grade: grade as 1 | 3 | 5,
+      grade: grade as GradeLevel,
       week,
       lessonNum,
       topic,
@@ -1029,6 +1045,86 @@ export default function App() {
       `Đã chèn "${imageToAttach.title}" vào ${
         column === 'content' ? 'Cột Nội Dung' : 'Cột Hoạt Động HS'
       } thành công!`
+    );
+  };
+
+  const getUniqueSavedMasterPlans = (): MasterPlanItem[] => {
+    const seen = new Set<string>();
+    const list: MasterPlanItem[] = [];
+    Object.values(allMasterPlans).forEach((plan) => {
+      if (!plan || !plan.id) return;
+      const dedupeKey = `${plan.week}_${plan.grade}_${plan.lessonNum}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      list.push(plan);
+    });
+    return list;
+  };
+
+  const getMatchingMultiGradeGameTargets = (gameName: string) => {
+    return findMatchingGameSlotsAcrossPlans(getUniqueSavedMasterPlans(), gameName, 'any');
+  };
+
+  const handleConfirmAttachImageForAllMatchingGrades = (gameName: string) => {
+    if (!imageToAttach) return;
+    const uniquePlans = getUniqueSavedMasterPlans();
+    const { updatedPlans, matchedTargets } = applyGameImageToMatchingPlans(
+      uniquePlans,
+      imageToAttach.imgUrl,
+      imageToAttach.title,
+      gameName,
+      { slotHint: 'any' }
+    );
+
+    if (matchedTargets.length > 0) {
+      const planMapUpdate: Record<string, MasterPlanItem> = {};
+      updatedPlans.forEach((p) => {
+        const wasTouched = matchedTargets.some((t) => t.planId === p.id);
+        if (!wasTouched) return;
+        const wkKey = `k${p.grade}_t${p.lessonNum}_w${p.week}`;
+        const genKey = `k${p.grade}_t${p.lessonNum}`;
+        planMapUpdate[wkKey] = p;
+        planMapUpdate[genKey] = p;
+      });
+      setAllMasterPlans((prev) => ({ ...prev, ...planMapUpdate }));
+    }
+
+    // Also update current open lessonRows in TabGenerator if any game row matches the same game name
+    setLessonRows((prev) =>
+      prev.map((row) => {
+        const rowGame = extractGameNameFromRowText(row.content || '');
+        if (!rowGame || !doGameNamesMatch(rowGame, gameName)) return row;
+        const isCol1 = row.content.toLowerCase().includes('1.3.') || row.content.toLowerCase().includes('3.5.');
+        if (isCol1) {
+          const existing =
+            row.contentImages && row.contentImages.length > 0
+              ? [...row.contentImages]
+              : row.contentImgUrl
+              ? [{ id: 'content_img_1', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh trò chơi' }]
+              : [];
+          const nextList = existing.some((it) => it.url === imageToAttach.imgUrl)
+            ? existing
+            : [...existing, { id: `game_sync_${Date.now()}`, url: imageToAttach.imgUrl, title: imageToAttach.title }];
+          return {
+            ...row,
+            contentImgUrl: nextList[0]?.url,
+            contentImgTitle: nextList[0]?.title,
+            contentImages: nextList
+          };
+        }
+        return {
+          ...row,
+          hsImgUrl: imageToAttach.imgUrl,
+          hsImgTitle: imageToAttach.title
+        };
+      })
+    );
+
+    const grades = Array.from(new Set(matchedTargets.map((t) => t.grade))).sort((a, b) => a - b);
+    showToast(
+      `🎮 Đã tự động chèn ảnh "${imageToAttach.title}" vào ${matchedTargets.length} tiết cùng trò chơi "${gameName}" (${grades
+        .map((g) => `Khối ${g}`)
+        .join(', ')})!`
     );
   };
 
@@ -1440,9 +1536,14 @@ export default function App() {
         onOpenImport={() =>
           isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
         }
-        onOpenGoogleDrive={() =>
-          isGuest ? requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive') : setIsGoogleDriveOpen(true)
-        }
+        onOpenGoogleDrive={() => {
+          if (isGuest) {
+            requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive');
+            return;
+          }
+          setGoogleDriveBundle(null);
+          setIsGoogleDriveOpen(true);
+        }}
         onOpenBackupRestore={() =>
           isGuest ? requireAuth('Sao lưu & Khôi phục toàn bộ dữ liệu') : setIsBackupRestoreOpen(true)
         }
@@ -1454,7 +1555,7 @@ export default function App() {
         }
         onOpenPpctManager={() => {
           handleTabChange('tab-export');
-          showToast('📊 Chuyển đến Xem trước & Rà soát Phân phối chương trình (PPCT) 3 khối!');
+          showToast('📊 Chuyển đến Xem trước & Rà soát Phân phối chương trình (PPCT) 5 khối!');
         }}
         currentWeek={week}
         onSelectCurrentWeek={() => {
@@ -1508,9 +1609,9 @@ export default function App() {
             <LockedFeatureGate
               badgeText="Tab 1 · Bóc Tách SGK"
               title="Tab 1 · Quét & Bóc Tách Ảnh Từ SGK Điện Tử"
-              description="Trích xuất ảnh động tác và trò chơi trực tiếp từ sách giáo khoa GDTC Kết nối tri thức (Khối 1, 3, 5), làm sạch nền AI và phân tích kỹ thuật bằng Gemini Vision dành riêng cho thành viên."
+              description="Trích xuất ảnh động tác và trò chơi trực tiếp từ sách giáo khoa GDTC Kết nối tri thức (Khối 1, 2, 3, 4, 5), làm sạch nền AI và phân tích kỹ thuật bằng Gemini Vision dành riêng cho thành viên."
               highlights={[
-                'Cắt vùng ảnh chuẩn nét cao từ từng trang SGK Khối 1, 3, 5',
+                'Cắt vùng ảnh chuẩn nét cao từ từng trang SGK Khối 1, 2, 3, 4, 5',
                 'Tự động phân tích tên động tác, nhịp đếm bằng Gemini Vision AI',
                 'Làm sạch nền & khử nhiễu ảnh scan trước khi đưa vào giáo án',
                 'Lưu trực tiếp vào Thư viện ảnh & gắn tự động vào đúng tiết học'
@@ -1529,6 +1630,7 @@ export default function App() {
               onOpenBatchUpload={() => {
                 handleTabChange('tab-img-library');
               }}
+              showToast={showToast}
               initialGrade={scanInitialGrade}
               initialPage={scanInitialPage}
             />
@@ -1724,7 +1826,7 @@ export default function App() {
             }}
             onSaveMultipleOfficialVersions={(plans) => {
               if (isGuest) {
-                requireAuth('Lưu bộ giáo án 3 khối vào Lịch sử & Cơ sở dữ liệu');
+                requireAuth('Lưu bộ giáo án 5 khối vào Lịch sử & Cơ sở dữ liệu');
                 return;
               }
               handleSaveMultipleOfficialVersions(plans, 'tab-export');
@@ -1776,9 +1878,14 @@ export default function App() {
               setLessonRows(JSON.parse(JSON.stringify(updated.rows)));
             }}
             onNavigateToLibrary={() => handleTabChange('tab-img-library')}
-            onOpenGoogleDrive={() =>
-              isGuest ? requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive') : setIsGoogleDriveOpen(true)
-            }
+            onOpenGoogleDrive={(bundle) => {
+              if (isGuest) {
+                requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive');
+                return;
+              }
+              setGoogleDriveBundle(bundle || null);
+              setIsGoogleDriveOpen(true);
+            }}
             onNavigateToGenerator={() => handleTabChange('tab-generator')}
             isGuest={isGuest}
             onRequireAuth={(feature) => requireAuth(feature)}
@@ -1832,6 +1939,8 @@ export default function App() {
         imageItem={imageToAttach}
         lessonRows={lessonRows}
         onConfirm={handleConfirmAttachImage}
+        getMatchingMultiGradeTargets={getMatchingMultiGradeGameTargets}
+        onConfirmAllMatchingGrades={handleConfirmAttachImageForAllMatchingGrades}
       />
 
       <ScenarioModal
@@ -1977,26 +2086,83 @@ export default function App() {
       {isGoogleDriveOpen && (
         <GoogleDriveModal
           isOpen={isGoogleDriveOpen}
-          onClose={() => setIsGoogleDriveOpen(false)}
+          onClose={() => {
+            setIsGoogleDriveOpen(false);
+            setGoogleDriveBundle(null);
+          }}
           currentPlanData={{
-            week,
-            title,
-            generateDocxBlob: async () => {
-              // Generate standard docx or doc blob for the current plan
-              return new Blob([`Kế hoạch bài dạy Tuần ${week}: ${title}`], {
-                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            week: googleDriveBundle?.week ?? week,
+            title: googleDriveBundle?.title ?? title,
+            generateGoogleDocHtml: async () => {
+              const targetPlans: MasterPlanItem[] =
+                googleDriveBundle && googleDriveBundle.plans.length > 0
+                  ? googleDriveBundle.plans
+                  : [
+                      {
+                        ...currentMasterPlan,
+                        grade,
+                        week,
+                        lessonNum,
+                        topic,
+                        title,
+                        rows: lessonRows
+                      }
+                    ];
+              const targetWeek = googleDriveBundle?.week ?? week;
+              const pkg = await buildWordExportPackage({
+                plans: targetPlans,
+                scheduleRows: googleDriveBundle?.scheduleRows,
+                settings: googleDriveBundle?.settings ?? schoolSettings,
+                week: targetWeek,
+                includeSchedule: Boolean(googleDriveBundle?.includeSchedule),
+                approvalDate: googleDriveBundle?.approvalDate,
+                dateRange: googleDriveBundle?.dateRange,
+                format: 'docx',
+                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`
               });
+              return pkg.html;
+            },
+            generateDocxBlob: async () => {
+              const targetPlans: MasterPlanItem[] =
+                googleDriveBundle && googleDriveBundle.plans.length > 0
+                  ? googleDriveBundle.plans
+                  : [
+                      {
+                        ...currentMasterPlan,
+                        grade,
+                        week,
+                        lessonNum,
+                        topic,
+                        title,
+                        rows: lessonRows
+                      }
+                    ];
+              const targetWeek = googleDriveBundle?.week ?? week;
+              const pkg = await buildWordExportPackage({
+                plans: targetPlans,
+                scheduleRows: googleDriveBundle?.scheduleRows,
+                settings: googleDriveBundle?.settings ?? schoolSettings,
+                week: targetWeek,
+                includeSchedule: Boolean(googleDriveBundle?.includeSchedule),
+                approvalDate: googleDriveBundle?.approvalDate,
+                dateRange: googleDriveBundle?.dateRange,
+                format: 'docx',
+                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`
+              });
+              return pkg.docxBlob;
             },
             generateJsonBlob: () => {
               const fullData = {
-                week,
+                week: googleDriveBundle?.week ?? week,
                 grade,
                 lessonNum,
                 topic,
-                title,
-                schoolSettings,
+                title: googleDriveBundle?.title ?? title,
+                schoolSettings: googleDriveBundle?.settings ?? schoolSettings,
                 currentMasterPlan,
                 lessonRows,
+                mergedBundlePlans: googleDriveBundle?.plans,
+                mergedBundleSchedule: googleDriveBundle?.scheduleRows,
                 exportedAt: new Date().toISOString()
               };
               return new Blob([JSON.stringify(fullData, null, 2)], {

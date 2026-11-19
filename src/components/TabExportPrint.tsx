@@ -33,10 +33,11 @@ import {
   Star,
   Clock,
   FileEdit,
-  Lock
+  Lock,
+  Gamepad2
 } from 'lucide-react';
 import mammoth from 'mammoth';
-import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate } from '../types/gdtc';
+import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel } from '../types/gdtc';
 import { customTemplateToMasterPlan } from '../utils/documentParser';
 import {
   RichTextWithImages,
@@ -87,7 +88,12 @@ import {
   sanitizePlanRowsVanDung,
   sanitizeRowColumn1Media,
   isInvalidColumn1AttachmentForRow,
-  applyGradeDistinctFormationsToRows
+  applyGradeDistinctFormationsToRows,
+  extractGameNameFromRowText,
+  findMatchingGameSlotsAcrossPlans,
+  applyGameImageToMatchingPlans,
+  autoSyncSharedGameImagesAcrossPlans,
+  normalizeGameNameForMatch
 } from '../utils/planAutoMatcher';
 import {
   cleanLessonTitleForHeader,
@@ -145,7 +151,16 @@ interface TabExportPrintProps {
   showToast: (msg: string) => void;
   onUpdateMasterPlan?: (updated: MasterPlanItem) => void;
   onNavigateToLibrary?: () => void;
-  onOpenGoogleDrive?: () => void;
+  onOpenGoogleDrive?: (bundle?: {
+    week: number;
+    title: string;
+    plans: MasterPlanItem[];
+    scheduleRows?: WeeklyMasterScheduleRow[];
+    includeSchedule: boolean;
+    settings: SchoolSettings;
+    approvalDate?: string;
+    dateRange?: string;
+  }) => void;
   onNavigateToGenerator?: () => void;
   isGuest?: boolean;
   onRequireAuth?: (feature: string) => void;
@@ -338,7 +353,51 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   }, [initialWeek]);
 
   // View mode
-  const [viewMode, setViewMode] = useState<'all_grades' | 'grade_1' | 'grade_3' | 'grade_5' | 'single' | 'custom_template'>('all_grades');
+  const [viewMode, setViewMode] = useState<'all_grades' | 'grade_1' | 'grade_2' | 'grade_3' | 'grade_4' | 'grade_5' | 'single' | 'custom_template'>('all_grades');
+
+  // Multi-grade checkboxes for merging selected grades into the weekly lesson plan bundle
+  const [selectedBundleGrades, setSelectedBundleGrades] = useState<GradeLevel[]>(() => {
+    try {
+      const saved = localStorage.getItem('gdtc_preview_bundle_grades_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const valid = parsed
+            .map((n) => Number(n))
+            .filter((n): n is GradeLevel => [1, 2, 3, 4, 5].includes(n))
+            .sort((a, b) => a - b);
+          if (valid.length > 0) return Array.from(new Set(valid));
+        }
+      }
+    } catch {}
+    return [1, 2, 3, 4, 5];
+  });
+  const [includeScheduleInBundle, setIncludeScheduleInBundle] = useState<boolean>(true);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('gdtc_preview_bundle_grades_v1', JSON.stringify(selectedBundleGrades));
+    } catch {}
+  }, [selectedBundleGrades]);
+
+  const toggleBundleGrade = (gradeToToggle: GradeLevel) => {
+    setViewMode('all_grades');
+    setSelectedBundleGrades((prev) => {
+      if (prev.includes(gradeToToggle)) {
+        if (prev.length <= 1) {
+          showToast('Cần giữ chọn ít nhất 1 khối lớp để hiển thị giáo án tuần.');
+          return prev;
+        }
+        return prev.filter((g) => g !== gradeToToggle);
+      }
+      return [...prev, gradeToToggle].sort((a, b) => a - b);
+    });
+  };
+
+  const applyBundleGradePreset = (grades: GradeLevel[]) => {
+    setViewMode('all_grades');
+    setSelectedBundleGrades([...grades].sort((a, b) => a - b));
+  };
 
   const activeUserCustomTemplate = useMemo(
     () =>
@@ -414,9 +473,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       ? customWeeklyThemes
     : getWeeklyIntegrationThemes(selectedWeek);
 
-  // Multi-grade PPCT
+  // Multi-grade PPCT (Khối 1 - 5)
   const ppctG1 = getGradePpctInfo(1, selectedWeek);
+  const ppctG2 = getGradePpctInfo(2, selectedWeek);
   const ppctG3 = getGradePpctInfo(3, selectedWeek);
+  const ppctG4 = getGradePpctInfo(4, selectedWeek);
   const ppctG5 = getGradePpctInfo(5, selectedWeek);
 
   // Initialize all plans for the selected week
@@ -458,7 +519,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           ...activeUserCustomTemplate,
           title: updatedCustom.title,
           topic: updatedCustom.topic,
-          grade: (updatedCustom.grade || 1) as 1 | 3 | 5,
+          grade: (updatedCustom.grade || 1) as GradeLevel,
           week: updatedCustom.week,
           lessonNum: updatedCustom.lessonNum,
           rows: updatedCustom.rows,
@@ -512,9 +573,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       return;
     }
     const updatedPlans = plansByGrade.map((p) => {
-      const rule = getCurriculumRule(p.grade as (1 | 3 | 5), p.lessonNum, selectedWeek);
+      const rule = getCurriculumRule(p.grade as GradeLevel, p.lessonNum, selectedWeek);
       const balancedRows = createBalanced7LessonRows(
-        p.grade as (1 | 3 | 5),
+        p.grade as GradeLevel,
         p.title,
         images,
         rule.warmupGame,
@@ -540,7 +601,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   // 1-Click: Automatically synchronize curriculum, lesson titles, movements, games, and disabled students accommodations
   const handleAutoSyncAllCurriculum = () => {
     if (isGuest && onRequireAuth) {
-      onRequireAuth('Đồng bộ 100% chuẩn SGK cả 3 khối');
+      onRequireAuth('Đồng bộ 100% chuẩn SGK cả 5 khối');
       return;
     }
     const result = autoSyncCurriculumAndPlans(plansByGrade, weeklyScheduleRows, selectedWeek, images);
@@ -647,7 +708,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setIsUploadPlanModalOpen(false);
     setPasteTableText('');
     showToast(
-      `✅ Đã nạp ${rows.length} tiết giảng dạy Tuần ${targetWeek} và tự động trích xuất nội dung tích hợp (QPAN, Năng lực số, Môi trường) vào toàn bộ giáo án 3 khối!`
+      `✅ Đã nạp ${rows.length} tiết giảng dạy Tuần ${targetWeek} và tự động trích xuất nội dung tích hợp (QPAN, Năng lực số, Môi trường) vào toàn bộ giáo án 5 khối!`
     );
   };
 
@@ -689,7 +750,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         return {
           ...p,
           title: match.lessonTitle,
-          rows: buildOfficialLessonRows(p.grade as 1 | 3 | 5, p.lessonNum, p.topic, match.lessonTitle)
+          rows: buildOfficialLessonRows(p.grade as GradeLevel, p.lessonNum, p.topic, match.lessonTitle)
         };
       }
       return p;
@@ -700,7 +761,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
   // Builds standard 1:1 granular horizontally aligned lesson rows where each sub-activity stands on its own row
   const buildOfficialLessonRows = (
-    gradeVal: 1 | 3 | 5,
+    gradeVal: GradeLevel,
     pNum: number,
     topicName: string,
     titleName: string,
@@ -712,7 +773,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
   // Build factory/SGK baseline plan for a specific (grade, lessonNum, week) slot (used when no user edits exist or for diff comparison)
   const buildBaselinePlanForSlot = (
-    g: 1 | 3 | 5,
+    g: GradeLevel,
     pNum: number,
     fallbackKey: string,
     overrides?: {
@@ -1055,7 +1116,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
   // Resolve a grade's master plan: ALWAYS prioritize the user's last edited / active version in planVersionStore!
   const resolvePlan = (
-    g: 1 | 3 | 5,
+    g: GradeLevel,
     pNum: number,
     fallbackKey: string,
     overrides?: {
@@ -1239,8 +1300,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const list: MasterPlanItem[] = [
       resolvePlan(1, ppctG1.periods[0], 'k1_t15', overrides),
       resolvePlan(1, ppctG1.periods[1], 'k1_t16', overrides),
+      resolvePlan(2, ppctG2.periods[0], 'k2_t15', overrides),
+      resolvePlan(2, ppctG2.periods[1], 'k2_t16', overrides),
       resolvePlan(3, ppctG3.periods[0], 'k3_t15', overrides),
       resolvePlan(3, ppctG3.periods[1], 'k3_t16', overrides),
+      resolvePlan(4, ppctG4.periods[0], 'k4_t15', overrides),
+      resolvePlan(4, ppctG4.periods[1], 'k4_t16', overrides),
       resolvePlan(5, ppctG5.periods[0], 'k5_t15', overrides),
       resolvePlan(5, ppctG5.periods[1], 'k5_t16', overrides),
     ];
@@ -1445,7 +1510,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const targetPlan = getEditablePlansList().find((p) => p.id === planId);
     if (!targetPlan) return;
 
-    const rule = getCurriculumRule(targetPlan.grade as 1 | 3 | 5, targetPlan.lessonNum, selectedWeek);
+    const rule = getCurriculumRule(targetPlan.grade as GradeLevel, targetPlan.lessonNum, selectedWeek);
 
     const updatedRows = splitAndAlignRows1to1(
       targetPlan.rows,
@@ -1529,6 +1594,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     lessonTitle?: string;
     rowName?: string;
     category?: ImageClassificationCategory;
+    gameName?: string;
   } | null>(null);
 
   const detectRowSlotMeta = (
@@ -1646,16 +1712,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const targetPlan = getEditablePlansList().find((p) => p.id === planId);
     const targetRow = targetPlan?.rows?.[rowIndex];
     const detected = detectRowSlotMeta(targetRow?.content, rowIndex, col, query);
+    const resolvedCategory = forcedCategory || detected.category;
+    const detectedGameName =
+      resolvedCategory === 'tro_choi_kd' || resolvedCategory === 'tro_choi_vd'
+        ? extractGameNameFromRowText(targetRow?.content || '')
+        : '';
 
     setPickerTarget({
       planId,
       rowIndex,
       col,
-      searchQuery: query || detected.defaultQuery,
+      searchQuery: detectedGameName || query || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
       rowName: `${detected.rowName} - ${col === 'content' ? 'Cột 1 (Nội dung)' : col === 'gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)'}`,
-      category: forcedCategory || detected.category
+      category: resolvedCategory,
+      gameName: detectedGameName || undefined
     });
     setPickerOpen(true);
   };
@@ -1672,6 +1744,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const targetRow = targetPlan?.rows?.[rowIndex];
     const colName = col === 'inline_content' ? 'Cột 1 (Nội dung)' : col === 'inline_gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)';
     const detected = detectRowSlotMeta(targetRow?.content, rowIndex, col, query);
+    const detectedGameName =
+      detected.category === 'tro_choi_kd' || detected.category === 'tro_choi_vd'
+        ? extractGameNameFromRowText(targetRow?.content || '')
+        : '';
 
     setPickerTarget({
       planId,
@@ -1679,11 +1755,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       col,
       cursorStart,
       cursorEnd,
-      searchQuery: query || detected.defaultQuery,
+      searchQuery: detectedGameName || query || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
       rowName: `Chèn ảnh vào dòng văn bản - ${colName} (${detected.rowName})`,
-      category: detected.category
+      category: detected.category,
+      gameName: detectedGameName || undefined
     });
     setPickerOpen(true);
   };
@@ -1785,6 +1862,162 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setPickerOpen(false);
     setPickerTarget(null);
     showToast(`Đã chèn hình ảnh: "${imgTitle}" vào bảng giáo án!`);
+  };
+
+  const handleAttachImageForMatchingGrades = (
+    imgUrl: string,
+    imgTitle: string,
+    matchedGameName: string
+  ) => {
+    if (!pickerTarget) return;
+    const { planId, rowIndex, col, cursorStart, cursorEnd, category } = pickerTarget;
+
+    // 1. Apply to the clicked target cell first
+    const basePlans = getEditablePlansList().map((p) => {
+      if (p.id !== planId) return p;
+      const newRows = [...p.rows];
+      if (col === 'inline_content') {
+        const oldText = newRows[rowIndex].content || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          content: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'inline_gv') {
+        const oldText = newRows[rowIndex].gv || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          gv: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'inline_hs') {
+        const oldText = newRows[rowIndex].hs || '';
+        const start = cursorStart ?? oldText.length;
+        const end = cursorEnd ?? start;
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          hs: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
+        };
+      } else if (col === 'content') {
+        const currentContentImages =
+          newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0
+            ? [...newRows[rowIndex].contentImages!]
+            : newRows[rowIndex].contentImgUrl
+            ? [{ id: 'content_img_1', url: newRows[rowIndex].contentImgUrl!, title: newRows[rowIndex].contentImgTitle || 'Ảnh trò chơi' }]
+            : [];
+        if (!currentContentImages.some((it) => it.url === imgUrl)) {
+          currentContentImages.push({
+            id: `content_img_${Date.now()}`,
+            url: imgUrl,
+            title: imgTitle
+          });
+        }
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          contentImgUrl: currentContentImages[0]?.url,
+          contentImgTitle: currentContentImages[0]?.title,
+          contentImages: currentContentImages
+        };
+      } else if (col === 'gv') {
+        const currentGvImages =
+          newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0
+            ? [...newRows[rowIndex].gvImages!]
+            : newRows[rowIndex].gvImgUrl
+            ? [{ id: 'gv_img_1', url: newRows[rowIndex].gvImgUrl!, title: newRows[rowIndex].gvImgTitle || 'Hình minh họa GV' }]
+            : [];
+        if (!currentGvImages.some((it) => it.url === imgUrl)) {
+          currentGvImages.push({
+            id: `gv_img_${Date.now()}`,
+            url: imgUrl,
+            title: imgTitle
+          });
+        }
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          gvImgUrl: currentGvImages[0]?.url,
+          gvImgTitle: currentGvImages[0]?.title,
+          gvImages: currentGvImages
+        };
+      } else {
+        const currentDiagrams =
+          newRows[rowIndex].hsImages && newRows[rowIndex].hsImages!.length > 0
+            ? [...newRows[rowIndex].hsImages!]
+            : newRows[rowIndex].hsImgUrl
+            ? [{ id: 'diag_1', url: newRows[rowIndex].hsImgUrl!, title: newRows[rowIndex].hsImgTitle || 'Ảnh trò chơi' }]
+            : [];
+        if (!currentDiagrams.some((it) => it.url === imgUrl)) {
+          currentDiagrams.push({
+            id: `diag_${Date.now()}`,
+            url: imgUrl,
+            title: imgTitle
+          });
+        }
+        newRows[rowIndex] = {
+          ...newRows[rowIndex],
+          hsImgUrl: currentDiagrams[0]?.url,
+          hsImgTitle: currentDiagrams[0]?.title,
+          hsImages: currentDiagrams
+        };
+      }
+      return { ...p, rows: newRows };
+    });
+
+    // 2. Automatically propagate the same game image to every OTHER plan/grade using the same game name
+    const canonicalGame = normalizeGameNameForMatch(matchedGameName || imgTitle);
+    const slotHint: 'tro_choi_kd' | 'tro_choi_vd' | 'any' =
+      category === 'tro_choi_kd' || category === 'tro_choi_vd' ? category : 'any';
+
+    const { updatedPlans, matchedTargets } = applyGameImageToMatchingPlans(
+      basePlans,
+      imgUrl,
+      imgTitle,
+      canonicalGame,
+      {
+        slotHint,
+        excludePlanRow: { planId, rowIndex }
+      }
+    );
+
+    recordHistory(updatedPlans);
+    setPickerOpen(false);
+    setPickerTarget(null);
+
+    if (matchedTargets.length > 0) {
+      const targetGradeSet = new Set<number>(matchedTargets.map((t) => t.grade));
+      if (pickerTarget.grade) targetGradeSet.add(pickerTarget.grade);
+      const gradesLabel = Array.from(targetGradeSet)
+        .sort((a, b) => a - b)
+        .map((g) => `Khối ${g}`)
+        .join(', ');
+      showToast(
+        `🎮 Đã chèn ảnh "${canonicalGame || imgTitle}" tự động cho ${matchedTargets.length + 1} mục trò chơi cùng tên (${gradesLabel})!`
+      );
+    } else {
+      showToast(`Đã chèn hình ảnh: "${imgTitle}" vào bảng giáo án!`);
+    }
+  };
+
+  const handleAutoSyncSharedGameImages = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tự động ghép ảnh trò chơi dùng chung đa khối');
+      return;
+    }
+    const editable = getEditablePlansList();
+    const { updatedPlans, insertedCount, details } = autoSyncSharedGameImagesAcrossPlans(editable, images);
+    if (insertedCount === 0) {
+      showToast('✨ Tất cả mục trò chơi cùng tên trên các khối đã có đủ ảnh khớp từ thư viện!');
+      return;
+    }
+    recordHistory(updatedPlans);
+    const gradesUpdated = Array.from(new Set(details.map((d) => d.grade)))
+      .sort((a, b) => a - b)
+      .map((g) => `Khối ${g}`)
+      .join(', ');
+    showToast(
+      `🎮 Đã tự động tìm & chèn ${insertedCount} ảnh trò chơi cùng tên dùng chung vào ${gradesUpdated}!`
+    );
   };
 
   const handleRemoveInlineImage = (planId: string, rowIndex: number, field: 'content' | 'gv' | 'hs', rawTag: string) => {
@@ -1912,7 +2145,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
       setAutoDraftStatus('saved');
       setIsEditMode(false);
-      showToast(`💾 Đã lưu chính thức bộ giáo án 3 khối (${plansToCommit.length} tiết) Tuần ${selectedWeek} vào lịch sử phiên bản & cơ sở dữ liệu!`);
+      showToast(`💾 Đã lưu chính thức bộ giáo án 5 khối (${plansToCommit.length} tiết) Tuần ${selectedWeek} vào lịch sử phiên bản & cơ sở dữ liệu!`);
     } catch (e) {
       console.error(e);
       showToast('Đã lưu dữ liệu vào phiên làm việc hiện tại!');
@@ -1931,6 +2164,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     }, 400);
   };
 
+  const isAllFiveBundleSelected = selectedBundleGrades.length === 5;
+  const bundleGradesShortLabel = isAllFiveBundleSelected
+    ? 'Cả 5 Khối'
+    : selectedBundleGrades.map((g) => `K${g}`).join(', ');
+  const bundleGradesFullLabel = isAllFiveBundleSelected
+    ? 'Khối 1–5'
+    : selectedBundleGrades.map((g) => `Khối ${g}`).join(', ');
+  const bundleFileTag = isAllFiveBundleSelected
+    ? 'Ca_5_Khoi_1_den_5'
+    : `Ghep_${selectedBundleGrades.map((g) => `K${g}`).join('_')}`;
+
+  const filteredWeeklyScheduleRows = useMemo(() => {
+    if (selectedBundleGrades.length === 5) return weeklyScheduleRows;
+    return weeklyScheduleRows.filter((row) => selectedBundleGrades.includes(row.grade));
+  }, [weeklyScheduleRows, selectedBundleGrades]);
+
   const handleExportWord = async (forceJoint = false, format: 'doc' | 'docx' = 'doc') => {
     if (isGuest && onRequireAuth) {
       onRequireAuth(`Xuất & tải về file Word (.${format.toUpperCase()})`);
@@ -1940,39 +2189,60 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     showToast(`⏳ Đang nhúng hình ảnh PNG chuẩn và tạo file Word (.${format.toUpperCase()}) in trực tiếp...`);
     try {
       const isCustomView = !forceJoint && viewMode === 'custom_template' && customPlanState !== null;
-      const isSingle = !forceJoint && viewMode !== 'all_grades';
-      const plansToExport = isCustomView
+      const isBundleView = forceJoint || viewMode === 'all_grades';
+      const plansToExport = forceJoint
+        ? plansByGrade
+        : isCustomView
         ? [customPlanState!]
-        : isSingle
-        ? plansByGrade.filter((p) => {
+        : viewMode === 'all_grades'
+        ? plansByGrade.filter((p) => selectedBundleGrades.includes(p.grade as GradeLevel))
+        : plansByGrade.filter((p) => {
             if (viewMode === 'grade_1') return p.grade === 1;
+            if (viewMode === 'grade_2') return p.grade === 2;
             if (viewMode === 'grade_3') return p.grade === 3;
+            if (viewMode === 'grade_4') return p.grade === 4;
             if (viewMode === 'grade_5') return p.grade === 5;
             if (viewMode === 'single') return `k${p.grade}_t${p.lessonNum}` === selectedPlanKey;
             return true;
-          })
-        : plansByGrade;
+          });
 
       const singleGradeLabel = isCustomView
         ? 'Mau_Nguoi_Dung'
         : viewMode === 'grade_1'
         ? 'Khoi_1'
+        : viewMode === 'grade_2'
+        ? 'Khoi_2'
         : viewMode === 'grade_3'
         ? 'Khoi_3'
+        : viewMode === 'grade_4'
+        ? 'Khoi_4'
         : viewMode === 'grade_5'
         ? 'Khoi_5'
         : 'Tiet_Le';
 
-      const filename = isSingle
-        ? `KHDH_GDTC_Tuan_${selectedWeek}_${singleGradeLabel}.${format}`
-        : `KHDH_GDTC_Tuan_${selectedWeek}_Ca_3_Khoi_1_3_5.${format}`;
+      const filename = forceJoint
+        ? `KHDH_GDTC_Tuan_${selectedWeek}_Ca_5_Khoi_1_den_5.${format}`
+        : viewMode === 'all_grades'
+        ? `KHDH_GDTC_Tuan_${selectedWeek}_${bundleFileTag}.${format}`
+        : `KHDH_GDTC_Tuan_${selectedWeek}_${singleGradeLabel}.${format}`;
+
+      const includeSchedule = forceJoint
+        ? true
+        : isBundleView
+        ? includeScheduleInBundle
+        : false;
+      const exportScheduleRows = forceJoint
+        ? weeklyScheduleRows
+        : includeSchedule
+        ? filteredWeeklyScheduleRows
+        : undefined;
 
       await exportCleanWordDocxFromData({
         plans: plansToExport,
-        scheduleRows: isSingle ? undefined : weeklyScheduleRows,
+        scheduleRows: exportScheduleRows,
         settings: localSettings,
         week: selectedWeek,
-        includeSchedule: !isSingle,
+        includeSchedule,
         weeklyThemes,
         filename,
         format,
@@ -2002,14 +2272,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     return 'động tác thể dục';
   };
 
-  // Filter plans to display based on viewMode
+  // Filter plans to display based on viewMode and ticked multi-grade checkboxes
   const displayedPlans =
     viewMode === 'custom_template' && customPlanState
       ? [customPlanState]
       : plansByGrade.filter((p) => {
-          if (viewMode === 'all_grades') return true;
+          if (viewMode === 'all_grades') return selectedBundleGrades.includes(p.grade as GradeLevel);
           if (viewMode === 'grade_1') return p.grade === 1;
+          if (viewMode === 'grade_2') return p.grade === 2;
           if (viewMode === 'grade_3') return p.grade === 3;
+          if (viewMode === 'grade_4') return p.grade === 4;
           if (viewMode === 'grade_5') return p.grade === 5;
           if (viewMode === 'single') return `k${p.grade}_t${p.lessonNum}` === selectedPlanKey;
           return true;
@@ -2058,7 +2330,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             <button
               onClick={() => {
                 if (isGuest && onRequireAuth) {
-                  onRequireAuth('Chỉnh sửa trực tiếp giáo án 3 khối');
+                  onRequireAuth('Chỉnh sửa trực tiếp giáo án 5 khối');
                   return;
                 }
                 setIsEditMode(!isEditMode);
@@ -2077,7 +2349,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               ) : (
                 <>
                   <Edit3 className="w-4 h-4 text-indigo-600" />
-                  <span>Chỉnh Sửa Giáo Án 3 Khối</span>
+                  <span>Chỉnh Sửa Giáo Án 5 Khối</span>
                   {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
                 </>
               )}
@@ -2121,6 +2393,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
+            <button
+              type="button"
+              onClick={handleAutoSyncSharedGameImages}
+              className="bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
+              title="Tự động tìm ảnh trò chơi có tên giống nhau trên cả 5 khối trong thư viện và chèn vào tất cả các khối có cùng trò chơi"
+            >
+              <Gamepad2 className="w-4 h-4 text-purple-600" />
+              <span>Ghép Ảnh Trò Chơi Đa Khối</span>
+              {isGuest && <Lock className="w-3 h-3 text-purple-600" />}
+            </button>
+
             {onNavigateToGenerator && (
               <button
                 onClick={onNavigateToGenerator}
@@ -2141,7 +2424,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <span>
                 {viewMode === 'custom_template'
                   ? 'Lưu Mẫu Người Dùng'
-                  : `Lưu Bộ 3 Khối (6 Tiết) Tuần ${selectedWeek}`}
+                  : `Lưu Bộ 5 Khối (${plansByGrade.length || 10} Tiết) Tuần ${selectedWeek}`}
               </span>
               {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
@@ -2161,14 +2444,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 onClick={() => handleExportWord(false, 'doc')}
                 disabled={isExportingWord}
                 className="bg-slate-900 hover:bg-black disabled:opacity-50 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                title="Xuất file Word MHTML (.DOC) - Hỗ trợ mọi phiên bản Word, nhúng ảnh trực tiếp để in"
+                title="Xuất file Word MHTML (.DOC) theo đúng các khối lớp đang tick chọn"
               >
                 <FileDown className="w-4 h-4 text-emerald-400" />
                 <span>
                   {isExportingWord
                     ? 'Đang xuất Word...'
                     : viewMode === 'all_grades'
-                    ? 'Tải Word (.DOC)'
+                    ? `Tải ${bundleGradesShortLabel} (.DOC)`
                     : viewMode === 'custom_template'
                     ? 'Tải Mẫu Mới (.DOC)'
                     : viewMode === 'single'
@@ -2182,14 +2465,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 onClick={() => handleExportWord(false, 'docx')}
                 disabled={isExportingWord}
                 className="bg-blue-800 hover:bg-blue-900 disabled:opacity-50 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                title="Xuất file Word hiện đại (.DOCX) - Tương thích hoàn hảo Word 2013-365, hiển thị ảnh 100%"
+                title="Xuất file Word hiện đại (.DOCX) theo đúng các khối lớp đang tick chọn"
               >
                 <FileText className="w-4 h-4 text-sky-300" />
                 <span>
                   {isExportingWord
                     ? '...'
                     : viewMode === 'all_grades'
-                    ? 'Tải Word (.DOCX)'
+                    ? `Tải ${bundleGradesShortLabel} (.DOCX)`
                     : viewMode === 'custom_template'
                     ? 'Tải Mẫu Mới (.DOCX)'
                     : viewMode === 'single'
@@ -2199,14 +2482,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
               </button>
 
-              {viewMode !== 'all_grades' && (
+              {(viewMode !== 'all_grades' || !isAllFiveBundleSelected) && (
                 <button
                   onClick={() => handleExportWord(true, 'docx')}
                   disabled={isExportingWord}
                   className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white px-2.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 shadow-2xs transition"
-                  title="Tải toàn bộ 3 khối (K1, K3, K5) và lịch dạy tuần chung thành file Word .DOCX"
+                  title="Tải toàn bộ 5 khối (K1–K5) và lịch dạy tuần chung thành file Word .DOCX"
                 >
-                  <span>+ Tải Cả 3 Khối (.DOCX)</span>
+                  <span>+ Tải Cả 5 Khối (.DOCX)</span>
                   {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
                 </button>
               )}
@@ -2215,16 +2498,29 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <button
                   onClick={() => {
                     if (isGuest && onRequireAuth) {
-                      onRequireAuth('Lưu & đồng bộ giáo án lên Google Drive');
+                      onRequireAuth('Lưu & xem giáo án trên Google Docs / Google Drive');
                       return;
                     }
-                    onOpenGoogleDrive();
+                    const includeSched = viewMode === 'all_grades' && includeScheduleInBundle;
+                    onOpenGoogleDrive({
+                      week: selectedWeek,
+                      title:
+                        viewMode === 'all_grades'
+                          ? `Bộ giáo án Tuần ${selectedWeek} (${bundleGradesFullLabel} · ${displayedPlans.length} tiết)`
+                          : displayedPlans[0]?.title || `Giáo án Tuần ${selectedWeek}`,
+                      plans: displayedPlans,
+                      scheduleRows: includeSched ? filteredWeeklyScheduleRows : undefined,
+                      includeSchedule: includeSched,
+                      settings: localSettings,
+                      approvalDate: customApprovalDate,
+                      dateRange: customDateRange
+                    });
                   }}
                   className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                  title="Mở Google Drive để lưu trữ và quản lý giáo án trực tuyến"
+                  title="Lưu trực tiếp bộ giáo án đang chọn thành Google Docs, xem trước trong ứng dụng hoặc mở chỉnh sửa trên Google Docs"
                 >
                   <HardDrive className="w-4 h-4 text-amber-200" />
-                  <span>Lưu vào Google Drive</span>
+                  <span>Lưu & Xem Google Docs</span>
                   {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                 </button>
               )}
@@ -2272,14 +2568,20 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             </div>
 
             {/* Auto PPCT Display */}
-            <div className="hidden lg:flex items-center gap-2 text-slate-600 text-[11px]">
-              <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded">
+            <div className="hidden lg:flex flex-wrap items-center gap-1.5 text-slate-600 text-[11px]">
+              <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded whitespace-nowrap">
                 K1: {ppctG1.periodLabel}
               </span>
-              <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+              <span className="bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded whitespace-nowrap">
+                K2: {ppctG2.periodLabel}
+              </span>
+              <span className="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded whitespace-nowrap">
                 K3: {ppctG3.periodLabel}
               </span>
-              <span className="bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded">
+              <span className="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded whitespace-nowrap">
+                K4: {ppctG4.periodLabel}
+              </span>
+              <span className="bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded whitespace-nowrap">
                 K5: {ppctG5.periodLabel}
               </span>
             </div>
@@ -2296,7 +2598,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 setIsUploadPlanModalOpen(true);
               }}
               className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-              title="Tải lên file Word (.docx) hoặc dán bảng thời khóa biểu tuần mới để tự động phân tích và trích xuất nội dung tích hợp vào giáo án 3 khối"
+              title="Tải lên file Word (.docx) hoặc dán bảng thời khóa biểu tuần mới để tự động phân tích và trích xuất nội dung tích hợp vào giáo án 5 khối"
             >
               <Upload className="w-3.5 h-3.5 text-blue-200" />
               <span>Nạp File Kế Hoạch Tuần</span>
@@ -2306,16 +2608,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             <button
               onClick={() => {
                 if (isGuest && onRequireAuth) {
-                  onRequireAuth('Quản lý & đối chiếu Phân phối chương trình (PPCT) 3 khối');
+                  onRequireAuth('Quản lý & đối chiếu Phân phối chương trình (PPCT) 5 khối');
                   return;
                 }
                 setIsPpctManagerOpen(true);
               }}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-2xs transition"
-              title="Quản lý Phân phối chương trình cả 3 khối, đối chiếu và rà soát tiến độ tuần"
+              title="Quản lý Phân phối chương trình cả 5 khối, đối chiếu và rà soát tiến độ tuần"
             >
               <BookOpen className="w-3.5 h-3.5 text-emerald-200" />
-              <span>PPCT 3 Khối & Rà Soát</span>
+              <span>PPCT 5 Khối & Rà Soát</span>
               {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
 
@@ -2334,17 +2636,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             <button
               onClick={() => {
                 if (isGuest && onRequireAuth) {
-                  onRequireAuth('Đổi kiểu sơ đồ đội hình riêng cho Khối 1/3/5');
+                  onRequireAuth('Đổi kiểu sơ đồ đội hình riêng cho Khối 1–5');
                   return;
                 }
                 setGradeFormationStyles(getGradeFormationStyles());
                 setIsGradeFormationStyleOpen(true);
               }}
               className="px-2.5 py-1.5 bg-amber-50 border border-amber-300 hover:bg-amber-100 rounded-lg font-bold text-amber-900 flex items-center gap-1 transition"
-              title="Tùy chỉnh kiểu sơ đồ đội hình khác nhau cho Khối 1, Khối 3 và Khối 5"
+              title="Tùy chỉnh kiểu sơ đồ đội hình khác nhau cho cả 5 khối (Khối 1, 2, 3, 4, 5)"
             >
               <Compass className="w-3.5 h-3.5 text-amber-700" />
-              <span>Đổi Kiểu Đội Hình K1/3/5</span>
+              <span>Đổi Kiểu Đội Hình K1–K5</span>
               {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
             </button>
 
@@ -2454,74 +2756,175 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           </div>
         )}
 
-        {/* 4. VIEW MODES & TYPOGRAPHY SELECTORS */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 text-xs">
-          {/* View Modes */}
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setViewMode('all_grades')}
-              className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 ${
-                viewMode === 'all_grades' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Gộp Cả 3 Khối (Tuần {selectedWeek})</span>
-            </button>
-            <button
-              onClick={() => setViewMode('grade_1')}
-              className={`px-2.5 py-1.5 rounded-lg transition ${
-                viewMode === 'grade_1' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Khối 1 ({ppctG1.periodLabel})
-            </button>
-            <button
-              onClick={() => setViewMode('grade_3')}
-              className={`px-2.5 py-1.5 rounded-lg transition ${
-                viewMode === 'grade_3' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Khối 3 ({ppctG3.periodLabel})
-            </button>
-            <button
-              onClick={() => setViewMode('grade_5')}
-              className={`px-2.5 py-1.5 rounded-lg transition ${
-                viewMode === 'grade_5' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Khối 5 ({ppctG5.periodLabel})
-            </button>
-            <button
-              onClick={() => setViewMode('single')}
-              className={`px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 ${
-                viewMode === 'single' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Tiết Lẻ</span>
-            </button>
-            {userCustomTemplates.length > 0 && (
+        {/* 4. VIEW MODES, MULTI-GRADE BUNDLE CHECKBOXES & TYPOGRAPHY SELECTORS */}
+        <div className="space-y-3 pt-2 border-t border-slate-100 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* Primary View Modes */}
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => {
-                  if (isGuest && onRequireAuth) {
-                    onRequireAuth('Xem & sử dụng Mẫu giáo án mới từ người dùng');
-                    return;
-                  }
-                  setViewMode('custom_template');
-                }}
-                className={`px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 ${
-                  viewMode === 'custom_template'
-                    ? 'bg-indigo-600 text-white shadow-xs font-bold'
-                    : 'text-indigo-700 hover:bg-indigo-50 font-semibold'
+                onClick={() => setViewMode('all_grades')}
+                className={`px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                  viewMode === 'all_grades' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Mẫu mới từ người dùng ({userCustomTemplates.length})</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>
+                  Bộ Giáo Án Tuần ({bundleGradesShortLabel} · {viewMode === 'all_grades' ? displayedPlans.length : plansByGrade.filter((p) => selectedBundleGrades.includes(p.grade as GradeLevel)).length} tiết)
+                </span>
               </button>
-            )}
+              <button
+                type="button"
+                onClick={() => setViewMode('single')}
+                className={`px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 whitespace-nowrap shrink-0 ${
+                  viewMode === 'single' ? 'bg-blue-600 text-white shadow-xs font-bold' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Xem Tiết Lẻ</span>
+              </button>
+              {userCustomTemplates.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isGuest && onRequireAuth) {
+                      onRequireAuth('Xem & sử dụng Mẫu giáo án mới từ người dùng');
+                      return;
+                    }
+                    setViewMode('custom_template');
+                  }}
+                  className={`px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                    viewMode === 'custom_template'
+                      ? 'bg-indigo-600 text-white shadow-xs font-bold'
+                      : 'text-indigo-700 hover:bg-indigo-50 font-semibold'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Mẫu mới từ người dùng ({userCustomTemplates.length})</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-500" />}
+                </button>
+              )}
+            </div>
+
+            {/* Multi-Grade Quick Presets */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-slate-500">Chọn nhanh:</span>
+              <button
+                type="button"
+                onClick={() => applyBundleGradePreset([1, 2, 3, 4, 5])}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                  viewMode === 'all_grades' && isAllFiveBundleSelected
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400 hover:text-blue-700'
+                }`}
+              >
+                Cả 5 khối
+              </button>
+              <button
+                type="button"
+                onClick={() => applyBundleGradePreset([1, 3, 5])}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                  viewMode === 'all_grades' &&
+                  selectedBundleGrades.length === 3 &&
+                  selectedBundleGrades.join(',') === '1,3,5'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400 hover:text-blue-700'
+                }`}
+              >
+                Khối 1, 3, 5
+              </button>
+              <button
+                type="button"
+                onClick={() => applyBundleGradePreset([2, 4])}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                  viewMode === 'all_grades' &&
+                  selectedBundleGrades.length === 2 &&
+                  selectedBundleGrades.join(',') === '2,4'
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400 hover:text-blue-700'
+                }`}
+              >
+                Khối 2, 4
+              </button>
+            </div>
           </div>
+
+          {/* Multi-Grade Tick-Box Strip for Merging Weekly Lesson Plan Bundle */}
+          <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-200/80 flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-blue-950 mr-1">
+                Tick chọn các khối ghép vào bộ giáo án Tuần {selectedWeek}:
+              </span>
+              {(
+                [
+                  { grade: 1 as GradeLevel, label: ppctG1.periodLabel },
+                  { grade: 2 as GradeLevel, label: ppctG2.periodLabel },
+                  { grade: 3 as GradeLevel, label: ppctG3.periodLabel },
+                  { grade: 4 as GradeLevel, label: ppctG4.periodLabel },
+                  { grade: 5 as GradeLevel, label: ppctG5.periodLabel }
+                ] as const
+              ).map(({ grade: g, label }) => {
+                const isChecked = viewMode === 'all_grades' && selectedBundleGrades.includes(g);
+                const countForGrade = plansByGrade.filter((p) => p.grade === g).length;
+                return (
+                  <label
+                    key={g}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer select-none transition ${
+                      isChecked
+                        ? 'bg-blue-600 text-white border-blue-700 shadow-2xs font-bold'
+                        : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400 hover:bg-blue-50 font-semibold'
+                    }`}
+                    title={`Tick để thêm hoặc bỏ Khối ${g} (${countForGrade} tiết) khỏi bộ giáo án tuần chung`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleBundleGrade(g)}
+                      className="w-3.5 h-3.5 rounded accent-emerald-400 cursor-pointer"
+                    />
+                    <span>
+                      Khối {g}{' '}
+                      <span className={isChecked ? 'text-blue-100 font-medium' : 'text-slate-500 font-normal'}>
+                        ({label})
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <label
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-950 cursor-pointer select-none bg-white px-2.5 py-1.5 rounded-lg border border-blue-200"
+              title="Hiển thị và xuất kèm trang Kế hoạch dạy học chung 7 cột của tuần ở đầu bộ giáo án"
+            >
+              <input
+                type="checkbox"
+                checked={includeScheduleInBundle}
+                onChange={(e) => {
+                  setViewMode('all_grades');
+                  setIncludeScheduleInBundle(e.target.checked);
+                }}
+                className="w-3.5 h-3.5 rounded text-blue-600 cursor-pointer"
+              />
+              <span>Kèm lịch tuần chung ({filteredWeeklyScheduleRows.length} tiết)</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-[11px] text-slate-600">
+              {viewMode === 'all_grades' ? (
+                <span>
+                  Đang ghép hiển thị toàn bộ giáo án Tuần <strong>{selectedWeek}</strong>:{' '}
+                  <strong className="text-blue-700">{bundleGradesFullLabel}</strong> (
+                  <strong>{displayedPlans.length}</strong> tiết giáo án chi tiết
+                  {includeScheduleInBundle ? ' + 1 trang lịch tuần chung' : ''})
+                </span>
+              ) : viewMode === 'single' ? (
+                <span>Đang xem chế độ tiết lẻ. Tick chọn bất kỳ khối lớp nào ở trên để quay lại chế độ ghép bộ giáo án tuần.</span>
+              ) : (
+                <span>Đang xem mẫu giáo án tùy chỉnh từ người dùng.</span>
+              )}
+            </div>
 
           {/* Typography Controls */}
           <div className="flex items-center gap-3 flex-wrap">
@@ -2601,6 +3004,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <span className="text-[11px]">Ghi chú dưới ảnh</span>
             </label>
           </div>
+          </div>
         </div>
 
         {/* Single Mode Lesson Selector Tabs */}
@@ -2673,7 +3077,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }}
       >
         {/* TRANG ĐẦU: KẾ HOẠCH DẠY HỌC CHUNG CỦA TUẦN (MẪU KẾ HOẠCH 7 CỘT CHUẨN CỦA TRƯỜNG) */}
-        {viewMode === 'all_grades' && (
+        {viewMode === 'all_grades' && includeScheduleInBundle && (
           <div className="official-master-overview-page mb-10 print:break-after-page">
 
 
@@ -2730,12 +3134,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
             {/* ACTION TOOLBAR SPECIFIC TO WEEKLY PLAN & PPCT AUDIT */}
             <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 mb-2 bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 rounded-xl border border-blue-200 no-print">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-blue-600" /> Bảng 16 Tiết Giảng Dạy Tuần {selectedWeek} (Khối 1, 3, 5):
+                  <Calendar className="w-4 h-4 text-blue-600" /> Bảng {filteredWeeklyScheduleRows.length} Tiết Giảng Dạy Tuần {selectedWeek} ({bundleGradesFullLabel}):
                 </span>
                 <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                  Tự động đồng bộ với giáo án 3 khối
+                  Tự động đồng bộ theo các khối đã tick chọn
                 </span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -2748,7 +3152,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     setIsUploadPlanModalOpen(true);
                   }}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition"
-                  title="Tải tệp Word (.docx) hoặc dán bảng thời khóa biểu tuần mới để tự động phân tích và trích xuất nội dung tích hợp vào giáo án 3 khối"
+                  title="Tải tệp Word (.docx) hoặc dán bảng thời khóa biểu tuần mới để tự động phân tích và trích xuất nội dung tích hợp vào giáo án 5 khối"
                 >
                   <Upload className="w-3.5 h-3.5 text-blue-200" />
                   <span>📥 Nạp File Kế Hoạch Tuần & Tích Hợp</span>
@@ -2757,16 +3161,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <button
                   onClick={() => {
                     if (isGuest && onRequireAuth) {
-                      onRequireAuth('Quản lý & đối chiếu Phân phối chương trình (PPCT) 3 khối');
+                      onRequireAuth('Quản lý & đối chiếu Phân phối chương trình (PPCT) 5 khối');
                       return;
                     }
                     setIsPpctManagerOpen(true);
                   }}
                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-2xs flex items-center gap-1.5 transition"
-                  title="Quản lý Phân phối chương trình cả 3 khối, đối chiếu và rà soát tiến độ tuần"
+                  title="Quản lý Phân phối chương trình cả 5 khối, đối chiếu và rà soát tiến độ tuần"
                 >
                   <BookOpen className="w-3.5 h-3.5 text-emerald-200" />
-                  <span>📊 Rà Soát & Đối Chiếu PPCT 3 Khối</span>
+                  <span>📊 Rà Soát & Đối Chiếu PPCT 5 Khối</span>
                   {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
                 </button>
               </div>
@@ -2787,7 +3191,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {weeklyScheduleRows.map((row) => (
+                  {filteredWeeklyScheduleRows.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50/50">
                       {/* Thứ */}
                       <td className="border border-slate-600 p-1.5 text-center font-bold align-top">
@@ -2982,7 +3386,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                         onToggleBestVersion(planKey, activeVer.versionId);
                       } else if (onSaveOfficialVersion) {
                         const baseline = buildBaselinePlanForSlot(
-                          freshPlan.grade as 1 | 3 | 5,
+                          freshPlan.grade as GradeLevel,
                           freshPlan.lessonNum,
                           `k${freshPlan.grade}_t${freshPlan.lessonNum}`
                         );
@@ -3013,7 +3417,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                           (plan.id.startsWith('custom_tpl_') ? customPlanState : latestPlansRef.current.find((x) => x.id === plan.id)) ||
                           plan;
                         const baseline = buildBaselinePlanForSlot(
-                          freshPlan.grade as 1 | 3 | 5,
+                          freshPlan.grade as GradeLevel,
                           freshPlan.lessonNum,
                           `k${freshPlan.grade}_t${freshPlan.lessonNum}`
                         );
@@ -4284,10 +4688,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-slate-900">
-                    Đa Dạng Hóa Kiểu Sơ Đồ Đội Hình Theo Khối (1 · 3 · 5)
+                    Đa Dạng Hóa Kiểu Sơ Đồ Đội Hình Theo Khối (1 · 2 · 3 · 4 · 5)
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Chọn bộ đội hình riêng cho từng khối để tránh lặp lại giống hệt nhau giữa 3 khối khi in giáo án.
+                    Chọn bộ đội hình riêng cho từng khối để tránh lặp lại giống hệt nhau giữa 5 khối khi in giáo án.
                   </p>
                 </div>
               </div>
@@ -4301,7 +4705,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             </div>
 
             <div className="space-y-3 overflow-y-auto pr-1 text-xs">
-              {([1, 3, 5] as const).map((gVal) => {
+              {([1, 2, 3, 4, 5] as const).map((gVal) => {
                 const selectedKey = gradeFormationStyles[gVal];
                 const selectedInfo = GRADE_FORMATION_STYLE_OPTIONS.find((o) => o.key === selectedKey);
                 return (
@@ -4313,8 +4717,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       <span className="font-extrabold text-sm text-slate-900">
                         {gVal === 1
                           ? 'Khối 1 (Trực quan · Gần gũi · Dễ quan sát)'
+                          : gVal === 2
+                          ? 'Khối 2 (Nhịp nhàng · 2–4 hàng so le · Vòng tròn đôi)'
                           : gVal === 3
                           ? 'Khối 3 (Nề nếp · Bậc thang · 4 khu A-B-C-D)'
+                          : gVal === 4
+                          ? 'Khối 4 (Linh hoạt · Vòng tròn/Tuyến tập với vòng)'
                           : 'Khối 5 (Tự quản · Giãn cách 1.5m · 4 Trạm xoay vòng)'}
                       </span>
                       <select
@@ -4366,12 +4774,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   }));
                   recordHistory(updatedPlans);
                   setIsGradeFormationStyleOpen(false);
-                  showToast('✨ Đã áp dụng bộ sơ đồ đội hình riêng biệt cho Khối 1, Khối 3 và Khối 5!');
+                  showToast('✨ Đã áp dụng bộ sơ đồ đội hình riêng biệt cho cả 5 khối (Khối 1, 2, 3, 4, 5)!');
                 }}
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
               >
                 <Check className="w-4 h-4 text-emerald-300" />
-                <span>Lưu & Áp Dụng Cho 3 Khối</span>
+                <span>Lưu & Áp Dụng Cho 5 Khối</span>
               </button>
             </div>
           </div>
@@ -4392,7 +4800,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     Nạp File Kế Hoạch Tuần & Tự Động Tích Hợp
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Bóc tách thời khóa biểu 7 cột và tự động đưa nội dung tích hợp (QPAN, Năng lực số, Môi trường) vào giáo án 3 khối.
+                    Bóc tách thời khóa biểu 7 cột và tự động đưa nội dung tích hợp (QPAN, Năng lực số, Môi trường) vào giáo án 5 khối.
                   </p>
                 </div>
               </div>
@@ -4452,7 +4860,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               <div className="bg-emerald-50/80 border border-emerald-200 rounded-xl p-3 text-[11px] text-emerald-900 flex items-start gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                 <p>
-                  <strong>Tính năng thông minh:</strong> Hệ thống sẽ tự động quét cột <em>"ND Tích hợp/điều chỉnh"</em> và tiêu đề để đưa các mã Năng lực số (3.1TC1a, 4.1TC1a, 6.1TC2a), QPAN, Bảo vệ môi trường vào mục <strong>I.4 Yêu cầu cần đạt</strong> của giáo án Khối 1, 3, 5.
+                  <strong>Tính năng thông minh:</strong> Hệ thống sẽ tự động quét cột <em>"ND Tích hợp/điều chỉnh"</em> và tiêu đề để đưa các mã Năng lực số (3.1TC1a, 4.1TC1a, 6.1TC2a), QPAN, Bảo vệ môi trường vào mục <strong>I.4 Yêu cầu cần đạt</strong> của giáo án Khối 1, 2, 3, 4, 5.
                 </p>
               </div>
             </div>
@@ -4547,7 +4955,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 </div>
                 <div>
                   <h3 className="font-bold text-sm sm:text-base text-slate-900">
-                    Rà Soát & Đối Chiếu Chuẩn SGK (Khối 1 - 3 - 5) · Tuần {selectedWeek}
+                    Rà Soát & Đối Chiếu Chuẩn SGK (Khối 1 - 2 - 3 - 4 - 5) · Tuần {selectedWeek}
                   </h3>
                   <p className="text-xs text-slate-500">
                     Đối chiếu tên bài TKB vs Giáo án, kỹ thuật động tác, trò chơi và giảm tải cho HS khuyết tật
@@ -4593,7 +5001,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl font-bold text-xs shadow-md flex items-center gap-1.5 transition active:scale-95"
                 >
                   <Sparkles className="w-4 h-4 text-amber-200" />
-                  <span>Đồng Bộ 100% Cả 3 Khối Chuẩn SGK</span>
+                  <span>Đồng Bộ 100% Cả 5 Khối Chuẩn SGK</span>
                   {isGuest && <Lock className="w-3.5 h-3.5 text-amber-200" />}
                 </button>
               </div>
@@ -4616,7 +5024,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   {auditReport.items.map((item) => (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition">
                       <td className="p-2.5 align-top font-bold text-slate-800">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold ${item.grade === 1 ? 'bg-blue-100 text-blue-800' : item.grade === 3 ? 'bg-emerald-100 text-emerald-800' : 'bg-purple-100 text-purple-800'}`}>
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                          item.grade === 1 ? 'bg-blue-100 text-blue-800'
+                          : item.grade === 2 ? 'bg-sky-100 text-sky-800'
+                          : item.grade === 3 ? 'bg-emerald-100 text-emerald-800'
+                          : item.grade === 4 ? 'bg-amber-100 text-amber-800'
+                          : 'bg-purple-100 text-purple-800'
+                        }`}>
                           Khối {item.grade}
                         </span>
                         <div className="text-[11px] text-slate-500 font-semibold mt-0.5">
@@ -4725,15 +5139,28 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             setPickerTarget(null);
           }}
           images={images}
-          initialGrade={pickerTarget.grade ? (String(pickerTarget.grade) as '1' | '3' | '5') : 'all'}
+          initialGrade={pickerTarget.grade ? (String(pickerTarget.grade) as '1' | '2' | '3' | '4' | '5') : 'all'}
           initialCategory={pickerTarget.category || 'all'}
           targetInfo={{
             grade: pickerTarget.grade,
             lessonTitle: pickerTarget.lessonTitle,
             rowName: pickerTarget.rowName,
-            rowIndex: pickerTarget.rowIndex
+            rowIndex: pickerTarget.rowIndex,
+            gameName: pickerTarget.gameName
           }}
+          matchingGameTargets={
+            pickerTarget.gameName
+              ? findMatchingGameSlotsAcrossPlans(
+                  getEditablePlansList(),
+                  pickerTarget.gameName,
+                  pickerTarget.category === 'tro_choi_kd' || pickerTarget.category === 'tro_choi_vd'
+                    ? pickerTarget.category
+                    : 'any'
+                )
+              : []
+          }
           onSelectImage={handleAttachImage}
+          onSelectImageForAllMatchingGrades={handleAttachImageForMatchingGrades}
         />
       )}
 
@@ -4746,12 +5173,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           initialTargetKey={versionModalInitialKey}
           targets={plansByGrade.map((p) => ({
             week: p.week,
-            grade: p.grade as 1 | 3 | 5,
+            grade: p.grade as GradeLevel,
             lessonNum: p.lessonNum,
             title: p.title,
             currentPlan: p,
             defaultBaselinePlan: buildBaselinePlanForSlot(
-              p.grade as 1 | 3 | 5,
+              p.grade as GradeLevel,
               p.lessonNum,
               `k${p.grade}_t${p.lessonNum}`
             )

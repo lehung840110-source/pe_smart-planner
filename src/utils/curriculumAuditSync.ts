@@ -1,6 +1,6 @@
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { masterPlansTuan9 } from '../data/masterTemplateTuan9';
-import { WeeklyMasterScheduleRow, LessonRow, SgkImageItem } from '../types/gdtc';
+import { GradeLevel, WeeklyMasterScheduleRow, LessonRow, SgkImageItem } from '../types/gdtc';
 import {
   AUTHENTIC_TEXTBOOK_MAP,
   resolveAccurateMovement,
@@ -11,14 +11,14 @@ import {
   sanitizeRowColumn1Media,
   isInvalidColumn1AttachmentForRow
 } from './planAutoMatcher';
-import { findSgkLessonByTopicOrTitle } from '../data/sgkCurriculumTree';
+import { findSgkLessonByTopicOrTitle, getSgkTreeOverrides } from '../data/sgkCurriculumTree';
 import { defaultAllPpctData } from '../data/defaultPpctData';
 
 export const DEFAULT_DISABLED_SPECIAL = 'Giảm nhẹ các yêu cầu về năng lực đặc thù. Tuỳ tình hình của HS mà GV linh hoạt áp dụng với tinh thần học hoà nhập, giảm cường độ vận động, yêu cầu kỹ thuật động tác, thực hiện ở mức độ cơ bản. Giữ vệ sinh cá nhân và sân tập.';
 export const DEFAULT_DISABLED_GENERAL = 'Giảm nhẹ các yêu cầu về năng lực chung. Tuỳ tình hình tiến bộ của HS mà GV linh hoạt áp dụng với tinh thần học hoà nhập.';
 
 export interface CurriculumItemRule {
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   ppct: number;
   topic: string;
   cleanTitle: string;
@@ -31,7 +31,7 @@ export interface CurriculumItemRule {
 }
 
 /**
- * Authoritative GDTC 2018 (Kết nối tri thức) Curriculum Master Table across Grade 1, 3, 5
+ * Authoritative GDTC 2018 (Kết nối tri thức) Curriculum Master Table across Grades 1, 2, 3, 4, 5
  */
 export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> = {
   // KHỐI 1 - TUẦN 8 (Tiết 15, 16)
@@ -119,6 +119,91 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     practiceGame: 'Mèo đuổi chuột'
   },
 
+  // KHỐI 2 - TUẦN 8 (Tiết 15, 16)
+  'k2_t15': {
+    grade: 2,
+    ppct: 15,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY',
+    movementName: 'Ôn động tác Vươn thở và Động tác Tay',
+    movementKey: 'k2_vuon_tho',
+    warmupGame: 'Đèn xanh đèn đỏ',
+    practiceGame: 'Ném trúng đích'
+  },
+  'k2_t16': {
+    grade: 2,
+    ppct: 16,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY',
+    movementName: 'Hoàn thiện Động tác Vươn thở và Động tác Tay',
+    movementKey: 'k2_tay',
+    warmupGame: 'Đèn xanh đèn đỏ',
+    practiceGame: 'Ném trúng đích'
+  },
+  // KHỐI 2 - TUẦN 9 (Tiết 17, 18)
+  'k2_t17': {
+    grade: 2,
+    ppct: 17,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG',
+    movementName: 'Học động tác Chân',
+    movementKey: 'k2_chan',
+    warmupGame: 'Tàu hoả chạy',
+    practiceGame: 'Chèo thuyền'
+  },
+  'k2_t18': {
+    grade: 2,
+    ppct: 18,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG',
+    movementName: 'Học động tác Lườn; Ôn động tác Chân',
+    movementKey: 'k2_luon',
+    warmupGame: 'Tàu hoả chạy',
+    practiceGame: 'Chèo thuyền'
+  },
+  // KHỐI 2 - TUẦN 10 (Tiết 19, 20)
+  'k2_t19': {
+    grade: 2,
+    ppct: 19,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG',
+    movementName: 'Học động tác Bụng; Ôn động tác Chân và Động tác Lườn',
+    movementKey: 'k2_bung',
+    warmupGame: 'Tàu hoả chạy',
+    practiceGame: 'Chèo thuyền'
+  },
+  'k2_t20': {
+    grade: 2,
+    ppct: 20,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG',
+    movementName: 'Hoàn thiện Động tác Chân, Lườn, Bụng',
+    movementKey: 'k2_bung',
+    warmupGame: 'Tàu hoả chạy',
+    practiceGame: 'Chèo thuyền'
+  },
+  // KHỐI 2 - TUẦN 11 (Tiết 21, 22)
+  'k2_t21': {
+    grade: 2,
+    ppct: 21,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HOÀ',
+    movementName: 'Học động tác Phối hợp',
+    movementKey: 'k2_toan_than',
+    warmupGame: 'Lái ô tô',
+    practiceGame: 'Mèo đuổi chuột'
+  },
+  'k2_t22': {
+    grade: 2,
+    ppct: 22,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    cleanTitle: 'BÀI 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HOÀ',
+    movementName: 'Học động tác Nhảy; Ôn động tác Phối hợp',
+    movementKey: 'k2_nhay_dieu_hoa',
+    warmupGame: 'Lái ô tô',
+    practiceGame: 'Mèo đuổi chuột'
+  },
+
   // KHỐI 3 - TUẦN 8 (Tiết 15, 16)
   'k3_t15': {
     grade: 3,
@@ -202,6 +287,91 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
     movementKey: 'phoi_hop',
     warmupGame: 'Mèo đuổi chuột',
     practiceGame: 'Nhanh lên bạn ơi'
+  },
+
+  // KHỐI 4 - TUẦN 8 (Tiết 15, 16)
+  'k4_t15': {
+    grade: 4,
+    ppct: 15,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN VỚI VÒNG',
+    movementName: 'Học động tác Chân với vòng thể dục; Ôn Vươn thở, Tay với vòng',
+    movementKey: 'chan_vong',
+    warmupGame: 'Làm theo hiệu lệnh',
+    practiceGame: 'Nhảy lướt sóng'
+  },
+  'k4_t16': {
+    grade: 4,
+    ppct: 16,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN VỚI VÒNG',
+    movementName: 'Luyện tập Động tác Vươn thở, Tay, Chân với vòng thể dục',
+    movementKey: 'chan_vong',
+    warmupGame: 'Làm theo hiệu lệnh',
+    practiceGame: 'Nhảy lướt sóng'
+  },
+  // KHỐI 4 - TUẦN 9 (Tiết 17, 18)
+  'k4_t17': {
+    grade: 4,
+    ppct: 17,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN VỚI VÒNG',
+    movementName: 'Ôn tập phối hợp Động tác Vươn thở, Tay, Chân với vòng thể dục',
+    movementKey: 'tay_vong',
+    warmupGame: 'Làm theo hiệu lệnh',
+    practiceGame: 'Nhảy lướt sóng'
+  },
+  'k4_t18': {
+    grade: 4,
+    ppct: 18,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN VỚI VÒNG',
+    movementName: 'Hoàn thiện Động tác Vươn thở, Tay, Chân với vòng thể dục',
+    movementKey: 'chan_vong',
+    warmupGame: 'Làm theo hiệu lệnh',
+    practiceGame: 'Nhảy lướt sóng'
+  },
+  // KHỐI 4 - TUẦN 10 (Tiết 19, 20)
+  'k4_t19': {
+    grade: 4,
+    ppct: 19,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC LƯNG – BỤNG, ĐỘNG TÁC TOÀN THÂN VỚI VÒNG',
+    movementName: 'Học động tác Lườn với vòng thể dục',
+    movementKey: 'luon_vong',
+    warmupGame: 'Quân xanh quân đỏ',
+    practiceGame: 'Chạy đổi vòng'
+  },
+  'k4_t20': {
+    grade: 4,
+    ppct: 20,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC LƯNG – BỤNG, ĐỘNG TÁC TOÀN THÂN VỚI VÒNG',
+    movementName: 'Học động tác Lưng – bụng với vòng thể dục; Ôn Lườn với vòng',
+    movementKey: 'bung_vong',
+    warmupGame: 'Quân xanh quân đỏ',
+    practiceGame: 'Chạy đổi vòng'
+  },
+  // KHỐI 4 - TUẦN 11 (Tiết 21, 22)
+  'k4_t21': {
+    grade: 4,
+    ppct: 21,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC LƯNG – BỤNG, ĐỘNG TÁC TOÀN THÂN VỚI VÒNG',
+    movementName: 'Học động tác Toàn thân với vòng thể dục; Ôn Lườn và Lưng – bụng với vòng',
+    movementKey: 'toan_than_vong',
+    warmupGame: 'Quân xanh quân đỏ',
+    practiceGame: 'Chạy đổi vòng'
+  },
+  'k4_t22': {
+    grade: 4,
+    ppct: 22,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+    cleanTitle: 'BÀI 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC LƯNG – BỤNG, ĐỘNG TÁC TOÀN THÂN VỚI VÒNG',
+    movementName: 'Ôn tập Động tác Lườn, Lưng – bụng, Toàn thân với vòng thể dục',
+    movementKey: 'toan_than_vong',
+    warmupGame: 'Quân xanh quân đỏ',
+    practiceGame: 'Chạy đổi vòng'
   },
 
   // KHỐI 5 - TUẦN 8 (Tiết 15, 16, 17)
@@ -303,12 +473,16 @@ export const AUTHORITATIVE_CURRICULUM_RULES: Record<string, CurriculumItemRule> 
  * Resolves the authoritative curriculum rule for any grade, period, and week across all 35 weeks.
  * Guaranteed to return a non-null, fully populated CurriculumItemRule matching GDPT 2018 standards.
  */
-export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number): CurriculumItemRule {
+export function getCurriculumRule(grade: GradeLevel, ppct: number, week?: number): CurriculumItemRule {
   const key = `k${grade}_t${ppct}`;
   if (AUTHORITATIVE_CURRICULUM_RULES[key]) {
     const item = AUTHORITATIVE_CURRICULUM_RULES[key];
+    const matchedLesson = findSgkLessonByTopicOrTitle(grade, item.cleanTitle, item.topic);
+    const manualOverride = matchedLesson ? getSgkTreeOverrides()[matchedLesson.id] : undefined;
     return {
       ...item,
+      warmupGame: manualOverride?.warmupGameName?.trim() || item.warmupGame,
+      practiceGame: manualOverride?.practiceGameName?.trim() || item.practiceGame,
       disabledStudentsSpecial: item.disabledStudentsSpecial || DEFAULT_DISABLED_SPECIAL,
       disabledStudentsGeneral: item.disabledStudentsGeneral || DEFAULT_DISABLED_GENERAL
     };
@@ -324,7 +498,7 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
     ppctItem?.topic ||
     (isAssessment
       ? 'ĐÁNH GIÁ VÀ TỔNG KẾT NĂM HỌC'
-      : grade === 1
+      : grade === 1 || grade === 2
       ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC'
       : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC');
   const topic = cleanTopicForDisplay(rawTopic, grade);
@@ -336,6 +510,20 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
     ? 'danh_gia'
     : titleLower.includes('gậy')
     ? 'gay'
+    : titleLower.includes('vòng') && !titleLower.includes('vòng phải') && !titleLower.includes('vòng trái') && !titleLower.includes('vòng tròn') && !titleLower.includes('vòng bên') && !titleLower.includes('vòng sau')
+    ? titleLower.includes('vươn thở')
+      ? 'vuon_tho_vong'
+      : titleLower.includes('tay')
+      ? 'tay_vong'
+      : titleLower.includes('chân')
+      ? 'chan_vong'
+      : titleLower.includes('lườn')
+      ? 'luon_vong'
+      : titleLower.includes('bụng')
+      ? 'bung_vong'
+      : titleLower.includes('toàn thân')
+      ? 'toan_than_vong'
+      : 'nhay_dieu_hoa_vong'
     : titleLower.includes('vươn thở')
     ? 'vuon_tho'
     : titleLower.includes('tay') && !titleLower.includes('bóng') && !titleLower.includes('đầu, cổ')
@@ -348,6 +536,8 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
     ? 'bung'
     : titleLower.includes('vặn mình')
     ? 'van_minh'
+    : titleLower.includes('toàn thân')
+    ? 'toan_than'
     : titleLower.includes('phối hợp') && !titleLower.includes('chạy') && !titleLower.includes('bóng')
     ? 'phoi_hop'
     : titleLower.includes('điều hòa') || titleLower.includes('điều hoà')
@@ -363,7 +553,16 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
   if (!treeLesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName) {
     if (isAssessment) {
       warmupGame = grade === 5 ? 'Chạy nhẹ theo hiệu lệnh' : 'Làm theo hiệu lệnh';
-      practiceGame = grade === 1 ? 'Thỏ nhường hang' : grade === 3 ? 'Chim về tổ' : 'Tiếp sức đồng đội';
+      practiceGame =
+        grade === 1
+          ? 'Thỏ nhường hang'
+          : grade === 2
+          ? 'Ném trúng đích'
+          : grade === 3
+          ? 'Chim về tổ'
+          : grade === 4
+          ? 'Chuyền vòng tiếp sức'
+          : 'Tiếp sức đồng đội';
     } else if (grade === 1) {
       if (movementKey === 'vuon_tho' || movementKey === 'tay') {
         warmupGame = 'Làm theo hiệu lệnh';
@@ -375,6 +574,9 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
         warmupGame = 'Đứng ngồi theo hiệu lệnh';
         practiceGame = 'Lò cò tiếp sức';
       }
+    } else if (grade === 2) {
+      warmupGame = 'Đèn xanh đèn đỏ';
+      practiceGame = 'Ném trúng đích';
     } else if (grade === 3) {
       if (movementKey === 'di_deu') {
         warmupGame = 'Đứng ngồi theo hiệu lệnh';
@@ -386,6 +588,9 @@ export function getCurriculumRule(grade: 1 | 3 | 5, ppct: number, week?: number)
         warmupGame = 'Chim về tổ';
         practiceGame = 'Đua ô tô';
       }
+    } else if (grade === 4) {
+      warmupGame = 'Làm theo hiệu lệnh';
+      practiceGame = 'Chuyền vòng tiếp sức';
     } else {
       if (titleLower.includes('gậy') || movementKey === 'gay') {
         warmupGame = 'Ai nhanh hơn với gậy';
@@ -469,7 +674,7 @@ export function cleanTopicForDisplay(topic: string, grade?: number): string {
 
 export interface AuditCheckItem {
   id: string;
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   ppct: number;
   scheduleTitle: string;
   planTitle: string;
@@ -507,7 +712,7 @@ export function auditCurriculumSync(
   let totalCount = 0;
 
   const items: AuditCheckItem[] = plans.map((plan) => {
-    const rule = getCurriculumRule(plan.grade as 1 | 3 | 5, plan.lessonNum, currentWeek);
+    const rule = getCurriculumRule(plan.grade as GradeLevel, plan.lessonNum, currentWeek);
 
     // 1. Check title synchronization with timetable
     const schedRow = scheduleRows.find((r) => r.grade === plan.grade && r.ppct === plan.lessonNum);
@@ -609,7 +814,11 @@ export function auditCurriculumSync(
     const rPracImg = rPractice?.contentImgUrl || '';
     const isNoGradeLeak =
       plan.grade === 1
-        ? !r1Img.includes('k3_') && !r1Img.includes('k5_') && !rPracImg.includes('k3_') && !rPracImg.includes('k5_')
+        ? !r1Img.includes('k2_') && !r1Img.includes('k3_') && !r1Img.includes('k4_') && !r1Img.includes('k5_') && !rPracImg.includes('k2_') && !rPracImg.includes('k3_') && !rPracImg.includes('k4_') && !rPracImg.includes('k5_')
+        : plan.grade === 2
+        ? !r1Img.includes('k1_') && !r1Img.includes('k3_') && !r1Img.includes('k4_') && !r1Img.includes('k5_') && !rPracImg.includes('k1_') && !rPracImg.includes('k3_') && !rPracImg.includes('k4_') && !rPracImg.includes('k5_')
+        : plan.grade === 4
+        ? !r1Img.includes('k1_') && !r1Img.includes('k2_') && !r1Img.includes('k3_') && !r1Img.includes('k5_') && !rPracImg.includes('k1_') && !rPracImg.includes('k2_') && !rPracImg.includes('k3_') && !rPracImg.includes('k5_')
         : true;
 
     const isGameSynced = isWarmupSynced && isPracticeSynced && isNoGradeLeak;
@@ -649,7 +858,7 @@ export function auditCurriculumSync(
 
     return {
       id: plan.id,
-      grade: plan.grade as 1 | 3 | 5,
+      grade: plan.grade as GradeLevel,
       ppct: plan.lessonNum,
       scheduleTitle: schedRow?.lessonTitle || plan.title,
       planTitle: plan.title,
@@ -681,7 +890,7 @@ export function auditCurriculumSync(
 
 /**
  * Automatically repairs and synchronizes lesson titles, timetable rows, movement steps,
- * games, and competencies across all 3 grades according to official SGK standards.
+ * games, and competencies across all 5 grades according to official SGK standards.
  * Guaranteed to achieve 100% textbook synchronization rate.
  */
 export function autoSyncCurriculumAndPlans(
@@ -692,7 +901,7 @@ export function autoSyncCurriculumAndPlans(
 ): { updatedPlans: MasterPlanItem[]; updatedScheduleRows: WeeklyMasterScheduleRow[] } {
   // 1. Synchronize Weekly Schedule Rows
   const updatedScheduleRows = scheduleRows.map((row) => {
-    const rule = getCurriculumRule(row.grade as 1 | 3 | 5, row.ppct, currentWeek);
+    const rule = getCurriculumRule(row.grade as GradeLevel, row.ppct, currentWeek);
     if (rule) {
       return {
         ...row,
@@ -708,7 +917,7 @@ export function autoSyncCurriculumAndPlans(
   // 2. Synchronize Detailed Lesson Plans
   const updatedPlans = plans.map((plan) => {
     const key = `k${plan.grade}_t${plan.lessonNum}`;
-    const rule = getCurriculumRule(plan.grade as 1 | 3 | 5, plan.lessonNum, currentWeek);
+    const rule = getCurriculumRule(plan.grade as GradeLevel, plan.lessonNum, currentWeek);
 
     // If Week 9 authoritative template exists in masterPlansTuan9, use it directly
     if ((plan.week === 9 || currentWeek === 9) && masterPlansTuan9[key]) {
@@ -1049,7 +1258,7 @@ export function auditPlanAgainstCurriculum(
     }
   }
   if (!rule) {
-    rule = getCurriculumRule(grade as 1 | 3 | 5, lessonNum, week);
+    rule = getCurriculumRule(grade as GradeLevel, lessonNum, week);
   }
 
   const expectedTitle = rule?.cleanTitle || title;
@@ -1171,7 +1380,12 @@ export function auditPlanAgainstCurriculum(
   } else if (expMovLower.includes('vươn thở')) {
     imgPassed = imgCorpus.includes('vươn thở') || imgCorpus.includes('vuon_tho');
   } else if (expMovLower.includes('tay')) {
-    imgPassed = imgCorpus.includes('động tác tay') || imgCorpus.includes('k1_tay') || imgCorpus.includes('vuon_tho_tay');
+    imgPassed =
+      imgCorpus.includes('động tác tay') ||
+      imgCorpus.includes('k1_tay') ||
+      imgCorpus.includes('k2_tay') ||
+      imgCorpus.includes('tay_vong') ||
+      imgCorpus.includes('vuon_tho_tay');
   } else {
     imgPassed = Boolean(imgUrl) && !isInvalidColumn1AttachmentForRow(movRow?.content || '', imgUrl, imgTitleDisplay, grade, title);
   }

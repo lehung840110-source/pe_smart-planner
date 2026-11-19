@@ -13,23 +13,28 @@ import firebaseConfig from '../../firebase-applet-config.json';
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
-// Configure Google Provider with the selected Google Drive scopes
+// Configure Google Provider with Google Drive, Google Docs, and Gmail scopes
 export const googleDriveProvider = new GoogleAuthProvider();
 
-// Scopes configured in applet
-export const GOOGLE_DRIVE_SCOPES = [
+// Full Workspace scopes configured in applet
+export const GOOGLE_WORKSPACE_SCOPES = [
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/drive.file',
   'https://www.googleapis.com/auth/drive.appdata',
   'https://www.googleapis.com/auth/drive.metadata',
-  'https://www.googleapis.com/auth/drive.readonly'
+  'https://www.googleapis.com/auth/drive.readonly',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/gmail.send'
 ];
 
-GOOGLE_DRIVE_SCOPES.forEach((scope) => {
+// Alias kept for backwards compatibility
+export const GOOGLE_DRIVE_SCOPES = GOOGLE_WORKSPACE_SCOPES;
+
+GOOGLE_WORKSPACE_SCOPES.forEach((scope) => {
   googleDriveProvider.addScope(scope);
 });
 
-// CRITICAL: Force Google OAuth consent screen so user is prompted to grant Drive permissions
+// Force Google OAuth consent screen so user is prompted to grant Drive, Docs & Gmail permissions
 googleDriveProvider.setCustomParameters({
   prompt: 'consent',
   access_type: 'offline',
@@ -38,7 +43,7 @@ googleDriveProvider.setCustomParameters({
 
 // Flag to indicate ongoing sign-in
 let isSigningIn = false;
-// In-memory token cache (never stored in localStorage)
+// In-memory token cache (never stored in localStorage or sessionStorage)
 let cachedAccessToken: string | null = null;
 
 /**
@@ -64,7 +69,7 @@ export const initAuth = (
 };
 
 /**
- * Sign in with Google Popup and obtain access token
+ * Sign in with Google Popup and obtain access token for Drive, Docs, and Gmail
  */
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
   try {
@@ -78,7 +83,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Lỗi đăng nhập Google Drive:', error);
+    console.error('Lỗi đăng nhập Google Workspace:', error);
     throw error;
   } finally {
     isSigningIn = false;

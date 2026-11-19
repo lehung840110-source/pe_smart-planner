@@ -2107,18 +2107,14 @@ function generate3dCartoonSvg(
   `.trim();
 }
 
-// API: Tạo ảnh nhân vật mới từ ảnh cũ hoặc tên động tác, đa phong cách, nền trong suốt, KHÔNG CHỮ
+// API: Tạo ảnh minh họa phân thế chuẩn SGK 2D Vector (không dùng model trả phí)
 app.post('/api/ai/generate-3d-cartoon', async (req: Request, res: Response) => {
   const {
     movementName,
     grade = 1,
     description = '',
-    sourceImageBase64 = '',
-    style = 'sgk_vector',
     gender = 'male',
     characterMode = 'single',
-    openAiApiKey = '',
-    geminiApiKey = ''
   } = req.body;
   const safeName = movementName || 'Động tác thể dục';
 
@@ -2138,92 +2134,6 @@ app.post('/api/ai/generate-3d-cartoon', async (req: Request, res: Response) => {
 
   const effectiveMode = characterMode === 'group' || isMultiplayerGame ? 'group' : characterMode === 'pair' ? 'pair' : 'single';
 
-  // 1. Nếu có OpenAI API Key, ưu tiên gọi OpenAI DALL-E 3 để tạo tranh minh họa SGK
-  if (openAiApiKey && openAiApiKey.trim()) {
-    try {
-      const openAiRes = await fetch('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openAiApiKey.trim()}`
-        },
-        body: JSON.stringify({
-          model: 'dall-e-3',
-          prompt: `Vietnamese Physical Education primary textbook illustration (SGK GDTC Bộ Kết Nối Tri Thức). Exercise: "${safeName}" for Grade ${grade}. Full-body Vietnamese elementary school students wearing athletic uniform: white collared polo shirt with blue trim, royal-blue long sweatpants with white side stripe, sneakers. Sequential horizontal breakdown showing 5 key poses: TTCB, Step 1, Step 2, Step 3, Step 4. Clean 2D flat digital vector illustration, white background, no 3D clay or plastic toys, high resolution for school print.`,
-          n: 1,
-          size: '1024x1024'
-        })
-      });
-      const openAiData: any = await openAiRes.json();
-      if (openAiData?.data?.[0]?.url) {
-        return res.json({
-          success: true,
-          source: 'openai-dall-e-3',
-          imageUrl: openAiData.data[0].url,
-          movementName: safeName,
-          grade
-        });
-      }
-    } catch (e: any) {
-      console.warn('OpenAI API call notice:', e?.message);
-    }
-  }
-
-  // 2. Chỉ gọi Gemini Image API nếu người dùng có cung cấp custom geminiApiKey
-  // (Tránh gọi trên free tier default key vì model image có quota = 0 gây lỗi 429)
-  if (geminiApiKey && geminiApiKey.trim()) {
-    try {
-      const userGeminiClient = new GoogleGenAI({ apiKey: geminiApiKey.trim() });
-      const parts: any[] = [];
-
-      const resolvedRef = extractBase64Data(sourceImageBase64);
-      if (resolvedRef) {
-        parts.push({
-          inlineData: {
-            mimeType: resolvedRef.mimeType,
-            data: resolvedRef.data,
-          }
-        });
-      }
-
-      const promptText = `Educational textbook illustration for primary physical education (SGK GDTC Khối ${grade}).
-Movement: "${safeName}".
-Attire: Vietnamese primary school PE uniform: clean white athletic polo shirt with blue trim, long royal-blue sports pants with white side stripe, sneakers.
-Style: 2D flat digital vector cel-shading illustration, clean outlines, sequential horizontal movement breakdown (TTCB, Nhịp 1, Nhịp 2, Nhịp 3, Nhịp 4). Pure white background, high resolution. ABSOLUTELY NO 3D CLAY FIGURES, NO PLASTIC BOBBLEHEAD DOLLS.`;
-
-      parts.push({ text: promptText });
-
-      const response = await userGeminiClient.models.generateContent({
-        model: 'gemini-3.1-flash-lite-image',
-        contents: { parts },
-        config: {
-          imageConfig: {
-            aspectRatio: '4:3'
-          }
-        }
-      });
-
-      const candidate = response?.candidates?.[0];
-      if (candidate?.content?.parts) {
-        for (const part of candidate.content.parts) {
-          if (part.inlineData && part.inlineData.data) {
-            const mime = part.inlineData.mimeType || 'image/png';
-            const imageUrl = `data:${mime};base64,${part.inlineData.data}`;
-            return res.json({
-              success: true,
-              source: 'gemini-image-gen',
-              imageUrl,
-              movementName: safeName,
-              style,
-              characterMode: effectiveMode
-            });
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // 3. Fallback chuẩn xác 100%: Sinh Tranh Phân Thế 2D Vector SGK (TTCB -> Nhịp 1 -> Nhịp 2 -> Nhịp 3 -> Nhịp 4)
   const rawSvg = generateSgk2dSequenceSvg(safeName, grade, effectiveMode, gender);
   const svgDataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(rawSvg)}`;
 
@@ -2238,6 +2148,123 @@ Style: 2D flat digital vector cel-shading illustration, clean outlines, sequenti
   });
 });
 
+// API: Phân tích & thiết kế thông số khớp động tác chuẩn SGK bằng Gemini 4 Hydrogen (cho Studio Tạo Ảnh Mới HD/2K/4K)
+app.post('/api/ai/compose-hd-illustration', async (req: Request, res: Response) => {
+  const {
+    movementName = 'Động tác thể dục',
+    grade = '1',
+    sceneMode = 'sequence_5',
+    gender = 'male',
+    equipment = 'none',
+    customDescription = '',
+  } = req.body || {};
+
+  if (!aiClient) {
+    return res.json({
+      success: true,
+      source: 'deterministic-kinematic-engine',
+      useLocalPreset: true,
+    });
+  }
+
+  try {
+    const prompt = `Bạn là chuyên gia Giáo dục thể chất Tiểu học Việt Nam (Chương trình GDPT 2018, Bộ Kết nối tri thức với cuộc sống).
+Hãy thiết kế cấu trúc các tư thế phân thế động tác bằng tọa độ góc khớp để hệ thống đồ họa vector vẽ tranh minh họa SGK Khối ${grade}:
+- Tên bài / động tác: "${movementName}"
+- Chế độ bố cục: "${sceneMode}" (sequence_5 = 5 bước TTCB -> Nhịp 1 -> Nhịp 2 -> Nhịp 3 -> Nhịp 4; single_pose = 1 tư thế chuẩn trọng tâm; pair_practice = 2 học sinh tập cặp đôi; group_game = trò chơi vận động tập thể)
+- Nhân vật chính: ${gender === 'female' ? 'Học sinh nữ' : 'Học sinh nam'}
+- Dụng cụ: "${equipment}" (none/stick/hoop/ball/rope/cone/flag)
+${customDescription ? `- Yêu cầu/mô tả chi tiết của giáo viên: "${customDescription}"` : ''}
+
+Quy ước góc khớp (đơn vị độ):
+- facing: "front" (nhìn chính diện), "profile_right" (nghiêng phải — dùng cho chạy, bật xa, cúi gập bụng sâu, cặp đôi bên trái), hoặc "profile_left" (cặp đôi bên phải).
+- torsoTiltDeg: -35 đến +35 (nghiêng lườn sang trái là âm, sang phải là dương, đứng thẳng = 0).
+- torsoForwardBend: 0 đến 1 (0 = thẳng, 0.9 = cúi gập sâu chạm mũi chân).
+- kneeSquat: 0 đến 1 (0 = thẳng gối, 0.7 = khuỵu gối sâu).
+- heelRaisePx: 0 đến 20 (0 = chân chạm sàn, 14 = kiễng gót, 20 = bật nhảy lên không).
+- Arm (0 = buông dọc thân, 90 = dang ngang/đưa thẳng trước, 145 = vươn chữ V, 170 = giơ thẳng lên cao, -25 = bắt chéo trước ngực; elbowDeg: 0 = thẳng tay, 95 = chống hông hoặc gập khuỷu, -35 = vỗ tay trên đầu).
+- Leg (hipDeg: 0 = đứng khép, 20 = bước rộng/đưa chân lên, 75 = nâng cao đùi; kneeDeg: 0 = thẳng, 80 = gập gối).
+- motionArc: "none" | "arms_up" | "arms_down" | "arms_out" | "clap" | "side_left" | "side_right" | "bend_down" | "hop_up" | "run_forward" | "throw_ball".
+- gameType (nếu sceneMode là group_game): "relay" | "circle" | "tug_of_war" | "rabbit_hop" | "ball_pass" | "cone_run".
+
+Hãy xuất ra JSON chính xác sư phạm, ngắn gọn, dễ hiểu cho học sinh tiểu học.`;
+
+    const aiResponse = await aiClient.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: prompt,
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            title: { type: Type.STRING },
+            subtitle: { type: Type.STRING },
+            equipment: { type: Type.STRING },
+            gameType: { type: Type.STRING },
+            bottomNote: { type: Type.STRING },
+            poses: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  label: { type: Type.STRING },
+                  caption: { type: Type.STRING },
+                  facing: { type: Type.STRING },
+                  torsoTiltDeg: { type: Type.NUMBER },
+                  torsoForwardBend: { type: Type.NUMBER },
+                  kneeSquat: { type: Type.NUMBER },
+                  heelRaisePx: { type: Type.NUMBER },
+                  headTiltDeg: { type: Type.NUMBER },
+                  leftUpperDeg: { type: Type.NUMBER },
+                  leftElbowDeg: { type: Type.NUMBER },
+                  rightUpperDeg: { type: Type.NUMBER },
+                  rightElbowDeg: { type: Type.NUMBER },
+                  leftHipDeg: { type: Type.NUMBER },
+                  leftKneeDeg: { type: Type.NUMBER },
+                  rightHipDeg: { type: Type.NUMBER },
+                  rightKneeDeg: { type: Type.NUMBER },
+                  palmFacing: { type: Type.STRING },
+                  motionArc: { type: Type.STRING },
+                },
+                required: ['label', 'caption', 'leftUpperDeg', 'leftElbowDeg', 'rightUpperDeg', 'rightElbowDeg', 'leftHipDeg', 'leftKneeDeg', 'rightHipDeg', 'rightKneeDeg']
+              }
+            }
+          },
+          required: ['title', 'subtitle', 'bottomNote', 'poses']
+        }
+      }
+    });
+
+    const parsed = JSON.parse(aiResponse.text || '{}');
+    if (Array.isArray(parsed?.poses) && parsed.poses.length > 0) {
+      return res.json({
+        success: true,
+        source: 'gemini-4-hydrogen',
+        useLocalPreset: false,
+        spec: {
+          title: parsed.title || movementName,
+          subtitle: parsed.subtitle || `Minh họa kỹ thuật chuẩn SGK GDTC Khối ${grade} · Bộ Kết nối tri thức`,
+          grade: (['1', '2', '3', '4', '5'].includes(String(grade)) ? String(grade) : '1') as '1' | '2' | '3' | '4' | '5',
+          sceneMode,
+          gender,
+          equipment: equipment !== 'none' ? equipment : (parsed.equipment || 'none'),
+          gameType: parsed.gameType || undefined,
+          bottomNote: parsed.bottomNote || 'Thực hiện nhịp nhàng, đúng biên độ động tác và giữ lưng thẳng.',
+          poses: parsed.poses
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn('Compose HD illustration notice, using local preset fallback:', err?.message);
+  }
+
+  return res.json({
+    success: true,
+    source: 'deterministic-kinematic-engine',
+    useLocalPreset: true,
+  });
+});
+
 // ============================================================================
 // PERSISTENT USER ACCOUNTS, AUTHENTICATION & WORKSPACE SYNC (SCRYPT + HMAC)
 // ============================================================================
@@ -2245,6 +2272,9 @@ const DATA_DIR = path.join(__dirname, '.data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const WORKSPACES_DIR = path.join(DATA_DIR, 'workspaces');
 const SECRET_FILE = path.join(DATA_DIR, '.session_secret');
+const RECOVERY_CODES_FILE = path.join(DATA_DIR, 'recovery_codes.json');
+const REG_NOTIFICATIONS_FILE = path.join(DATA_DIR, 'registration_notifications.json');
+const ADMIN_NOTIFICATION_EMAIL = 'lehung840110@gmail.com';
 
 interface StoredUser {
   id: string;
@@ -2255,12 +2285,42 @@ interface StoredUser {
   passwordHash: string;
   createdAt: number;
   lastLoginAt: number;
+  registrationConfirmed?: boolean;
+  confirmedAt?: number;
+}
+
+interface StoredRecoveryCode {
+  email: string;
+  codeHash: string;
+  expiresAt: number;
+  createdAt: number;
+  attempts: number;
+}
+
+interface RegistrationNotificationRecord {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  schoolName: string;
+  notifyEmail: string;
+  confirmationCode: string;
+  registeredAt: number;
+  emailSent: boolean;
+  emailSentAt?: number;
+  gmailMessageId?: string;
+  sentByEmail?: string;
+  confirmed: boolean;
+  confirmedAt?: number;
+  confirmedBy?: string;
 }
 
 function ensureAuthStorage() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(WORKSPACES_DIR)) fs.mkdirSync(WORKSPACES_DIR, { recursive: true });
   if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
+  if (!fs.existsSync(RECOVERY_CODES_FILE)) fs.writeFileSync(RECOVERY_CODES_FILE, '[]', 'utf8');
+  if (!fs.existsSync(REG_NOTIFICATIONS_FILE)) fs.writeFileSync(REG_NOTIFICATIONS_FILE, '[]', 'utf8');
 }
 
 function getSessionSecret(): string {
@@ -2277,10 +2337,10 @@ function getSessionSecret(): string {
   return generated;
 }
 
-function readUsersList(): StoredUser[] {
+function readJsonList<T>(filePath: string): T[] {
   ensureAuthStorage();
   try {
-    const raw = fs.readFileSync(USERS_FILE, 'utf8');
+    const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -2288,11 +2348,35 @@ function readUsersList(): StoredUser[] {
   }
 }
 
-function writeUsersList(users: StoredUser[]) {
+function writeJsonList<T>(filePath: string, list: T[]) {
   ensureAuthStorage();
-  const tmpFile = `${USERS_FILE}.tmp`;
-  fs.writeFileSync(tmpFile, JSON.stringify(users, null, 2), 'utf8');
-  fs.renameSync(tmpFile, USERS_FILE);
+  const tmpFile = `${filePath}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(list, null, 2), 'utf8');
+  fs.renameSync(tmpFile, filePath);
+}
+
+function readUsersList(): StoredUser[] {
+  return readJsonList<StoredUser>(USERS_FILE);
+}
+
+function writeUsersList(users: StoredUser[]) {
+  writeJsonList(USERS_FILE, users);
+}
+
+function readRecoveryCodes(): StoredRecoveryCode[] {
+  return readJsonList<StoredRecoveryCode>(RECOVERY_CODES_FILE);
+}
+
+function writeRecoveryCodes(codes: StoredRecoveryCode[]) {
+  writeJsonList(RECOVERY_CODES_FILE, codes);
+}
+
+function readRegistrationNotifications(): RegistrationNotificationRecord[] {
+  return readJsonList<RegistrationNotificationRecord>(REG_NOTIFICATIONS_FILE);
+}
+
+function writeRegistrationNotifications(items: RegistrationNotificationRecord[]) {
+  writeJsonList(REG_NOTIFICATIONS_FILE, items);
 }
 
 function hashPassword(password: string): string {
@@ -2310,12 +2394,20 @@ function verifyPassword(password: string, storedHash: string): boolean {
   return crypto.timingSafeEqual(derivedBuf, expectedBuf);
 }
 
-function signSessionToken(user: StoredUser): string {
+function maskEmailAddress(email: string): string {
+  const [local, domain] = email.split('@');
+  if (!local || !domain) return email;
+  if (local.length <= 2) return `${local[0] || '*'}***@${domain}`;
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
+
+function signSessionToken(user: StoredUser, rememberMe = true): string {
+  const ttlMs = rememberMe ? 30 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
   const payload = Buffer.from(
     JSON.stringify({
       sub: user.id,
       email: user.email,
-      exp: Date.now() + 30 * 24 * 60 * 60 * 1000
+      exp: Date.now() + ttlMs
     }),
     'utf8'
   ).toString('base64url');
@@ -2377,16 +2469,19 @@ function toPublicUser(u: StoredUser) {
     email: u.email,
     fullName: u.fullName,
     schoolName: u.schoolName,
-    role: u.role,
+    role: u.email === ADMIN_NOTIFICATION_EMAIL ? 'admin' : u.role,
     createdAt: u.createdAt,
-    lastLoginAt: u.lastLoginAt
+    lastLoginAt: u.lastLoginAt,
+    registrationConfirmed: Boolean(u.registrationConfirmed),
+    confirmedAt: u.confirmedAt
   };
 }
 
-function setSessionCookie(res: Response, token: string) {
+function setSessionCookie(res: Response, token: string, rememberMe = true) {
+  const maxAgePart = rememberMe ? `; Max-Age=${30 * 24 * 60 * 60}` : '';
   res.setHeader(
     'Set-Cookie',
-    `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 24 * 60 * 60}`
+    `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${maxAgePart}`
   );
 }
 
@@ -2395,6 +2490,7 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
   const password = String(req.body?.password || '');
   const fullName = String(req.body?.fullName || '').trim() || 'Giáo viên GDTC';
   const schoolName = String(req.body?.schoolName || '').trim() || 'TRƯỜNG TIỂU HỌC & THCS';
+  const rememberMe = req.body?.rememberMe !== false;
 
   if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
     return res.status(400).json({ success: false, error: 'Email không hợp lệ. Vui lòng nhập đúng định dạng email.' });
@@ -2405,37 +2501,60 @@ app.post('/api/auth/register', (req: Request, res: Response) => {
 
   const users = readUsersList();
   if (users.some((u) => u.email === rawEmail)) {
-    return res.status(409).json({ success: false, error: 'Email này đã được đăng ký tài khoản. Vui lòng đăng nhập.' });
+    return res.status(409).json({ success: false, error: 'Email này đã được đăng ký tài khoản. Vui lòng đăng nhập hoặc dùng tính năng Khôi phục mật khẩu.' });
   }
 
   const now = Date.now();
+  const isAdminAccount = users.length === 0 || rawEmail === ADMIN_NOTIFICATION_EMAIL;
   const newUser: StoredUser = {
     id: `usr_${now}_${crypto.randomBytes(4).toString('hex')}`,
     email: rawEmail,
     fullName,
     schoolName,
-    role: users.length === 0 ? 'admin' : 'teacher',
+    role: isAdminAccount ? 'admin' : 'teacher',
     passwordHash: hashPassword(password),
     createdAt: now,
-    lastLoginAt: now
+    lastLoginAt: now,
+    registrationConfirmed: rawEmail === ADMIN_NOTIFICATION_EMAIL
   };
 
   users.push(newUser);
   writeUsersList(users);
 
-  const token = signSessionToken(newUser);
-  setSessionCookie(res, token);
+  // Create persistent registration notification record addressed to lehung840110@gmail.com
+  const confirmationCode = String(crypto.randomInt(100000, 999999));
+  const notificationRecord: RegistrationNotificationRecord = {
+    id: `reg_${now}_${crypto.randomBytes(3).toString('hex')}`,
+    userId: newUser.id,
+    email: newUser.email,
+    fullName: newUser.fullName,
+    schoolName: newUser.schoolName,
+    notifyEmail: ADMIN_NOTIFICATION_EMAIL,
+    confirmationCode,
+    registeredAt: now,
+    emailSent: false,
+    confirmed: rawEmail === ADMIN_NOTIFICATION_EMAIL,
+    ...(rawEmail === ADMIN_NOTIFICATION_EMAIL ? { confirmedAt: now, confirmedBy: ADMIN_NOTIFICATION_EMAIL } : {})
+  };
+  const notifications = readRegistrationNotifications();
+  notifications.unshift(notificationRecord);
+  writeRegistrationNotifications(notifications.slice(0, 200));
+
+  const token = signSessionToken(newUser, rememberMe);
+  setSessionCookie(res, token, rememberMe);
 
   return res.json({
     success: true,
     token,
-    user: toPublicUser(newUser)
+    user: toPublicUser(newUser),
+    registrationNotification: notificationRecord
   });
 });
 
 app.post('/api/auth/login', (req: Request, res: Response) => {
   const rawEmail = String(req.body?.email || '').trim().toLowerCase();
   const password = String(req.body?.password || '');
+  const rememberMe = req.body?.rememberMe !== false;
 
   if (!rawEmail || !password) {
     return res.status(400).json({ success: false, error: 'Vui lòng nhập đầy đủ Email và Mật khẩu.' });
@@ -2448,16 +2567,261 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
   }
 
   users[idx].lastLoginAt = Date.now();
+  if (users[idx].email === ADMIN_NOTIFICATION_EMAIL && users[idx].role !== 'admin') {
+    users[idx].role = 'admin';
+  }
   writeUsersList(users);
 
-  const token = signSessionToken(users[idx]);
-  setSessionCookie(res, token);
+  const token = signSessionToken(users[idx], rememberMe);
+  setSessionCookie(res, token, rememberMe);
 
   return res.json({
     success: true,
     token,
     user: toPublicUser(users[idx])
   });
+});
+
+app.post('/api/auth/find-account', (req: Request, res: Response) => {
+  const query = String(req.body?.query || '').trim().toLowerCase();
+  if (query.length < 2) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập ít nhất 2 ký tự họ tên hoặc email để tra cứu.' });
+  }
+
+  const users = readUsersList();
+  const matches = users
+    .filter(
+      (u) =>
+        u.email.toLowerCase().includes(query) ||
+        u.fullName.toLowerCase().includes(query) ||
+        u.schoolName.toLowerCase().includes(query)
+    )
+    .slice(0, 8)
+    .map((u) => ({
+      email: u.email,
+      maskedEmail: maskEmailAddress(u.email),
+      fullName: u.fullName,
+      schoolName: u.schoolName,
+      createdAt: u.createdAt
+    }));
+
+  return res.json({
+    success: true,
+    accounts: matches
+  });
+});
+
+app.post('/api/auth/request-reset', (req: Request, res: Response) => {
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập địa chỉ email hợp lệ.' });
+  }
+
+  const users = readUsersList();
+  const user = users.find((u) => u.email === rawEmail);
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: 'Không tìm thấy tài khoản nào đăng ký với email này. Bạn có thể dùng tab "Tra cứu tài khoản" để tìm lại.'
+    });
+  }
+
+  const now = Date.now();
+  const expiresAt = now + 15 * 60 * 1000;
+  const recoveryCode = String(crypto.randomInt(100000, 999999));
+
+  const existing = readRecoveryCodes().filter((item) => item.email !== rawEmail && item.expiresAt > now);
+  existing.push({
+    email: rawEmail,
+    codeHash: hashPassword(recoveryCode),
+    expiresAt,
+    createdAt: now,
+    attempts: 0
+  });
+  writeRecoveryCodes(existing);
+
+  return res.json({
+    success: true,
+    email: rawEmail,
+    maskedEmail: maskEmailAddress(rawEmail),
+    fullName: user.fullName,
+    expiresAt,
+    recoveryCode,
+    notifyEmail: ADMIN_NOTIFICATION_EMAIL
+  });
+});
+
+app.post('/api/auth/reset-password', (req: Request, res: Response) => {
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  const code = String(req.body?.code || '').trim();
+  const newPassword = String(req.body?.newPassword || '');
+
+  if (!rawEmail || !code) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập đầy đủ email và mã khôi phục 6 chữ số.' });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).json({ success: false, error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+  }
+
+  const now = Date.now();
+  const codes = readRecoveryCodes();
+  const codeIdx = codes.findIndex((c) => c.email === rawEmail);
+  if (codeIdx < 0) {
+    return res.status(400).json({ success: false, error: 'Chưa có yêu cầu khôi phục mật khẩu cho email này hoặc mã đã được sử dụng.' });
+  }
+
+  const record = codes[codeIdx];
+  if (now > record.expiresAt) {
+    codes.splice(codeIdx, 1);
+    writeRecoveryCodes(codes);
+    return res.status(400).json({ success: false, error: 'Mã khôi phục đã hết hạn (quá 15 phút). Vui lòng tạo mã mới.' });
+  }
+
+  if (record.attempts >= 5) {
+    codes.splice(codeIdx, 1);
+    writeRecoveryCodes(codes);
+    return res.status(429).json({ success: false, error: 'Bạn đã nhập sai mã quá 5 lần. Vui lòng yêu cầu mã khôi phục mới.' });
+  }
+
+  if (!verifyPassword(code, record.codeHash)) {
+    record.attempts += 1;
+    writeRecoveryCodes(codes);
+    return res.status(400).json({
+      success: false,
+      error: `Mã khôi phục chưa chính xác (còn ${Math.max(0, 5 - record.attempts)} lần thử).`
+    });
+  }
+
+  const users = readUsersList();
+  const userIdx = users.findIndex((u) => u.email === rawEmail);
+  if (userIdx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản tương ứng.' });
+  }
+
+  users[userIdx].passwordHash = hashPassword(newPassword);
+  users[userIdx].lastLoginAt = now;
+  writeUsersList(users);
+
+  codes.splice(codeIdx, 1);
+  writeRecoveryCodes(codes);
+
+  const token = signSessionToken(users[userIdx], true);
+  setSessionCookie(res, token, true);
+
+  return res.json({
+    success: true,
+    token,
+    user: toPublicUser(users[userIdx])
+  });
+});
+
+app.post('/api/auth/change-password', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Vui lòng đăng nhập để đổi mật khẩu.' });
+  }
+
+  const currentPassword = String(req.body?.currentPassword || '');
+  const newPassword = String(req.body?.newPassword || '');
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ success: false, error: 'Mật khẩu mới phải có ít nhất 6 ký tự.' });
+  }
+
+  const users = readUsersList();
+  const idx = users.findIndex((u) => u.id === authUser.id);
+  if (idx < 0 || !verifyPassword(currentPassword, users[idx].passwordHash)) {
+    return res.status(400).json({ success: false, error: 'Mật khẩu hiện tại chưa chính xác.' });
+  }
+
+  users[idx].passwordHash = hashPassword(newPassword);
+  writeUsersList(users);
+
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/notifications', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+
+  const all = readRegistrationNotifications();
+  const isAdmin = authUser.role === 'admin' || authUser.email === ADMIN_NOTIFICATION_EMAIL;
+  const visible = isAdmin ? all : all.filter((n) => n.userId === authUser.id || n.email === authUser.email);
+
+  return res.json({
+    success: true,
+    notifyEmail: ADMIN_NOTIFICATION_EMAIL,
+    isAdmin,
+    notifications: visible
+  });
+});
+
+app.post('/api/auth/notifications/:id/mark-sent', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+
+  const targetId = String(req.params.id || '');
+  const gmailMessageId = String(req.body?.gmailMessageId || '');
+  const sentByEmail = String(req.body?.sentByEmail || authUser.email);
+  const notifications = readRegistrationNotifications();
+  const idx = notifications.findIndex((n) => n.id === targetId);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy thông báo đăng ký.' });
+  }
+
+  const isAdmin = authUser.role === 'admin' || authUser.email === ADMIN_NOTIFICATION_EMAIL;
+  if (!isAdmin && notifications[idx].userId !== authUser.id) {
+    return res.status(403).json({ success: false, error: 'Bạn không có quyền cập nhật thông báo này.' });
+  }
+
+  notifications[idx].emailSent = true;
+  notifications[idx].emailSentAt = Date.now();
+  if (gmailMessageId) notifications[idx].gmailMessageId = gmailMessageId;
+  if (sentByEmail) notifications[idx].sentByEmail = sentByEmail;
+  writeRegistrationNotifications(notifications);
+
+  return res.json({ success: true, notification: notifications[idx] });
+});
+
+app.post('/api/auth/notifications/:id/confirm', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+
+  const targetId = String(req.params.id || '');
+  const submittedCode = String(req.body?.confirmationCode || '').trim();
+  const notifications = readRegistrationNotifications();
+  const idx = notifications.findIndex((n) => n.id === targetId);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bản ghi đăng ký.' });
+  }
+
+  const isAdmin = authUser.role === 'admin' || authUser.email === ADMIN_NOTIFICATION_EMAIL;
+  const codeMatches = submittedCode && submittedCode === notifications[idx].confirmationCode;
+  if (!isAdmin && !(notifications[idx].userId === authUser.id && codeMatches)) {
+    return res.status(403).json({ success: false, error: 'Mã xác nhận chưa khớp hoặc cần quản trị viên xác nhận.' });
+  }
+
+  const now = Date.now();
+  notifications[idx].confirmed = true;
+  notifications[idx].confirmedAt = now;
+  notifications[idx].confirmedBy = authUser.email;
+  writeRegistrationNotifications(notifications);
+
+  const users = readUsersList();
+  const userIdx = users.findIndex((u) => u.id === notifications[idx].userId);
+  if (userIdx >= 0) {
+    users[userIdx].registrationConfirmed = true;
+    users[userIdx].confirmedAt = now;
+    writeUsersList(users);
+  }
+
+  return res.json({ success: true, notification: notifications[idx] });
 });
 
 app.post('/api/auth/logout', (_req: Request, res: Response) => {

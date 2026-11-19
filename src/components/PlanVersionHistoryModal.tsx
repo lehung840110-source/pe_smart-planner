@@ -13,6 +13,7 @@ import {
   FileEdit,
   ArrowRight
 } from 'lucide-react';
+import { GradeLevel } from '../types/gdtc';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import {
   LessonPlanVersion,
@@ -28,7 +29,7 @@ import {
 
 interface PlanVersionTargetOption {
   week: number;
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   lessonNum: number;
   title: string;
   currentPlan: MasterPlanItem;

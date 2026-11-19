@@ -746,7 +746,7 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     hsTask: '- Nâng hạ gậy nhịp nhàng theo hơi thở sâu, thả lỏng toàn thân.'
   },
 
-  // Bổ sung các chuyển động chuẩn khớp hoàn toàn chương trình SGK cả 3 khối:
+  // Bổ sung các chuyển động chuẩn khớp hoàn toàn chương trình SGK cả 5 khối:
   // Đội hình đội ngũ: Đứng nghiêm, đứng nghỉ
   {
     id: 'mv_k1_dung_nghiem',
@@ -835,6 +835,257 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     defaultLvd: "7 - 8'",
     gvExplanation: '- Kiểm tra đệm thể dục dày dặn, an toàn tuyệt đối.\n- Nhấn mạnh điểm quan trọng: giấu cằm vào ngực, không chống đỉnh đầu.',
     hsTask: '- Luân phiên từng học sinh thực hiện trên đệm có GV bảo hiểm.'
+  },
+
+  // Khối 2 (SGK GDTC Lớp 2 Kết nối tri thức)
+  {
+    id: 'mv_k2_bien_doi_hang_doc',
+    name: 'Biến đổi đội hình hàng dọc (Khối 2)',
+    grade: 2,
+    keywords: ['biến đổi đội hình', 'hàng dọc', 'khối 2', 'tập hợp hàng dọc'],
+    category: 'dong_tac_moi',
+    cues: ['Nghe khẩu lệnh tách - hợp 1, 2 hàng dọc thành 2, 4 hàng dọc', 'Giữ cự ly đều, gióng hàng thẳng', 'Di chuyển nhanh nhẹn, trật tự'],
+    commonErrors: ['Hàng dọc bị cong lệch', 'Không giữ đúng cự ly giãn cách'],
+    svgDataUrl: '/assets/sgk_chuan/k2_bien_doi_hang_doc.svg',
+    defaultLvd: "7 - 8'",
+    gvExplanation: '- GV làm mẫu và hô khẩu lệnh rõ ràng cách biến đổi từ 1 hàng dọc thành 2, 4 hàng dọc.\n- Cho HS quan sát hình ảnh SGK Lớp 2, hướng dẫn điểm số 1-2 và bước chếch đúng vị trí.',
+    hsTask: '- Lắng nghe khẩu lệnh, di chuyển đúng vị trí hàng và nhanh chóng gióng hàng thẳng.'
+  },
+  {
+    id: 'mv_k2_vuon_tho',
+    name: 'Động tác Vươn thở (Khối 2)',
+    grade: 2,
+    keywords: ['vươn thở', 'bài 1', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái rộng bằng vai, hai tay vươn chữ V chếch cao hít sâu', 'Hạ tay bắt chéo trước bụng cúi nhẹ thở ra', 'Giữ lưng thẳng nhịp nhàng'],
+    commonErrors: ['Thở ngược nhịp', 'Tay chưa vươn thẳng'],
+    svgDataUrl: '/assets/sgk_chuan/k2_vuon_tho.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV làm mẫu 2-3 lần theo chiều gương, kết hợp cho HS xem hình ảnh SGK GDTC Lớp 2.\n- Nhắc HS hít sâu bằng mũi ở nhịp 1, 3 và thở ra chậm ở nhịp 2, 4.',
+    hsTask: '- Tập theo nhịp hô chậm của GV, phối hợp nhịp thở sâu đều.'
+  },
+  {
+    id: 'mv_k2_tay',
+    name: 'Động tác Tay (Khối 2)',
+    grade: 2,
+    keywords: ['động tác tay', 'tay', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái rộng bằng vai, hai tay dang ngang bàn tay sấp/ngửa đúng nhịp', 'Đưa hai tay lên cao vỗ tay dứt khoát', 'Thân người thẳng tự nhiên'],
+    commonErrors: ['Khuỷu tay bị chùng', 'Vỗ tay không đều nhịp'],
+    svgDataUrl: '/assets/sgk_chuan/k2_tay.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV thị phạm kỹ thuật Động tác Tay SGK Lớp 2, phân tích độ cao tay ngang vai và nhịp vỗ tay trên cao.',
+    hsTask: '- Đội hình 4 hàng ngang so le giãn cách 1 sải tay thực hiện dứt khoát.'
+  },
+  {
+    id: 'mv_k2_chan',
+    name: 'Động tác Chân (Khối 2)',
+    grade: 2,
+    keywords: ['động tác chân', 'chân', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Nhịp 1 kiễng gót, hai tay chống hông', 'Nhịp 2 khuỵu gối sâu giữ lưng thẳng, hai tay đưa ra trước ngang vai', 'Thăng bằng ổn định'],
+    commonErrors: ['Ngả người về trước khi khuỵu gối', 'Kiễng gót chao đảo'],
+    svgDataUrl: '/assets/sgk_chuan/k2_chan.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV hướng dẫn kỹ thuật giữ lưng thẳng khi khuỵu gối và kiễng gót thăng bằng theo SGK Lớp 2.',
+    hsTask: '- Tập mô phỏng chậm, kiểm soát khớp gối và cổ chân.'
+  },
+  {
+    id: 'mv_k2_luon',
+    name: 'Động tác Lườn (Khối 2)',
+    grade: 2,
+    keywords: ['động tác lườn', 'lườn', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái sang ngang, hai tay dang ngang', 'Nghiêng lườn sang trái, tay trái chống hông, tay phải vươn áp sát tai', 'Đổi bên đều đặn'],
+    commonErrors: ['Nghiêng bị xoay vặn thân ra trước', 'Chùng chân trụ'],
+    svgDataUrl: '/assets/sgk_chuan/k2_luon.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV phân tích tư thế nghiêng thẳng mặt phẳng trán, giữ hai chân thẳng theo SGK Lớp 2.',
+    hsTask: '- Thực hiện nghiêng lườn nhẹ nhàng, kéo giãn cơ liên sườn đều hai bên.'
+  },
+  {
+    id: 'mv_k2_bung',
+    name: 'Động tác Bụng (Khối 2)',
+    grade: 2,
+    keywords: ['động tác bụng', 'bụng', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân rộng hơn vai, hai tay vươn cao vỗ tay', 'Cúi gập thân sâu hai tay chạm mũi bàn chân, hai chân thẳng', 'Đứng thẳng dang ngang tay'],
+    commonErrors: ['Co đầu gối khi cúi', 'Cúi đầu gập cổ quá mạnh'],
+    svgDataUrl: '/assets/sgk_chuan/k2_bung.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV làm mẫu tư thế gập thân thẳng gối, tay hướng chạm mũi chân theo SGK Lớp 2.',
+    hsTask: '- Cúi gập thân chậm rãi, giữ thẳng hai gối, thở ra đều.'
+  },
+  {
+    id: 'mv_k2_toan_than',
+    name: 'Động tác Toàn thân (Khối 2)',
+    grade: 2,
+    keywords: ['động tác toàn thân', 'toàn thân', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái chếch trước khuỵu gối, tay vươn chữ V', 'Gập thân cúi đầu chạm mũi chân', 'Đứng thẳng vươn ngực mở tay'],
+    commonErrors: ['Chân sau bị chùng gối', 'Mất thăng bằng khi đổi chân'],
+    svgDataUrl: '/assets/sgk_chuan/k2_toan_than.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV hướng dẫn phối hợp liên hoàn chân trước khuỵu gối - chân sau thẳng và gập thân theo SGK Lớp 2.',
+    hsTask: '- Thực hiện nhịp nhàng các nhịp, giữ thăng bằng chắc chắn.'
+  },
+  {
+    id: 'mv_k2_nhay_dieu_hoa',
+    name: 'Động tác Nhảy và Điều hòa (Khối 2)',
+    grade: 2,
+    keywords: ['động tác nhảy', 'động tác điều hòa', 'nhảy', 'điều hòa', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Bật nhảy tách chân tiếp đất êm bằng nửa trước bàn chân', 'Lắc cổ tay thả lỏng nhẹ nhàng kết hợp hít thở sâu ở động tác điều hòa'],
+    commonErrors: ['Tiếp đất bằng gót chân', 'Thả lỏng chưa tự nhiên'],
+    svgDataUrl: '/assets/sgk_chuan/k2_nhay_dieu_hoa.svg',
+    defaultLvd: "5 - 7'",
+    gvExplanation: '- GV làm mẫu nhịp bật nhảy êm nhẹ và nhịp điều hòa thả lỏng hồi phục cơ thể theo SGK Lớp 2.',
+    hsTask: '- Bật nhảy dứt khoát nhưng êm chân, chuyển sang điều hòa thở sâu nhẹ nhàng.'
+  },
+  {
+    id: 'mv_k2_vach_ke_thang',
+    name: 'Đi theo vạch kẻ thẳng, hai tay chống hông (Khối 2)',
+    grade: 2,
+    keywords: ['vạch kẻ thẳng', 'chống hông', 'giữ thăng bằng', 'khối 2'],
+    category: 'dong_tac_moi',
+    cues: ['Mắt nhìn thẳng phía trước cách 2-3m', 'Hai tay chống hông thẳng lưng', 'Đặt bàn chân bước đều chính xác lên vạch kẻ thẳng'],
+    commonErrors: ['Cúi gằm đầu nhìn chân', 'Bước lệch khỏi vạch'],
+    svgDataUrl: '/assets/sgk_chuan/k2_vach_ke_thang.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- Kẻ vạch thẳng rõ ràng trên sân, hướng dẫn HS giữ thẳng lưng mắt nhìn phía trước khi bước đi thăng bằng.',
+    hsTask: '- Đi từng hàng nối tiếp nhau dọc vạch kẻ thẳng, giữ thăng bằng tốt.'
+  },
+
+  // Khối 4 (SGK GDTC Lớp 4 Kết nối tri thức - Bài tập thể dục với vòng thể dục)
+  {
+    id: 'mv_k4_di_deu_chuyen_chay',
+    name: 'Đi đều chuyển sang chạy (Khối 4)',
+    grade: 4,
+    keywords: ['đi đều chuyển sang chạy', 'đi đều vòng phải', 'vòng trái', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Nghe khẩu lệnh Chạy đều - CHẠY! khi đang đi đều', 'Chuyển bước tiếp xúc nửa trước bàn chân, tay đánh dọc thân', 'Giữ hàng ngũ thẳng đều'],
+    commonErrors: ['Chuyển nhịp bị vấp chân', 'Xô đẩy mất cự ly hàng'],
+    svgDataUrl: '/assets/sgk_chuan/k4_di_deu_chuyen_chay.svg',
+    defaultLvd: "7 - 8'",
+    gvExplanation: '- GV hô khẩu lệnh chuẩn xác để hướng dẫn chuyển từ đi đều sang chạy đều nhịp nhàng theo SGK Lớp 4.',
+    hsTask: '- Lắng nghe dự lệnh và động lệnh, giữ thẳng hàng ngũ khi chuyển bước chạy.'
+  },
+  {
+    id: 'mv_k4_vuon_tho_vong',
+    name: 'Động tác Vươn thở với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['vươn thở với vòng', 'vươn thở', 'với vòng thể dục', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Hai tay cầm hai bên mép vòng thể dục', 'Bước chân trái nâng vòng lên cao chếch trước hít sâu', 'Hạ vòng trước bụng cúi nhẹ thở ra'],
+    commonErrors: ['Cầm vòng lệch tâm', 'Hít thở ngược nhịp'],
+    svgDataUrl: '/assets/sgk_chuan/k4_vuon_tho_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV kiểm tra độ an toàn vòng thể dục và thị phạm Động tác Vươn thở với vòng (SGK Lớp 4 Trang 26).',
+    hsTask: '- Giãn cách 1.5m an toàn, cầm chắc mép vòng tập nhịp nhàng theo nhịp thở.'
+  },
+  {
+    id: 'mv_k4_tay_vong',
+    name: 'Động tác Tay với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['tay với vòng', 'động tác tay với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Hai tay cầm vòng đưa ra trước thẳng tay ngang vai', 'Mở một tay giữ vòng sang ngang hoặc chuyển vòng nhịp nhàng', 'Thân trên thẳng đứng'],
+    commonErrors: ['Tay chùng không ngang vai', 'Làm rơi vòng khi chuyển tay'],
+    svgDataUrl: '/assets/sgk_chuan/k4_tay_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV thị phạm Động tác Tay với vòng thể dục (SGK Lớp 4 Trang 27), nhấn mạnh độ căng tay và cầm vòng gọn.',
+    hsTask: '- Thực hiện dứt khoát từng nhịp đưa vòng trước ngực, sang ngang.'
+  },
+  {
+    id: 'mv_k4_chan_vong',
+    name: 'Động tác Chân với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['chân với vòng', 'động tác chân với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Nhịp 1 kiễng gót nâng vòng đưa ra trước ngang vai', 'Nhịp 2 khuỵu gối sâu giữ lưng thẳng nâng vòng lên cao', 'Nhịp 3 kiễng gót về nhịp 1'],
+    commonErrors: ['Khuỵu gối đổ thân ra trước', 'Vòng bị nghiêng lệch'],
+    svgDataUrl: '/assets/sgk_chuan/k4_chan_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV làm mẫu Động tác Chân với vòng thể dục (SGK Lớp 4 Trang 31), sửa lỗi gù lưng và giữ vòng song song.',
+    hsTask: '- Giữ lưng thẳng khi khuỵu gối và thăng bằng vững trên nửa trước bàn chân.'
+  },
+  {
+    id: 'mv_k4_luon_vong',
+    name: 'Động tác Lườn với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['lườn với vòng', 'động tác lườn với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân trái rộng bằng vai, hai tay đưa vòng lên cao qua đầu', 'Nghiêng lườn sâu sang trái/phải giữ vòng thẳng trên trục thân', 'Hai chân thẳng'],
+    commonErrors: ['Đổ người về trước khi nghiêng', 'Tay cầm vòng bị chùng khuỷu'],
+    svgDataUrl: '/assets/sgk_chuan/k4_luon_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV hướng dẫn giữ thẳng tay nâng vòng qua đầu và nghiêng đúng mặt phẳng trán theo SGK Lớp 4 Trang 32.',
+    hsTask: '- Nghiêng lườn dẻo dai sang hai bên, giữ chắc mép vòng trên cao.'
+  },
+  {
+    id: 'mv_k4_bung_vong',
+    name: 'Động tác Bụng với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['bụng với vòng', 'động tác bụng với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân rộng hơn vai, nâng vòng lên cao ngửa đầu', 'Cúi gập thân sâu đưa vòng chạm mũi bàn chân, hai chân giữ thẳng'],
+    commonErrors: ['Co đầu gối khi gập thân', 'Đập vòng mạnh xuống sàn'],
+    svgDataUrl: '/assets/sgk_chuan/k4_bung_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV thị phạm Động tác Bụng với vòng (SGK Lớp 4 Trang 36), nhắc giữ hai chân thẳng và đặt nhẹ vòng gần mũi chân.',
+    hsTask: '- Gập thân sâu thở ra đều, giữ thẳng gối.'
+  },
+  {
+    id: 'mv_k4_toan_than_vong',
+    name: 'Động tác Toàn thân với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['toàn thân với vòng', 'động tác toàn thân với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Bước chân chếch trước khuỵu gối nâng vòng chếch cao', 'Thu chân gập thân hạ vòng', 'Phối hợp liên hoàn nhịp nhàng'],
+    commonErrors: ['Chân sau chùng gối', 'Mất thăng bằng khi xoay vòng'],
+    svgDataUrl: '/assets/sgk_chuan/k4_toan_than_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV làm mẫu chi tiết từng nhịp Động tác Toàn thân với vòng thể dục (SGK Lớp 4 Trang 37) và cho lớp ghép liên hoàn.',
+    hsTask: '- Phối hợp đồng bộ tay cầm vòng và nhịp bước khuỵu gối.'
+  },
+  {
+    id: 'mv_k4_nhay_dieu_hoa_vong',
+    name: 'Động tác Nhảy và Điều hòa với vòng thể dục (Khối 4)',
+    grade: 4,
+    keywords: ['nhảy với vòng', 'điều hòa với vòng', 'nhảy và điều hòa với vòng', 'với vòng', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Bật nhảy tách chân nâng vòng lên cao tiếp đất êm bằng mũi chân', 'Thả lỏng nhẹ nhàng chuyển vòng nhịp điều hòa thở sâu'],
+    commonErrors: ['Tiếp đất mạnh gây tiếng động', 'Cầm vòng lỏng lẻo khi nhảy'],
+    svgDataUrl: '/assets/sgk_chuan/k4_nhay_dieu_hoa_vong.svg',
+    defaultLvd: "6 - 8'",
+    gvExplanation: '- GV hướng dẫn kỹ thuật bật nhảy hoãn xung an toàn với vòng thể dục rồi chuyển sang nhịp điều hòa phục hồi (SGK Lớp 4 Trang 40).',
+    hsTask: '- Cầm chắc vòng bật nhảy êm và hít thở sâu thả lỏng ở động tác điều hòa.'
+  },
+  {
+    id: 'mv_k4_nhay_day',
+    name: 'Nhảy dây kiểu chụm hai chân (Khối 4)',
+    grade: 4,
+    keywords: ['nhảy dây', 'chụm hai chân', 'so dây', 'trao dây', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['So dây vừa chiều cao, dùng cổ tay quay dây đều', 'Chụm hai chân bật nhảy thấp vừa qua dây', 'Tiếp đất êm bằng nửa trước bàn chân'],
+    commonErrors: ['Quay dây bằng cả cánh tay', 'Nhảy quá cao mất sức'],
+    svgDataUrl: '/assets/sgk_chuan/k4_nhay_day.svg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- GV hướng dẫn so dây, trao dây và nhịp bật nhảy chụm hai chân quay dây bằng cổ tay.',
+    hsTask: '- Giãn cách an toàn 2m, quay cổ tay đều và bật nhảy nhịp nhàng.'
+  },
+  {
+    id: 'mv_k4_dan_bong_ro',
+    name: 'Dẫn bóng rổ di chuyển (Khối 4)',
+    grade: 4,
+    keywords: ['dẫn bóng', 'bóng rổ', 'di chuyển bóng rổ', 'khối 4'],
+    category: 'dong_tac_moi',
+    cues: ['Khuỵu gối hạ thấp trọng tâm', 'Dùng các ngón tay ấn nhồi bóng nhịp nhàng khi di chuyển', 'Mắt nhìn hướng di chuyển'],
+    commonErrors: ['Đập bóng bằng lòng bàn tay', 'Cúi đầu nhìn bóng'],
+    svgDataUrl: '/assets/sgk_chuan/k4_dan_bong_ro.svg',
+    defaultLvd: "8 - 10'",
+    gvExplanation: '- GV thị phạm dẫn bóng di chuyển tiến, dừng bảo vệ bóng bằng thân người theo SGK Lớp 4.',
+    hsTask: '- Dẫn bóng chậm dọc đường thẳng và vòng qua cọc tiêu đúng kỹ thuật.'
   }
 ];
 

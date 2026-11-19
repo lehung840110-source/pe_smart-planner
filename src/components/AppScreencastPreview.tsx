@@ -143,7 +143,7 @@ const SCENE_STEPS: Record<ScreencastSceneMode, DemoStep[]> = {
       clicking: true,
       zoomScale: 1.0,
       zoomOrigin: '50% 50%',
-      caption: 'Mở Tab 5 · Sinh Giáo Án Tuần Mới: Khớp PPCT 3 khối chỉ với một cú nhấp chuột'
+      caption: 'Mở Tab 5 · Sinh Giáo Án Tuần Mới: Khớp PPCT 5 khối chỉ với một cú nhấp chuột'
     }
   ],
   edit_replace: [
@@ -185,7 +185,7 @@ const SCENE_STEPS: Record<ScreencastSceneMode, DemoStep[]> = {
     },
     {
       id: 'e4',
-      label: 'Đổi sơ đồ K1/3/5',
+      label: 'Đổi sơ đồ K1–K5',
       targetTabId: 'tab-generator',
       crop: CROP_EDIT,
       cursorX: 77,

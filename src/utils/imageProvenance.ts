@@ -118,7 +118,7 @@ function normalizeMovementCore(name: string): string {
   return (name || '')
     .toLowerCase()
     .replace(/động tác/g, '')
-    .replace(/với gậy/g, '')
+    .replace(/với gậy|với vòng thể dục|với vòng/g, '')
     .replace(/ôn tập|học mới|học|ôn/g, '')
     .replace(/\([^)]*\)/g, '')
     .replace(/\s+/g, ' ')
@@ -272,8 +272,10 @@ export function resolveImageUsageProvenance(
   const lessonTitleLower = (img.lessonTitle || '').toLowerCase();
 
   let grade = Number(img.grade || 0);
-  if (![1, 3, 5].includes(grade)) {
-    if (idLower.includes('k3_') || tLower.includes('lớp 3') || lessonTitleLower.includes('lớp 3')) grade = 3;
+  if (![1, 2, 3, 4, 5].includes(grade)) {
+    if (idLower.includes('k2_') || tLower.includes('lớp 2') || lessonTitleLower.includes('lớp 2')) grade = 2;
+    else if (idLower.includes('k3_') || tLower.includes('lớp 3') || lessonTitleLower.includes('lớp 3')) grade = 3;
+    else if (idLower.includes('k4_') || tLower.includes('lớp 4') || lessonTitleLower.includes('lớp 4')) grade = 4;
     else if (idLower.includes('k5_') || tLower.includes('lớp 5') || lessonTitleLower.includes('lớp 5')) grade = 5;
     else grade = 1;
   }

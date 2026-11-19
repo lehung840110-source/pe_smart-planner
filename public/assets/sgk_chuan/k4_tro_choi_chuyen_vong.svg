@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgK4Cv" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#faf5ff"/>
+    </linearGradient>
+    <filter id="shK4Cv" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="360" fill="url(#bgK4Cv)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#e9d5ff" stroke-width="1.5" rx="15"/>
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#f3e8ff" stroke="#c084fc" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="700" fill="#7e22ce">
+    TRÒ CHƠI VẬN ĐỘNG: "CHẠY TIẾP SỨC CHUYỂN VÒNG" &amp; "CƯỚP CỜ" (SGK GDTC LỚP 4)
+  </text>
+
+  <rect x="40" y="64" width="720" height="270" rx="14" fill="#fff" stroke="#e9d5ff" stroke-width="1.5" filter="url(#shK4Cv)"/>
+  <line x1="185" y1="88" x2="185" y2="296" stroke="#ef4444" stroke-width="3"/>
+  <text x="185" y="80" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="bold" fill="#dc2626">VẠCH XUẤT PHÁT</text>
+
+  <!-- Teams -->
+  <circle cx="150" cy="145" r="10" fill="#7e22ce"/><circle cx="120" cy="145" r="10" fill="#a855f7"/><circle cx="90" cy="145" r="10" fill="#c084fc"/>
+  <text x="120" y="125" text-anchor="middle" font-size="11" font-weight="bold" fill="#7e22ce">TỔ 1</text>
+  <circle cx="150" cy="240" r="10" fill="#0284c7"/><circle cx="120" cy="240" r="10" fill="#38bdf8"/><circle cx="90" cy="240" r="10" fill="#7dd3fc"/>
+  <text x="120" y="220" text-anchor="middle" font-size="11" font-weight="bold" fill="#0369a1">TỔ 2</text>
+
+  <!-- Track & Turning cones with hoops -->
+  <line x1="185" y1="145" x2="650" y2="145" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="6 4"/>
+  <ellipse cx="660" cy="145" rx="18" ry="18" fill="none" stroke="#f59e0b" stroke-width="5"/>
+  <circle cx="660" cy="145" r="5" fill="#7e22ce"/>
+
+  <line x1="185" y1="240" x2="650" y2="240" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="6 4"/>
+  <ellipse cx="660" cy="240" rx="18" ry="18" fill="none" stroke="#f59e0b" stroke-width="5"/>
+  <circle cx="660" cy="240" r="5" fill="#0284c7"/>
+
+  <!-- Runner carrying hoop -->
+  <g transform="translate(410, 134)">
+    <circle cx="0" cy="-22" r="9" fill="#fed7aa" stroke="#334155" stroke-width="1.5"/>
+    <rect x="-7" y="-12" width="14" height="20" rx="3" fill="#7e22ce"/>
+    <ellipse cx="16" cy="-4" rx="12" ry="12" fill="none" stroke="#f59e0b" stroke-width="3.5"/>
+    <line x1="-4" y1="8" x2="-12" y2="26" stroke="#312e81" stroke-width="3.5" stroke-linecap="round"/>
+    <line x1="4" y1="8" x2="14" y2="24" stroke="#312e81" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+  <path d="M440 136 L635 136 Q685 136 685 152 Q685 168 635 168 L205 168" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="5 3"/>
+
+  <text x="420" y="316" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="600" fill="#6b21a8">
+    Cách chơi: Chạy nhanh mang vòng luồn qua cọc mốc rồi chạy về trao tận tay cho bạn tiếp theo (Không ném vòng)
+  </text>
+</svg>

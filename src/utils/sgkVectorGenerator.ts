@@ -354,21 +354,46 @@ export function generateSgk2dSequenceSvg(
     `;
   }
 
+  // Wrap Vietnamese captions into clean multi-line SVG <tspan> elements (no foreignObject for 100% Word & PNG export compatibility)
+  function wrapSvgLines(text: string, maxChars: number = 22): string[] {
+    const words = (text || '').trim().split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+    for (const word of words) {
+      if ((current + ' ' + word).trim().length <= maxChars) {
+        current = (current + ' ' + word).trim();
+      } else {
+        if (current) lines.push(current);
+        current = word;
+      }
+      if (lines.length >= 3) break;
+    }
+    if (current && lines.length < 3) lines.push(current);
+    return lines.length > 0 ? lines : [''];
+  }
+
+  function escapeXml(str: string): string {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   // Generate 5 figures horizontally at x = 95, 260, 430, 600, 765
   const stepLabels = ['TTCB', 'Nhịp 1', 'Nhịp 2', 'Nhịp 3', 'Nhịp 4'];
   const figures = [95, 260, 430, 600, 765].map((cx, idx) => {
     const f = drawFigure(cx, 225, idx);
     const label = stepLabels[idx];
-    const sub = stepSubs[idx];
+    const subLines = wrapSvgLines(stepSubs[idx], 23);
+    const tspans = subLines
+      .map((line, li) => `<tspan x="${cx}" dy="${li === 0 ? 0 : 12}">${escapeXml(line)}</tspan>`)
+      .join('');
     return `
       ${f}
-      <rect x="${cx - 30}" y="244" width="60" height="22" rx="11" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1"/>
-      <text x="${cx}" y="259" font-family="'Segoe UI', Roboto, sans-serif" font-size="11.5" font-weight="bold" fill="#0369a1" text-anchor="middle">${label}</text>
-      <foreignObject x="${cx - 75}" y="270" width="150" height="48">
-        <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: 'Segoe UI', Roboto, sans-serif; font-size: 9.5px; line-height: 1.25; color: #475569; text-align: center; font-weight: 500;">
-          ${sub}
-        </div>
-      </foreignObject>
+      <rect x="${cx - 30}" y="242" width="60" height="21" rx="10.5" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1"/>
+      <text x="${cx}" y="256" font-family="'Segoe UI', Roboto, Arial, sans-serif" font-size="11.5" font-weight="bold" fill="#0369a1" text-anchor="middle">${label}</text>
+      <text x="${cx}" y="276" font-family="'Segoe UI', Roboto, Arial, sans-serif" font-size="9.5" font-weight="500" fill="#475569" text-anchor="middle">${tspans}</text>
     `;
   }).join('\n');
 

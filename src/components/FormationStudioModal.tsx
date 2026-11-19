@@ -46,7 +46,7 @@ import {
 } from '../utils/formationStudioUtils';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
-import { SgkImageItem } from '../types/gdtc';
+import { SgkImageItem, GradeLevel } from '../types/gdtc';
 
 interface FormationStudioModalProps {
   isOpen: boolean;
@@ -115,9 +115,9 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   const [diagramPhase, setDiagramPhase] = useState<FormationDiagram['phase']>(
     initialFormation?.phase || 'dong_loat'
   );
-  const [diagramGrade, setDiagramGrade] = useState<1 | 3 | 5 | 'all'>(() => {
+  const [diagramGrade, setDiagramGrade] = useState<GradeLevel | 'all'>(() => {
     if (initialFormation?.grade) return initialFormation.grade;
-    if (grade === 1 || grade === 3 || grade === 5) return grade;
+    if (grade === 1 || grade === 2 || grade === 3 || grade === 4 || grade === 5) return grade;
     return 'all';
   });
 
@@ -130,8 +130,8 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   const [refCaption, setRefCaption] = useState<string>(initialReferenceImage?.caption || '');
   const [refGrade, setRefGrade] = useState<number>(() => {
     const imgGrade = Number(initialReferenceImage?.grade);
-    if (imgGrade === 1 || imgGrade === 3 || imgGrade === 5) return imgGrade;
-    return grade === 1 || grade === 3 || grade === 5 ? grade : 1;
+    if (imgGrade >= 1 && imgGrade <= 5) return imgGrade;
+    return grade && grade >= 1 && grade <= 5 ? grade : 1;
   });
   const [isAnalyzingRefImage, setIsAnalyzingRefImage] = useState<boolean>(false);
   const [isLibraryRefPickerOpen, setIsLibraryRefPickerOpen] = useState<boolean>(false);
@@ -164,7 +164,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
       setDiagramPhase(initialFormation.phase || 'dong_loat');
       setDiagramGrade(
         initialFormation.grade ||
-          (grade === 1 || grade === 3 || grade === 5 ? grade : 'all')
+          (grade === 1 || grade === 2 || grade === 3 || grade === 4 || grade === 5 ? grade : 'all')
       );
       if (initialFormation.elements && initialFormation.elements.length > 0) {
         setElements(JSON.parse(JSON.stringify(initialFormation.elements)));
@@ -185,7 +185,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
       setRefGameTitle(initialReferenceImage.title || '');
       setRefCaption(initialReferenceImage.caption || '');
       const imgG = Number(initialReferenceImage.grade);
-      if (imgG === 1 || imgG === 3 || imgG === 5) {
+      if (imgG === 1 || imgG === 2 || imgG === 3 || imgG === 4 || imgG === 5) {
         setRefGrade(imgG);
         setDiagramGrade(imgG);
       }
@@ -740,7 +740,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
         const nextPhase: FormationDiagram['phase'] =
           data.phase === 'khoi_dong' ? 'khoi_dong' : 'tro_choi';
         setDiagramPhase(nextPhase);
-        if (refGrade === 1 || refGrade === 3 || refGrade === 5) {
+        if (refGrade === 1 || refGrade === 2 || refGrade === 3 || refGrade === 4 || refGrade === 5) {
           setDiagramGrade(refGrade);
         }
         setSelectedIds([]);
@@ -1065,7 +1065,9 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-bold text-slate-700"
                 >
                   <option value={1}>Khối 1</option>
+                  <option value={2}>Khối 2</option>
                   <option value={3}>Khối 3</option>
+                  <option value={4}>Khối 4</option>
                   <option value={5}>Khối 5</option>
                 </select>
               </div>
@@ -1293,14 +1295,16 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                 value={String(diagramGrade)}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setDiagramGrade(v === 'all' ? 'all' : (Number(v) as 1 | 3 | 5));
+                  setDiagramGrade(v === 'all' ? 'all' : (Number(v) as GradeLevel));
                 }}
                 className="bg-white border border-slate-300 rounded-lg px-2 py-1 font-bold text-slate-700"
                 title="Gắn thẻ Khối lớp cho sơ đồ trong Kho"
               >
                 <option value="all">Chung (Tất cả khối)</option>
                 <option value="1">Khối 1</option>
+                <option value="2">Khối 2</option>
                 <option value="3">Khối 3</option>
+                <option value="4">Khối 4</option>
                 <option value="5">Khối 5</option>
               </select>
               <select
@@ -2193,7 +2197,9 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                 >
                   <option value="all">Tất cả khối</option>
                   <option value="1">Khối 1</option>
+                  <option value="2">Khối 2</option>
                   <option value="3">Khối 3</option>
+                  <option value="4">Khối 4</option>
                   <option value="5">Khối 5</option>
                 </select>
                 <label className="flex items-center gap-1.5 font-semibold text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-300">
@@ -2222,7 +2228,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                         setRefGameTitle(img.title);
                         setRefCaption(img.caption || '');
                         const imgG = Number(img.grade);
-                        if (imgG === 1 || imgG === 3 || imgG === 5) {
+                        if (imgG === 1 || imgG === 2 || imgG === 3 || imgG === 4 || imgG === 5) {
                           setRefGrade(imgG);
                           setDiagramGrade(imgG);
                         }

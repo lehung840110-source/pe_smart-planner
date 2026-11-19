@@ -1,14 +1,14 @@
-import { PpctItem } from '../types/gdtc';
+import { GradeLevel, PpctItem } from '../types/gdtc';
 
 /**
  * Official Curriculum Distribution (Phân Phối Chương Trình - PPCT) GDPT 2018
- * Primary Physical Education (Giáo Dục Thể Chất) - Grades 1, 3, 5
+ * Primary Physical Education (Giáo Dục Thể Chất) - Grades 1, 2, 3, 4, 5 (Kết nối tri thức)
  * 35 weeks x 2 periods/week = 70 periods per grade.
  */
 
 // Helper to generate periods for a range of weeks
 function createPpctRange(
-  grade: 1 | 3 | 5,
+  grade: GradeLevel,
   startWeek: number,
   endWeek: number,
   topic: string,
@@ -211,10 +211,128 @@ export const defaultGrade5Ppct: PpctItem[] = [
   ),
 ];
 
-// Combined full dataset
+// 4. GRADE 2 PPCT (70 Periods, Weeks 1-35) - SGK GDTC Lớp 2 Kết nối tri thức
+export const defaultGrade2Ppct: PpctItem[] = [
+  ...createPpctRange(2, 1, 2, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 1: Chuyển đội hình hàng dọc thành đội hình vòng tròn và ngược lại (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 3, 4, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 2: Chuyển đội hình hàng ngang thành đội hình vòng tròn và ngược lại (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 5, 6, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 3: Giậm chân tại chỗ, đứng lại (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 7, 8, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC', (p, w, sub) =>
+    `Bài 1: Động tác vươn thở, động tác tay (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 9, 10, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC', (p, w, sub) =>
+    `Bài 2: Động tác chân, động tác lườn, động tác bụng (tiết ${sub})`,
+    (w) => w === 9
+      ? `- Tích hợp năng lực số (3.1TC1a): Quan sát hình ảnh/video trình tự nhịp động tác chân, lườn, bụng an toàn theo hướng dẫn GV.\n- Tích hợp QPAN: Rèn tác phong nhanh nhẹn, chấp hành hiệu lệnh tập trung.`
+      : `- Tích hợp giáo dục quốc phòng và an ninh: Rèn ý thức tổ chức kỉ luật, giữ hàng ngũ ngay ngắn và tinh thần phối hợp đồng đội.`
+  ),
+  ...createPpctRange(2, 11, 14, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC', (p, w, sub) =>
+    `Bài 3: Động tác phối hợp, động tác nhảy, động tác điều hoà (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 15, 16, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 1: Bài tập di chuyển theo vạch kẻ thẳng (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 17, 18, 'ĐÁNH GIÁ VÀ TỔNG KẾT HỌC KỲ I', (p, w, sub) =>
+    `Kiểm tra, đánh giá bài tập thể dục 8 động tác và di chuyển cơ bản HK I (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 19, 20, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 2: Bài tập phối hợp di chuyển vòng trái, vòng phải (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 21, 22, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 3: Bài tập phối hợp di chuyển nhanh dần theo vạch kẻ thẳng (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 23, 24, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 4: Bài tập phối hợp di chuyển nhanh dần theo vạch kẻ sang trái và sang phải (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 25, 26, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    w === 25
+      ? `Bài 5: Các động tác quỳ, ngồi cơ bản (tiết ${sub})`
+      : `Bài 6: Bài tập phối hợp các tư thế quỳ, ngồi cơ bản (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 27, 30, 'THỂ THAO TỰ CHỌN: BÓNG RỔ / MÔN BƠI', (p, w, sub) =>
+    w <= 28
+      ? `Bài 1-2: Động tác di chuyển không bóng & Động tác dẫn bóng (tiết ${sub})`
+      : `Bài 3-4: Động tác tung – bắt bóng bằng hai tay & Ném rổ hai tay trước ngực (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 31, 32, 'THỂ THAO TỰ CHỌN: MÔN BƠI / TRÒ CHƠI VẬN ĐỘNG', (p, w, sub) =>
+    `Thực hành kĩ năng làm quen nước / Ôn tập trò chơi vận động phát triển thể lực (tiết ${sub})`
+  ),
+  ...createPpctRange(2, 33, 35, 'ĐÁNH GIÁ VÀ TỔNG KẾT NĂM HỌC', (p, w, sub) =>
+    `Kiểm tra, đánh giá thể lực và năng lực vận động cuối năm học (tiết ${sub})`
+  ),
+];
+
+// 5. GRADE 4 PPCT (70 Periods, Weeks 1-35) - SGK GDTC Lớp 4 Kết nối tri thức
+export const defaultGrade4Ppct: PpctItem[] = [
+  ...createPpctRange(4, 1, 2, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 1: Đi đều vòng bên phải (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 3, 4, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 2: Đi đều vòng bên trái (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 5, 6, 'CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ', (p, w, sub) =>
+    `Bài 3: Đi đều vòng sau (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 7, 9, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG', (p, w, sub) =>
+    `Bài 1: Động tác vươn thở, động tác tay, động tác chân với vòng (tiết ${sub})`,
+    (w) => w === 9
+      ? `- Tích hợp năng lực số (4.1TC1a / 6.1TC2a): Quan sát học liệu số và phân tích tư thế động tác với vòng qua hình ảnh minh họa.\n- Tích hợp bảo vệ môi trường: Thu dọn vòng thể dục ngăn nắp sau tập.`
+      : `- Năng lực số: Quan sát học liệu tranh ảnh động tác số hóa.\n- QPAN: Rèn tính kỷ luật, tư thế nghiêm túc, tác phong nhanh nhẹn.\n- Bảo vệ môi trường: Giữ vệ sinh sân tập sạch đẹp.`,
+    'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
+  ),
+  ...createPpctRange(4, 10, 12, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG', (p, w, sub) =>
+    `Bài 2: Động tác lườn, động tác lưng – bụng, động tác toàn thân với vòng (tiết ${sub})`,
+    () => `- Tích hợp bảo vệ môi trường: Giữ gìn vệ sinh sân tập, sử dụng vòng thể dục an toàn và thu xếp gọn gàng.`,
+    'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
+  ),
+  ...createPpctRange(4, 13, 14, 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG', (p, w, sub) =>
+    `Bài 3: Động tác nhảy, động tác điều hoà với vòng (tiết ${sub})`,
+    undefined,
+    'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
+  ),
+  ...createPpctRange(4, 15, 16, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 1: Bài tập rèn luyện kĩ năng thăng bằng (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 17, 18, 'ĐÁNH GIÁ VÀ TỔNG KẾT HỌC KỲ I', (p, w, sub) =>
+    `Kiểm tra, đánh giá bài thể dục với vòng và kĩ năng thăng bằng HK I (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 19, 21, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 2: Bài tập rèn luyện kĩ năng bật xa (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 22, 23, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 3: Bài tập rèn luyện kĩ năng bật cao (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 24, 26, 'CHỦ ĐỀ 3: TƯ THẾ VÀ KĨ NĂNG VẬN ĐỘNG CƠ BẢN', (p, w, sub) =>
+    `Bài 4: Nhảy dây (tiết ${sub})`,
+    undefined,
+    'SGK, Dây nhảy cá nhân, vạch kẻ, còi, dụng cụ TL'
+  ),
+  ...createPpctRange(4, 27, 30, 'THỂ THAO TỰ CHỌN: BÓNG RỔ / MÔN BƠI', (p, w, sub) =>
+    w <= 28
+      ? `Bài 1-2: Điều khiển bóng & Tại chỗ dẫn bóng chữ V, vượt chướng ngại vật (tiết ${sub})`
+      : `Bài 3-4: Chuyền, bắt bóng bật đất & Ném rổ bằng một tay trên vai (tiết ${sub})`,
+    undefined,
+    'SGK, Bóng rổ thiếu nhi, cọc tiêu, còi'
+  ),
+  ...createPpctRange(4, 31, 32, 'THỂ THAO TỰ CHỌN: MÔN BƠI / TRÒ CHƠI VẬN ĐỘNG', (p, w, sub) =>
+    `Kĩ thuật chân, tay, phối hợp bơi ếch / Ôn tập trò chơi vận động bóng rổ (tiết ${sub})`
+  ),
+  ...createPpctRange(4, 33, 35, 'ĐÁNH GIÁ VÀ TỔNG KẾT NĂM HỌC', (p, w, sub) =>
+    `Kiểm tra, đánh giá tiêu chuẩn thể lực và năng lực vận động cuối năm (tiết ${sub})`
+  ),
+];
+
+// Combined full dataset (All 5 Elementary Grades: 1, 2, 3, 4, 5)
 export const defaultAllPpctData: PpctItem[] = [
   ...defaultGrade1Ppct,
+  ...defaultGrade2Ppct,
   ...defaultGrade3Ppct,
+  ...defaultGrade4Ppct,
   ...defaultGrade5Ppct,
 ];
 
@@ -229,7 +347,7 @@ export function getStoredPpctData(): PpctItem[] {
       if (Array.isArray(parsed) && parsed.length > 0) {
         // Sanitize any outdated items (e.g. remove erroneous "thăng bằng" from Grade 5 Bài 3)
         let needsSave = false;
-        const sanitized = parsed.map((item: PpctItem) => {
+        let sanitized: PpctItem[] = parsed.map((item: PpctItem) => {
           if (item.grade === 5 && item.lessonTitle.toLowerCase().includes('thăng bằng')) {
             needsSave = true;
             return {
@@ -241,6 +359,19 @@ export function getStoredPpctData(): PpctItem[] {
           }
           return item;
         });
+
+        // Auto-backfill Grade 2 and Grade 4 PPCT for users upgrading from the 3-grade version
+        const hasGrade2 = sanitized.some((item) => Number(item.grade) === 2);
+        const hasGrade4 = sanitized.some((item) => Number(item.grade) === 4);
+        if (!hasGrade2) {
+          sanitized = [...sanitized, ...defaultGrade2Ppct];
+          needsSave = true;
+        }
+        if (!hasGrade4) {
+          sanitized = [...sanitized, ...defaultGrade4Ppct];
+          needsSave = true;
+        }
+
         if (needsSave) {
           saveStoredPpctData(sanitized);
         }

@@ -1,5 +1,5 @@
 import { MasterPlanItem, normalizeMasterPlan } from '../data/masterTemplateTuan8';
-import { DiagramAttachment, LessonRow } from '../types/gdtc';
+import { DiagramAttachment, GradeLevel, LessonRow } from '../types/gdtc';
 import { getAppStateDB, setAppStateDB } from './db';
 
 export type PlanVersionStatus = 'draft' | 'saved' | 'best';
@@ -16,7 +16,7 @@ export interface LessonPlanVersion {
   versionId: string;
   planKey: string; // e.g. plan_w9_k1_t17
   week: number;
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   lessonNum: number;
   title: string;
   topic: string;
@@ -615,7 +615,7 @@ export function upsertDraftVersion(
   baselinePlan?: MasterPlanItem | null
 ): { store: PlanVersionStore; changed: boolean; draftVersion: LessonPlanVersion | null } {
   const week = Number(plan.week) || 9;
-  const grade = (Number(plan.grade) as 1 | 3 | 5) || 1;
+  const grade = (Number(plan.grade) as GradeLevel) || 1;
   const lessonNum = Number(plan.lessonNum) || 17;
   const planKey = getPlanVersionKey(week, grade, lessonNum);
 
@@ -720,7 +720,7 @@ export function commitOfficialVersion(
   }
 ): { store: PlanVersionStore; savedVersion: LessonPlanVersion } {
   const week = Number(plan.week) || 9;
-  const grade = (Number(plan.grade) as 1 | 3 | 5) || 1;
+  const grade = (Number(plan.grade) as GradeLevel) || 1;
   const lessonNum = Number(plan.lessonNum) || 17;
   const planKey = getPlanVersionKey(week, grade, lessonNum);
 

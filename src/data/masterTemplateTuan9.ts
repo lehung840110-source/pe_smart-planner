@@ -201,6 +201,198 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
   },
 
   // ==========================================
+  // KHỐI 2 - TUẦN 9 - TIẾT 17
+  // ==========================================
+  k2_t17: {
+    id: 'k2_t17',
+    grade: 2,
+    week: 9,
+    lessonNum: 17,
+    topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN (Tiết 1)',
+    dateRange: 'Từ ngày 02-06 tháng 11 năm 2026',
+    specialCompetencies: {
+      healthCare: 'Biết chuẩn bị trang phục, giày tập; kiểm tra vệ sinh sân tập, thực hiện các yêu cầu an toàn trước, trong, sau khi tập luyện động tác Chân và ôn bài thể dục.',
+      basicMovement: 'Thực hiện được Động tác Chân (SGK GDTC Lớp 2 Trang 33) theo nhịp hô; phối hợp giữ thăng bằng tốt.',
+      sportsCompetency: 'Biết quan sát tranh ảnh SGK GDTC Lớp 2, học liệu số hoặc động tác mẫu của GV; tự sửa lỗi khuỵu gối và kiễng gót.',
+      disabledStudents: 'Tuỳ tình hình của HS mà GV linh hoạt áp dụng với tinh thần học hoà nhập, giảm cường độ vận động, thực hiện ở mức độ cơ bản.'
+    },
+    generalCompetencies: {
+      autonomy: 'HS chủ động chuẩn bị SGK, trang phục, dụng cụ cá nhân; tự giác luyện tập, tự sửa lỗi theo hướng dẫn.',
+      collaboration: 'HS biết phối hợp với bạn, tổ/nhóm; chấp hành phân công; hỗ trợ bạn trong tập luyện và trò chơi.',
+      problemSolving: 'HS biết quan sát, phát hiện lỗi sai khi kiễng gót mất thăng bằng hoặc cong lưng và lựa chọn cách khắc phục.',
+      disabledStudents: 'Tuỳ tình hình tiến bộ của HS mà GV linh hoạt áp dụng với tinh thần học hoà nhập.'
+    },
+    qualities: {
+      diligence: 'Tích cực, tự giác tập luyện để hoàn thành nhiệm vụ của bài học.',
+      honesty: 'Thực hiện đúng luật chơi, đúng hiệu lệnh; nhận xét kết quả luyện tập của bản thân và bạn trung thực.',
+      responsibility: 'Có trách nhiệm bảo đảm an toàn cho bản thân và bạn; đoàn kết, giúp đỡ bạn tập chưa tốt.',
+      disabledStudents: 'Hòa đồng, tham gia các hoạt động vui vẻ cùng bạn.'
+    },
+    integrations: {
+      digitalSkill: '4.1TC1a',
+      digitalDescription: 'Học sinh biết sử dụng thiết bị số an toàn khi quan sát tranh ảnh kỹ thuật động tác Chân SGK Lớp 2.',
+      lifeSkills: 'Rèn ý thức tổ chức kỷ luật, chấp hành hiệu lệnh và phối hợp với bạn.'
+    },
+    locationEquipment: {
+      location: 'Sân trường hoặc nhà thể chất.',
+      teacherTools: 'Giáo án, SGK GDTC Lớp 2, SGV; tranh ảnh SGK, còi, dụng cụ phục vụ trò chơi.',
+      studentTools: 'SGK, giày thể thao, trang phục thể thao gọn gàng.'
+    },
+    rows: [
+      {
+        content: "1. Hoạt động mở đầu\n1.1. Nhận lớp:\n- Kiểm tra vệ sinh sân tập, trang phục, sức khỏe của lớp.\n- Phổ biến nội dung yêu cầu giờ học: Học động tác Chân; trò chơi Đua ngựa.\n1.2. Khởi động:\n- Xoay các khớp cổ tay, cổ chân, hông, vai, gối...\n1.3. Trò chơi bổ trợ khởi động: Trò chơi “Đua ngựa”.",
+        lvd: "6 - 7'\n2x8n",
+        gv: "- GV nhận lớp, thăm hỏi sức khỏe và phổ biến mục tiêu tiết 17.\n- Hướng dẫn cán sự khởi động kỹ các khớp; tổ chức trò chơi \"Đua ngựa\" tạo hứng khởi an toàn.",
+        hs: "- Đội hình nhận lớp 4 hàng ngang báo cáo sĩ số.\n- Xoay khớp đều đặn và hào hứng tham gia trò chơi \"Đua ngựa\".",
+        contentImgUrl: '/assets/sgk_chuan/k2_tro_choi_dua_ngua.svg',
+        contentImgTitle: 'Trò chơi bổ trợ khởi động: Đua ngựa - SGK GDTC Lớp 2',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_nhan_lop') || standardFormationDiagrams[0]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình nhận lớp & khởi động'
+      },
+      {
+        content: "2. Hoạt động hình thành kiến thức mới\n2.1. Học Động tác Chân (SGK GDTC Lớp 2 Trang 33):\n- TTCB: Đứng nghiêm.\n- Nhịp 1: Kiễng gót hai chân, hai tay chống hông (lưng thẳng).\n- Nhịp 2: Hạ gót, khuỵu gối sâu giữ lưng thẳng, hai tay đưa ra trước song song ngang vai.\n- Nhịp 3: Đứng thẳng lên kiễng gót như nhịp 1.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Lặp lại như nhịp 1, 2, 3, 4.",
+        lvd: "7 - 8'\n2 - 3 lần",
+        gv: "- GV giới thiệu Động tác Chân (SGK Lớp 2 Trang 33) và cho HS quan sát tranh kỹ thuật.\n- Thị phạm làm mẫu 2-3 lần theo chiều gương, phân tích nhịp kiễng gót và khuỵu gối giữ thẳng lưng.\n- Hô nhịp chậm hướng dẫn HS tập mô phỏng và sửa sai trực tiếp.",
+        hs: "- Quan sát tranh SGK Lớp 2 và động tác mẫu của GV.\n- Thực hiện tập chậm từng nhịp, chú ý giữ thăng bằng và thẳng lưng.",
+        contentImgUrl: '/assets/sgk_chuan/k2_chan.svg',
+        contentImgTitle: 'Động tác Chân - SGK GDTC Lớp 2 (Trang 33)',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_tap_mau') || standardFormationDiagrams[2]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình quan sát mẫu'
+      },
+      {
+        content: "3. Hoạt động luyện tập\n3.1. Tổ chức tập đồng loạt cả lớp theo nhịp hô GV (1-2 lần).\n3.2. Luyện tập theo 4 tổ tại 4 góc sân.\n3.3. Luyện tập cặp đôi đối diện sửa sai & Thi đua giữa các tổ.",
+        lvd: "12 - 14'\n2-3 lần",
+        gv: "- GV hô nhịp cho lớp tập đồng loạt, chuyển sang luyện tập theo tổ và cặp đôi sửa sai.\n- Quan sát, động viên và tổ chức thi đua trình diễn giữa các tổ.",
+        hs: "- Đội hình tập đồng loạt 4 hàng ngang, sau đó di chuyển về 4 tổ và cặp đôi đối diện sửa lỗi.\n- Từng tổ lên thi đua tự tin, nhận xét khách quan.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_to_nhom') || standardFormationDiagrams[4]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình tập luyện theo tổ nhóm'
+      },
+      {
+        content: "3.4. Trò chơi vận động: \"Tìm người chỉ huy\"\n- Mục đích: Rèn phản xạ nhanh, khả năng quan sát và tinh thần đồng đội.",
+        lvd: "4 - 5'\n1 - 2 lần",
+        gv: "- GV nêu tên trò chơi, phổ biến luật chơi và làm trọng tài điều hành công bằng.",
+        hs: "- Đội hình vòng tròn tham gia trò chơi \"Tìm người chỉ huy\" nhiệt tình, an toàn.",
+        contentImgUrl: '/assets/sgk_chuan/k2_tro_choi_tim_chi_huy.svg',
+        contentImgTitle: 'Trò chơi vận động: Tìm người chỉ huy - SGK GDTC Lớp 2',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_tro_choi') || standardFormationDiagrams[7]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình trò chơi vận động'
+      },
+      {
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3. Nhận xét & Xuống lớp.",
+        lvd: "4 - 5'\n2x8n",
+        gv: "- Điều hành thả lỏng toàn thân, hít thở sâu.\n- GV nêu câu hỏi vận dụng sách giáo khoa (kèm hình ảnh SGK nếu có), nhận xét đánh giá tiết học và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng tay chân điều hòa nhịp thở.\n- Quan sát hình ảnh và trả lời câu hỏi vận dụng sách giáo khoa; xếp hàng về lớp.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_hoi_tinh') || standardFormationDiagrams[15]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình hồi tĩnh và kết thúc'
+      }
+    ],
+    postLessonAdjustment: 'Học sinh nắm vững kỹ thuật kiễng gót và khuỵu gối thẳng lưng ở Động tác Chân.',
+    signatures: {
+      locationDate: 'Vệ Giang, ngày 06 tháng 11 năm 2026',
+      bgh: 'Võ Thị Thuận',
+      headTeacher: 'Bùi Ngọc Lâm',
+      teacher: 'Lê Quốc Hưng'
+    }
+  },
+
+  // ==========================================
+  // KHỐI 2 - TUẦN 9 - TIẾT 18
+  // ==========================================
+  k2_t18: {
+    id: 'k2_t18',
+    grade: 2,
+    week: 9,
+    lessonNum: 18,
+    topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN (Tiết 2)',
+    dateRange: 'Từ ngày 02-06 tháng 11 năm 2026',
+    specialCompetencies: {
+      healthCare: 'Biết chuẩn bị trang phục, vệ sinh sân tập; thực hiện an toàn khi tập động tác Lườn và ôn động tác Chân.',
+      basicMovement: 'Thực hiện được Động tác Lườn (SGK GDTC Lớp 2 Trang 34) kết hợp ôn thuần thục Động tác Chân.',
+      sportsCompetency: 'Biết quan sát tranh ảnh SGK GDTC Lớp 2, tự sửa lỗi nghiêng thân bị xoay ra trước.',
+      disabledStudents: 'Linh hoạt áp dụng mức độ nhẹ nhàng phù hợp khả năng HS hòa nhập.'
+    },
+    generalCompetencies: {
+      autonomy: 'Tự giác ôn lại động tác Chân và tích cực khám phá động tác Lườn.',
+      collaboration: 'Phối hợp nhịp nhàng với bạn khi tập theo cặp đôi và theo tổ.',
+      problemSolving: 'Phát hiện và chỉnh sửa lỗi nghiêng lườn chưa thẳng mặt phẳng bên.',
+      disabledStudents: 'Được các bạn trong tổ quan tâm giúp đỡ.'
+    },
+    qualities: {
+      diligence: 'Chăm chỉ, tích cực luyện tập hoàn thành bài học.',
+      honesty: 'Trung thực khi tham gia trò chơi và nhận xét bạn.',
+      responsibility: 'Giữ gìn vệ sinh sân bãi và thu dọn dụng cụ gọn gàng.',
+      disabledStudents: 'Hòa đồng, vui vẻ cùng tập thể.'
+    },
+    integrations: {
+      digitalSkill: '4.1TC1a',
+      digitalDescription: 'Quan sát an toàn học liệu số về kỹ thuật động tác Lườn SGK Lớp 2.',
+      lifeSkills: 'Tích hợp bảo vệ môi trường: giữ sân tập sạch sẽ, không xả rác.'
+    },
+    locationEquipment: {
+      location: 'Sân trường hoặc nhà thể chất.',
+      teacherTools: 'Giáo án, SGK GDTC Lớp 2, tranh ảnh minh họa, còi, dụng cụ trò chơi.',
+      studentTools: 'SGK, giày thể thao, trang phục thể thao.'
+    },
+    rows: [
+      {
+        content: "1. Hoạt động mở đầu\n1.1. Nhận lớp: Kiểm tra sĩ số, trang phục, vệ sinh sân tập.\n1.2. Khởi động xoay các khớp cổ tay, cổ chân, vai, hông, gối.\n1.3. Trò chơi bổ trợ khởi động: Trò chơi “Đua ngựa”.",
+        lvd: "6 - 7'\n2x8n",
+        gv: "- GV nhận lớp, phổ biến mục tiêu tiết 18: Học Động tác Lườn, ôn Động tác Chân.\n- Điều hành khởi động và tổ chức trò chơi \"Đua ngựa\" hào hứng.",
+        hs: "- Cán sự tập trung lớp báo cáo sĩ số.\n- Khởi động đều đặn và chơi trò chơi sôi nổi.",
+        contentImgUrl: '/assets/sgk_chuan/k2_tro_choi_dua_ngua.svg',
+        contentImgTitle: 'Trò chơi bổ trợ khởi động: Đua ngựa - SGK GDTC Lớp 2',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_khoi_dong') || standardFormationDiagrams[1]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình khởi động'
+      },
+      {
+        content: "2. Hoạt động hình thành kiến thức mới\n2.1. Ôn Động tác Chân (1-2 lần).\n2.2. Học Động tác Lườn (SGK GDTC Lớp 2 Trang 34):\n- TTCB: Đứng nghiêm.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay dang ngang lòng bàn tay ngửa.\n- Nhịp 2: Nghiêng lườn sang trái, tay trái chống hông, tay phải vươn cao áp sát tai.\n- Nhịp 3: Về tư thế nhịp 1.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Đổi chân phải và nghiêng lườn sang phải.",
+        lvd: "7 - 8'\n2 - 3 lần",
+        gv: "- Cho lớp ôn lại Động tác Chân 1 lần.\n- GV thị phạm Động tác Lườn chuẩn xác theo SGK Lớp 2 Trang 34; nhấn mạnh giữ thẳng hai chân và nghiêng đúng mặt phẳng bên.",
+        hs: "- Quan sát tranh SGK Lớp 2 và mẫu của GV.\n- Tập từng nhịp chậm rãi, kéo căng đều cơ liên sườn hai bên.",
+        contentImgUrl: '/assets/sgk_chuan/k2_luon.svg',
+        contentImgTitle: 'Động tác Lườn - SGK GDTC Lớp 2 (Trang 34)',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_tap_mau') || standardFormationDiagrams[2]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình quan sát mẫu'
+      },
+      {
+        content: "3. Hoạt động luyện tập\n3.1. Tập đồng loạt liên hoàn Động tác Chân + Động tác Lườn.\n3.2. Luyện tập theo 4 tổ & Cặp đôi sửa sai.\n3.3. Thi đua giữa các tổ lên biểu diễn.",
+        lvd: "12 - 14'\n2-3 lần",
+        gv: "- Điều khiển tập đồng loạt liên hoàn Chân + Lườn, kiểm tra sửa sai theo tổ và tổ chức thi đua tuyên dương.",
+        hs: "- Luyện tập đồng loạt, theo tổ và cặp đôi giúp nhau sửa tư thế tay vươn sát tai.\n- Tự tin thi đua giữa các tổ.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_to_nhom') || standardFormationDiagrams[4]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình tập luyện theo tổ'
+      },
+      {
+        content: "3.4. Trò chơi vận động: \"Tìm người chỉ huy\"\n- Phát triển khả năng quan sát, phản xạ nhanh và tinh thần tập thể.",
+        lvd: "4 - 5'\n1 - 2 lần",
+        gv: "- Phổ biến luật chơi, làm trọng tài điều hành công bằng, đảm bảo an toàn.",
+        hs: "- Đội hình vòng tròn tham gia trò chơi hào hứng, trung thực.",
+        contentImgUrl: '/assets/sgk_chuan/k2_tro_choi_tim_chi_huy.svg',
+        contentImgTitle: 'Trò chơi vận động: Tìm người chỉ huy - SGK GDTC Lớp 2',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_tro_choi') || standardFormationDiagrams[7]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình trò chơi vận động'
+      },
+      {
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n4.3. Nhận xét & Xuống lớp.",
+        lvd: "4 - 5'\n2x8n",
+        gv: "- Điều hành lớp thả lỏng toàn thân, nêu câu hỏi vận dụng sách giáo khoa, nhận xét tiết học và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng cơ thể, trả lời câu hỏi vận dụng sách giáo khoa, thu dọn sân tập và về lớp.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k2_xuong_lop') || standardFormationDiagrams[15]).svgDataUrl,
+        hsImgTitle: 'Khối 2 - Đội hình hồi tĩnh và kết thúc'
+      }
+    ],
+    postLessonAdjustment: 'Học sinh thực hiện tốt liên hoàn Động tác Chân và Động tác Lườn đúng biên độ.',
+    signatures: {
+      locationDate: 'Vệ Giang, ngày 06 tháng 11 năm 2026',
+      bgh: 'Võ Thị Thuận',
+      headTeacher: 'Bùi Ngọc Lâm',
+      teacher: 'Lê Quốc Hưng'
+    }
+  },
+
+  // ==========================================
   // KHỐI 3 - TUẦN 9 - TIẾT 17 (Trang 10 - 13)
   // ==========================================
   k3_t17: {
@@ -376,6 +568,198 @@ export const masterPlansTuan9: Record<string, MasterPlanItem> = {
       }
     ],
     postLessonAdjustment: 'Học sinh nắm vững kỹ thuật, thực hiện động tác tay và vươn thở chuẩn xác.',
+    signatures: {
+      locationDate: 'Vệ Giang, ngày 06 tháng 11 năm 2026',
+      bgh: 'Võ Thị Thuận',
+      headTeacher: 'Bùi Ngọc Lâm',
+      teacher: 'Lê Quốc Hưng'
+    }
+  },
+
+  // ==========================================
+  // KHỐI 4 - TUẦN 9 - TIẾT 17
+  // ==========================================
+  k4_t17: {
+    id: 'k4_t17',
+    grade: 4,
+    week: 9,
+    lessonNum: 17,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN VỚI VÒNG THỂ DỤC (Tiết 1)',
+    dateRange: 'Từ ngày 02-06 tháng 11 năm 2026',
+    specialCompetencies: {
+      healthCare: 'Biết chuẩn bị trang phục, giày tập, vệ sinh sân tập; kiểm tra độ an toàn vòng thể dục trước khi tập.',
+      basicMovement: 'Thực hiện được Động tác Chân với vòng thể dục (SGK GDTC Lớp 4 Trang 31) đúng tư thế kiễng gót và khuỵu gối.',
+      sportsCompetency: 'Biết quan sát tranh ảnh SGK GDTC Lớp 4, học liệu số hoặc mẫu của GV để tự chỉnh sửa tư thế giữ vòng.',
+      disabledStudents: 'Giảm nhẹ yêu cầu về biên độ khuỵu gối, thực hiện an toàn với tinh thần hòa nhập.'
+    },
+    generalCompetencies: {
+      autonomy: 'HS chủ động chuẩn bị vòng thể dục, trang phục; tự giác luyện tập, tự sửa lỗi theo hướng dẫn.',
+      collaboration: 'Phối hợp giữ cự ly an toàn 1.5m khi cầm vòng; hỗ trợ bạn trong tổ/nhóm.',
+      problemSolving: 'Phát hiện lỗi gù lưng khi khuỵu gối hoặc mất thăng bằng khi kiễng gót để tự khắc phục.',
+      disabledStudents: 'Giảm nhẹ các yêu cầu về năng lực chung theo khả năng HS.'
+    },
+    qualities: {
+      diligence: 'Tích cực, tự giác tập luyện hoàn thành nhiệm vụ bài học.',
+      honesty: 'Thực hiện đúng luật chơi, nhận xét trung thực kết quả của bản thân và bạn.',
+      responsibility: 'Bảo quản vòng thể dục cẩn thận, giữ an toàn cho bản thân và bạn.',
+      disabledStudents: 'Tham gia vui vẻ, hòa đồng cùng tập thể.'
+    },
+    integrations: {
+      digitalSkill: '5.1.CB1a',
+      digitalDescription: 'HS biết quan sát tranh ảnh kỹ thuật số SGK Lớp 4 và xử lí đơn giản khi thiết bị trình chiếu gặp sự cố.',
+      lifeSkills: 'Rèn ý thức kỷ luật, sự khéo léo giữ thăng bằng và phối hợp đồng đội.'
+    },
+    locationEquipment: {
+      location: 'Sân trường hoặc nhà thể chất.',
+      teacherTools: 'Giáo án, SGK GDTC Lớp 4, SGV; còi, tranh ảnh SGK, vòng thể dục.',
+      studentTools: 'Mỗi HS 1 vòng thể dục an toàn, trang phục và giày thể thao.'
+    },
+    rows: [
+      {
+        content: "1. Hoạt động mở đầu\n1.1. Nhận lớp: Cán sự tập hợp báo cáo sĩ số; GV kiểm tra trang phục, dụng cụ vòng.\n1.2. Khởi động xoay các khớp cổ tay, cổ chân, vai, hông, gối kết hợp xoay vòng nhẹ.\n1.3. Trò chơi bổ trợ khởi động: Trò chơi “Chuyền vòng tiếp sức”.",
+        lvd: "6 - 7'\n2x8n",
+        gv: "- GV nhận lớp, phổ biến nội dung tiết 17: Học Động tác Chân với vòng thể dục.\n- Hướng dẫn khởi động kỹ các khớp cổ chân, đầu gối và tổ chức trò chơi bổ trợ \"Chuyền vòng tiếp sức\".",
+        hs: "- Cán sự tập trung 4 hàng ngang báo cáo sĩ số.\n- Khởi động đều đặn và tích cực tham gia trò chơi an toàn.",
+        contentImgUrl: '/assets/sgk_chuan/k4_tro_choi_chuyen_vong.svg',
+        contentImgTitle: 'Trò chơi: Chuyền vòng tiếp sức - SGK GDTC Lớp 4',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_nhan_lop') || standardFormationDiagrams[0]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình nhận lớp với vòng thể dục'
+      },
+      {
+        content: "2. Hoạt động hình thành kiến thức mới\n2.1. Học Động tác Chân với vòng thể dục (SGK GDTC Lớp 4 Trang 31):\n- TTCB: Đứng nghiêm, hai tay cầm hai bên mép vòng trước đùi.\n- Nhịp 1: Kiễng gót hai chân, hai tay đưa vòng ra trước ngang vai.\n- Nhịp 2: Hạ gót, khuỵu gối sâu giữ lưng thẳng, đồng thời nâng vòng lên cao qua đầu.\n- Nhịp 3: Đứng thẳng lên kiễng gót, hạ vòng ngang vai.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Lặp lại như nhịp 1, 2, 3, 4.",
+        lvd: "7 - 8'\n2 - 3 lần",
+        gv: "- GV giới thiệu Động tác Chân với vòng (SGK Lớp 4 Trang 31), cho HS quan sát tranh kỹ thuật.\n- Làm mẫu 2-3 lần theo chiều gương, nhấn mạnh giữ thẳng lưng khi khuỵu gối và nâng vòng qua đầu cân đối.\n- Hô nhịp chậm cho lớp tập mô phỏng và sửa lỗi từng em.",
+        hs: "- Đội hình 4 hàng ngang giãn cách 1.5m quan sát mẫu GV và tranh SGK Lớp 4.\n- Tập trung thực hiện từng nhịp kiễng gót, khuỵu gối vững vàng với vòng.",
+        contentImgUrl: '/assets/sgk_chuan/k4_chan_vong.svg',
+        contentImgTitle: 'Động tác Chân với vòng thể dục - SGK GDTC Lớp 4 (Trang 31)',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_tap_mau') || standardFormationDiagrams[2]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình quan sát làm mẫu với vòng'
+      },
+      {
+        content: "3. Hoạt động luyện tập\n3.1. Tập đồng loạt cả lớp theo nhịp hô GV.\n3.2. Tập theo 4 tổ tại 4 khu vực sân bãi.\n3.3. Tập cặp đôi đối diện sửa sai & Thi đua giữa các tổ.",
+        lvd: "13 - 15'\n2-3 lần",
+        gv: "- Điều hành tập đồng loạt, kiểm tra 4 tổ và hướng dẫn cặp đôi kiểm tra thăng bằng lưng thẳng cho nhau.\n- Tổ chức thi đua trình diễn và tuyên dương tổ tập đẹp.",
+        hs: "- Tập đồng loạt 4 hàng ngang, chuyển về 4 tổ và cặp đôi hỗ trợ sửa lỗi khuỵu gối.\n- Từng tổ lên thi đua tự tin.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_to_nhom') || standardFormationDiagrams[4]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình tập luyện theo tổ nhóm'
+      },
+      {
+        content: "3.4. Trò chơi vận động: “Chuyền vòng tiếp sức”\n- Phát triển sức nhanh, sự khéo léo và tinh thần phối hợp đồng đội.",
+        lvd: "4 - 5'\n2 - 3 lượt",
+        gv: "- GV hướng dẫn luật chơi chi tiết, nhắc quy tắc chuyền vòng an toàn và làm trọng tài công bằng.",
+        hs: "- 4 đội hàng dọc thi đấu sôi nổi, cổ vũ văn minh.",
+        contentImgUrl: '/assets/sgk_chuan/k4_tro_choi_chuyen_vong.svg',
+        contentImgTitle: 'Trò chơi vận động: Chuyền vòng tiếp sức - SGK GDTC Lớp 4',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_tro_choi') || standardFormationDiagrams[8]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Sơ đồ trò chơi Chuyền vòng tiếp sức'
+      },
+      {
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Thu dọn vòng thể dục ngăn nắp.\n4.3. Nhận xét & Xuống lớp.",
+        lvd: "4 - 5'\n2x8n",
+        gv: "- Điều hành thả lỏng toàn thân, nêu câu hỏi vận dụng sách giáo khoa, hướng dẫn cất vòng gọn gàng và nhận xét xuống lớp.",
+        hs: "- Thả lỏng cơ thể, trả lời câu hỏi vận dụng sách giáo khoa, cất vòng đúng nơi quy định và về lớp.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_hoi_tinh') || standardFormationDiagrams[15]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình hồi tĩnh và kết thúc'
+      }
+    ],
+    postLessonAdjustment: 'Học sinh giữ thăng bằng tốt, thực hiện Động tác Chân với vòng thể dục đúng nhịp.',
+    signatures: {
+      locationDate: 'Vệ Giang, ngày 06 tháng 11 năm 2026',
+      bgh: 'Võ Thị Thuận',
+      headTeacher: 'Bùi Ngọc Lâm',
+      teacher: 'Lê Quốc Hưng'
+    }
+  },
+
+  // ==========================================
+  // KHỐI 4 - TUẦN 9 - TIẾT 18
+  // ==========================================
+  k4_t18: {
+    id: 'k4_t18',
+    grade: 4,
+    week: 9,
+    lessonNum: 18,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN VỚI VÒNG THỂ DỤC (Tiết 2)',
+    dateRange: 'Từ ngày 02-06 tháng 11 năm 2026',
+    specialCompetencies: {
+      healthCare: 'Biết vệ sinh sân tập, chuẩn bị trang phục và kiểm tra độ an toàn vòng thể dục trước khi tập.',
+      basicMovement: 'Thực hiện được Động tác Lườn với vòng thể dục (SGK GDTC Lớp 4 Trang 32) và ôn Động tác Chân với vòng.',
+      sportsCompetency: 'Biết quan sát tranh ảnh SGK GDTC Lớp 4, tự chỉnh sửa lỗi tay cầm vòng bị chùng khi nghiêng lườn.',
+      disabledStudents: 'Giảm nhẹ biên độ nghiêng lườn, thực hiện theo khả năng cá nhân.'
+    },
+    generalCompetencies: {
+      autonomy: 'Tự giác ôn lại động tác Chân với vòng và tích cực học động tác Lườn với vòng.',
+      collaboration: 'Phối hợp giữ cự ly 1.5m khi cầm vòng và góp ý sửa sai theo cặp đôi.',
+      problemSolving: 'Nhận biết lỗi xoay người thay vì nghiêng lườn mặt phẳng bên để tự điều chỉnh.',
+      disabledStudents: 'Được bạn và giáo viên hỗ trợ tích cực.'
+    },
+    qualities: {
+      diligence: 'Chăm chỉ, tự giác tập luyện liên hoàn các động tác với vòng.',
+      honesty: 'Trung thực trong thi đấu trò chơi và nhận xét tổ bạn.',
+      responsibility: 'Giữ gìn dụng cụ, cất vòng đúng nơi quy định sau giờ học.',
+      disabledStudents: 'Hòa đồng, đoàn kết cùng bạn bè.'
+    },
+    integrations: {
+      digitalSkill: '5.1.CB1a',
+      digitalDescription: 'Quan sát tranh ảnh kỹ thuật số động tác Lườn với vòng SGK Lớp 4 an toàn.',
+      lifeSkills: 'Tích hợp bảo vệ môi trường: giữ sân bãi sạch đẹp và cất dụng cụ đúng nơi quy định.'
+    },
+    locationEquipment: {
+      location: 'Sân trường hoặc nhà thể chất.',
+      teacherTools: 'Giáo án, SGK GDTC Lớp 4, còi, tranh ảnh minh họa, vòng thể dục.',
+      studentTools: 'Mỗi HS 1 vòng thể dục an toàn, trang phục thể thao.'
+    },
+    rows: [
+      {
+        content: "1. Hoạt động mở đầu\n1.1. Nhận lớp: Kiểm tra sĩ số, trang phục, sức khỏe và vòng thể dục.\n1.2. Khởi động xoay kỹ các khớp theo nhạc.\n1.3. Trò chơi bổ trợ khởi động: Trò chơi “Chuyền vòng tiếp sức”.",
+        lvd: "6 - 7'\n2x8n",
+        gv: "- GV nhận lớp, phổ biến mục tiêu tiết 18: Ôn Động tác Chân với vòng, học mới Động tác Lườn với vòng.\n- Hướng dẫn khởi động các khớp và tổ chức trò chơi bổ trợ.",
+        hs: "- Cán sự tập trung lớp báo cáo sĩ số.\n- Khởi động đều đặn và tham gia trò chơi an toàn.",
+        contentImgUrl: '/assets/sgk_chuan/k4_tro_choi_chuyen_vong.svg',
+        contentImgTitle: 'Trò chơi: Chuyền vòng tiếp sức - SGK GDTC Lớp 4',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_khoi_dong') || standardFormationDiagrams[1]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình khởi động với vòng'
+      },
+      {
+        content: "2. Hoạt động hình thành kiến thức mới\n2.1. Ôn Động tác Chân với vòng (1-2 lần).\n2.2. Học mới Động tác Lườn với vòng thể dục (SGK GDTC Lớp 4 Trang 32):\n- TTCB: Đứng nghiêm, hai tay cầm hai bên mép vòng trước đùi.\n- Nhịp 1: Chân trái bước sang ngang rộng bằng vai, hai tay đưa vòng lên cao qua đầu.\n- Nhịp 2: Nghiêng lườn sâu sang trái, hai tay giữ thẳng nâng vòng theo trục thân, hai chân thẳng.\n- Nhịp 3: Đứng thẳng lên như nhịp 1.\n- Nhịp 4: Về TTCB.\n- Nhịp 5, 6, 7, 8: Đổi chân phải và nghiêng lườn sang phải.",
+        lvd: "7 - 8'\n2 - 3 lần",
+        gv: "- Cho lớp ôn lại Động tác Chân với vòng 1 lần.\n- GV làm mẫu Động tác Lườn với vòng chuẩn xác theo SGK Lớp 4 Trang 32; phân tích tư thế thẳng tay nâng vòng và nghiêng đúng mặt phẳng bên.",
+        hs: "- Đội hình 4 hàng ngang 1.5m quan sát mẫu GV và tranh SGK Lớp 4.\n- Tập từng nhịp chậm rãi, cảm nhận căng giãn cơ lườn hai bên.",
+        contentImgUrl: '/assets/sgk_chuan/k4_luon_vong.svg',
+        contentImgTitle: 'Động tác Lườn với vòng thể dục - SGK GDTC Lớp 4 (Trang 32)',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_tap_mau') || standardFormationDiagrams[2]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình quan sát làm mẫu'
+      },
+      {
+        content: "3. Hoạt động luyện tập\n3.1. Tập đồng loạt liên hoàn Động tác Chân + Động tác Lườn với vòng.\n3.2. Tập theo 4 tổ & Cặp đôi đối diện sửa sai.\n3.3. Thi đua biểu diễn giữa các tổ.",
+        lvd: "13 - 15'\n2-3 lần",
+        gv: "- Điều hành tập đồng loạt liên hoàn 2 động tác với vòng, kiểm tra sửa sai theo tổ và cặp đôi.\n- Tổ chức thi đua trình diễn và biểu dương.",
+        hs: "- Tập luyện đồng loạt, theo tổ và cặp đôi tích cực; sửa lỗi chùng tay khi nghiêng lườn.\n- Tự tin biểu diễn thi đua giữa các tổ.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_to_nhom') || standardFormationDiagrams[4]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình tập luyện theo tổ'
+      },
+      {
+        content: "3.4. Trò chơi vận động: “Chuyền vòng tiếp sức”\n- Rèn luyện tốc độ, sự khéo léo và tinh thần đoàn kết.",
+        lvd: "4 - 5'\n2 - 3 lượt",
+        gv: "- Điều hành thi đấu giữa 4 đội hàng dọc công bằng, đảm bảo an toàn khi di chuyển tiếp sức.",
+        hs: "- Thi đấu hào hứng, phối hợp nhịp nhàng, cổ vũ bạn văn minh.",
+        contentImgUrl: '/assets/sgk_chuan/k4_tro_choi_chuyen_vong.svg',
+        contentImgTitle: 'Trò chơi vận động: Chuyền vòng tiếp sức - SGK GDTC Lớp 4',
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_tro_choi') || standardFormationDiagrams[8]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Sơ đồ trò chơi Chuyền vòng tiếp sức'
+      },
+      {
+        content: "4. Hoạt động vận dụng\n4.1. Hồi tĩnh: Thả lỏng toàn thân.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp BVMT kiểm tra vệ sinh sân tập, thu dọn vòng.\n4.3. Nhận xét & Xuống lớp.",
+        lvd: "4 - 5'\n2x8n",
+        gv: "- Điều hành thả lỏng toàn thân, nêu câu hỏi vận dụng sách giáo khoa, nhắc cất vòng ngăn nắp và phát lệnh xuống lớp.",
+        hs: "- Thả lỏng cơ thể, trả lời câu hỏi vận dụng sách giáo khoa, thu dọn vòng và xếp hàng về lớp.",
+        hsImgUrl: (standardFormationDiagrams.find((d) => d.id === 'f_k4_xuong_lop') || standardFormationDiagrams[15]).svgDataUrl,
+        hsImgTitle: 'Khối 4 - Đội hình hồi tĩnh và xuống lớp'
+      }
+    ],
+    postLessonAdjustment: 'Học sinh thực hiện tốt liên hoàn Động tác Chân và Động tác Lườn với vòng thể dục.',
     signatures: {
       locationDate: 'Vệ Giang, ngày 06 tháng 11 năm 2026',
       bgh: 'Võ Thị Thuận',

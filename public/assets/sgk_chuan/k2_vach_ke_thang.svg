@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgK2Vk" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#fefce8"/>
+    </linearGradient>
+    <filter id="shK2Vk" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="360" fill="url(#bgK2Vk)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#fde047" stroke-width="1.5" rx="15"/>
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#fef9c3" stroke="#facc15" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="700" fill="#a16207">
+    ĐI THEO VẠCH KẺ THẲNG &amp; ĐI KIỄNG GÓT – VẬN ĐỘNG CƠ BẢN (SGK GDTC LỚP 2)
+  </text>
+
+  <!-- Step 1 -->
+  <rect x="40" y="64" width="220" height="270" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shK2Vk)"/>
+  <rect x="40" y="64" width="220" height="28" rx="10" fill="#f1f5f9"/>
+  <text x="150" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">1. Đi thường trên vạch thẳng</text>
+  <line x1="60" y1="286" x2="240" y2="286" stroke="#f59e0b" stroke-width="4" stroke-dasharray="10 4"/>
+  <g transform="translate(150, 195)">
+    <circle cx="2" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-11 -72 Q2 -85 15 -72 Q12 -60 2 -60 Q-8 -60 -11 -72" fill="#1e293b"/>
+    <path d="M-12 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0284c7" stroke-width="2"/>
+    <line x1="-12" y1="-48" x2="-30" y2="-28" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="12" y1="-48" x2="30" y2="-28" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L16 15 L3 15 L0 -2 L-3 15 L-16 15 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+    <line x1="-8" y1="15" x2="-16" y2="75" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="8" y1="15" x2="20" y2="75" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-16" cy="78" rx="7" ry="4" fill="#0284c7"/>
+    <ellipse cx="21" cy="78" rx="7" ry="4" fill="#0284c7"/>
+  </g>
+  <text x="150" y="316" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#475569">Đặt bàn chân dọc theo vạch, mắt nhìn trước</text>
+
+  <!-- Step 2 -->
+  <rect x="290" y="64" width="220" height="270" rx="12" fill="#fff" stroke="#fde047" stroke-width="1.5" filter="url(#shK2Vk)"/>
+  <rect x="290" y="64" width="220" height="28" rx="10" fill="#fef9c3"/>
+  <text x="400" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#a16207">2. Đi trên vạch, hai tay dang ngang</text>
+  <line x1="310" y1="286" x2="490" y2="286" stroke="#f59e0b" stroke-width="4"/>
+  <g transform="translate(400, 195)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0284c7" stroke-width="2"/>
+    <line x1="-14" y1="-50" x2="-52" y2="-50" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-50" x2="52" y2="-50" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+    <line x1="-6" y1="15" x2="-8" y2="75" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="6" y1="15" x2="10" y2="75" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-8" cy="78" rx="7" ry="4" fill="#0284c7"/>
+    <ellipse cx="11" cy="78" rx="7" ry="4" fill="#0284c7"/>
+  </g>
+  <text x="400" y="316" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#a16207">Giữ thăng bằng, thân người ngay ngắn</text>
+
+  <!-- Step 3 -->
+  <rect x="540" y="64" width="220" height="270" rx="12" fill="#fff" stroke="#fde047" stroke-width="1.5" filter="url(#shK2Vk)"/>
+  <rect x="540" y="64" width="220" height="28" rx="10" fill="#fef9c3"/>
+  <text x="650" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#a16207">3. Đi kiễng gót theo vạch thẳng</text>
+  <line x1="560" y1="286" x2="740" y2="286" stroke="#f59e0b" stroke-width="4"/>
+  <g transform="translate(650, 188)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0284c7" stroke-width="2"/>
+    <polyline points="-14,-50 -24,-30 -12,-12" fill="none" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <polyline points="14,-50 24,-30 12,-12" fill="none" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+    <line x1="-6" y1="15" x2="-10" y2="80" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="6" y1="15" x2="10" y2="80" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-10" cy="83" rx="5" ry="3" fill="#0284c7"/>
+    <ellipse cx="10" cy="83" rx="5" ry="3" fill="#0284c7"/>
+  </g>
+  <text x="650" y="316" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#a16207">Kiễng gót nhẹ nhàng, thẳng hàng</text>
+</svg>

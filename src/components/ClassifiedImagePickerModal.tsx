@@ -15,6 +15,11 @@ import {
 import { SgkImageItem } from '../types/gdtc';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
+import {
+  CrossGradeGameMatchTarget,
+  doGameNamesMatch,
+  normalizeGameNameForMatch
+} from '../utils/planAutoMatcher';
 
 export type ImageClassificationCategory =
   | 'dong_tac'
@@ -27,7 +32,7 @@ export type ImageClassificationCategory =
 export interface ClassifiedImageInfo {
   category: ImageClassificationCategory;
   categoryLabel: string;
-  grade: '1' | '3' | '5' | 'chung';
+  grade: '1' | '2' | '3' | '4' | '5' | 'chung';
   badgeBg: string;
   badgeBorder: string;
 }
@@ -45,11 +50,15 @@ export function classifyImageItem(img: SgkImageItem): ClassifiedImageInfo {
   const lTitle = (img.lessonTitle || '').toLowerCase();
 
   // 1. Determine Grade strictly
-  let grade: '1' | '3' | '5' | 'chung' = 'chung';
+  let grade: '1' | '2' | '3' | '4' | '5' | 'chung' = 'chung';
   if (img.grade === '1' || id.includes('k1_') || t.includes('lớp 1') || t.includes('khối 1') || lTitle.includes('lớp 1')) {
     grade = '1';
+  } else if (img.grade === '2' || id.includes('k2_') || t.includes('lớp 2') || t.includes('khối 2') || lTitle.includes('lớp 2')) {
+    grade = '2';
   } else if (img.grade === '3' || id.includes('k3_') || t.includes('lớp 3') || t.includes('khối 3') || lTitle.includes('lớp 3')) {
     grade = '3';
+  } else if (img.grade === '4' || id.includes('k4_') || t.includes('lớp 4') || t.includes('khối 4') || lTitle.includes('lớp 4')) {
+    grade = '4';
   } else if (img.grade === '5' || id.includes('k5_') || t.includes('lớp 5') || t.includes('khối 5') || lTitle.includes('lớp 5')) {
     grade = '5';
   }
@@ -171,15 +180,18 @@ export interface ClassifiedImagePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   images: SgkImageItem[];
-  initialGrade?: 'all' | '1' | '3' | '5';
+  initialGrade?: 'all' | '1' | '2' | '3' | '4' | '5';
   initialCategory?: 'all' | ImageClassificationCategory;
   targetInfo?: {
     grade?: number;
     lessonTitle?: string;
     rowName?: string;
     rowIndex?: number;
+    gameName?: string;
   };
+  matchingGameTargets?: CrossGradeGameMatchTarget[];
   onSelectImage: (imgUrl: string, imgTitle: string) => void;
+  onSelectImageForAllMatchingGrades?: (imgUrl: string, imgTitle: string, matchedGameName: string) => void;
 }
 
 export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProps> = ({
@@ -189,19 +201,45 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
   initialGrade = 'all',
   initialCategory = 'all',
   targetInfo,
-  onSelectImage
+  matchingGameTargets = [],
+  onSelectImage,
+  onSelectImageForAllMatchingGrades
 }) => {
-  const [gradeFilter, setGradeFilter] = useState<'all' | '1' | '3' | '5'>(initialGrade);
+  const [gradeFilter, setGradeFilter] = useState<'all' | '1' | '2' | '3' | '4' | '5'>(initialGrade);
   const [categoryFilter, setCategoryFilter] = useState<'all' | ImageClassificationCategory>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [applyToAllMatchingGrades, setApplyToAllMatchingGrades] = useState<boolean>(true);
+  const [includeBothGameTypes, setIncludeBothGameTypes] = useState<boolean>(true);
+
+  const isGameContext =
+    initialCategory === 'tro_choi_kd' ||
+    initialCategory === 'tro_choi_vd' ||
+    categoryFilter === 'tro_choi_kd' ||
+    categoryFilter === 'tro_choi_vd' ||
+    Boolean(targetInfo?.gameName);
+
+  const targetGameCanonical = useMemo(
+    () => normalizeGameNameForMatch(targetInfo?.gameName || ''),
+    [targetInfo?.gameName]
+  );
 
   // Sync filters whenever target changes
   useEffect(() => {
     if (isOpen) {
-      if (initialGrade && initialGrade !== 'all') {
+      const openingForGame =
+        initialCategory === 'tro_choi_kd' ||
+        initialCategory === 'tro_choi_vd' ||
+        Boolean(targetInfo?.gameName);
+
+      // For games, automatically search across ALL 5 grades so shared games are found immediately!
+      if (openingForGame) {
+        setGradeFilter('all');
+        setIncludeBothGameTypes(true);
+        setApplyToAllMatchingGrades(Boolean(onSelectImageForAllMatchingGrades));
+      } else if (initialGrade && initialGrade !== 'all') {
         setGradeFilter(initialGrade);
       } else if (targetInfo?.grade) {
-        setGradeFilter(String(targetInfo.grade) as '1' | '3' | '5');
+        setGradeFilter(String(targetInfo.grade) as '1' | '2' | '3' | '4' | '5');
       } else {
         setGradeFilter('all');
       }
@@ -218,19 +256,24 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
       }
       setSearchQuery('');
     }
-  }, [isOpen, initialGrade, initialCategory, targetInfo]);
+  }, [isOpen, initialGrade, initialCategory, targetInfo, onSelectImageForAllMatchingGrades]);
 
   // Classify all images once
   const classifiedImages = useMemo(() => {
     return images.map((img) => ({
       ...img,
-      meta: classifyImageItem(img)
+      meta: classifyImageItem(img),
+      isSameGameName: Boolean(
+        targetGameCanonical &&
+          (doGameNamesMatch(img.title || '', targetGameCanonical) ||
+            doGameNamesMatch((img.caption || '').split('•')[0] || '', targetGameCanonical))
+      )
     }));
-  }, [images]);
+  }, [images, targetGameCanonical]);
 
   // Category counts
   const counts = useMemo(() => {
-    const byGrade = (g: 'all' | '1' | '3' | '5') => {
+    const byGrade = (g: 'all' | '1' | '2' | '3' | '4' | '5') => {
       if (g === 'all') return classifiedImages;
       return classifiedImages.filter((img) => img.meta.grade === g || img.meta.grade === 'chung');
     };
@@ -246,15 +289,22 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
       luyen_tap: currentGradeImages.filter((i) => i.meta.category === 'luyen_tap').length,
       van_dung: currentGradeImages.filter((i) => i.meta.category === 'van_dung').length,
       g1: classifiedImages.filter((i) => i.meta.grade === '1').length,
+      g2: classifiedImages.filter((i) => i.meta.grade === '2').length,
       g3: classifiedImages.filter((i) => i.meta.grade === '3').length,
+      g4: classifiedImages.filter((i) => i.meta.grade === '4').length,
       g5: classifiedImages.filter((i) => i.meta.grade === '5').length,
       total: classifiedImages.length
     };
   }, [classifiedImages, gradeFilter]);
 
-  // Filtered images list
+  const sameGameCountAcrossAllGrades = useMemo(
+    () => classifiedImages.filter((i) => i.isSameGameName).length,
+    [classifiedImages]
+  );
+
+  // Filtered images list (sorted with same-name game matches floating to the top)
   const filteredImages = useMemo(() => {
-    return classifiedImages.filter((img) => {
+    const list = classifiedImages.filter((img) => {
       // 1. Grade Filter
       if (gradeFilter !== 'all') {
         if (img.meta.grade !== gradeFilter && img.meta.grade !== 'chung') {
@@ -262,25 +312,66 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
         }
       }
 
-      // 2. Category Filter
+      // 2. Category Filter (when picking games with includeBothGameTypes, show both TC Khởi động & TC Vận động)
       if (categoryFilter !== 'all') {
-        if (img.meta.category !== categoryFilter) {
+        const isGameCat = categoryFilter === 'tro_choi_kd' || categoryFilter === 'tro_choi_vd';
+        if (isGameCat && includeBothGameTypes) {
+          if (
+            img.meta.category !== 'tro_choi_kd' &&
+            img.meta.category !== 'tro_choi_vd' &&
+            !img.isSameGameName
+          ) {
+            return false;
+          }
+        } else if (img.meta.category !== categoryFilter) {
           return false;
         }
       }
 
-      // 3. Search Query
+      // 3. Search Query (supports both plain substring & canonical game name matching)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const t = (img.title || '').toLowerCase();
         const c = (img.caption || '').toLowerCase();
         const l = (img.lessonTitle || '').toLowerCase();
-        return t.includes(q) || c.includes(q) || l.includes(q);
+        return (
+          t.includes(q) ||
+          c.includes(q) ||
+          l.includes(q) ||
+          doGameNamesMatch(img.title || '', q)
+        );
       }
 
       return true;
     });
-  }, [classifiedImages, gradeFilter, categoryFilter, searchQuery]);
+
+    if (targetGameCanonical || isGameContext) {
+      return [...list].sort((a, b) => {
+        if (a.isSameGameName !== b.isSameGameName) return a.isSameGameName ? -1 : 1;
+        const aSameGrade = targetInfo?.grade && a.meta.grade === String(targetInfo.grade) ? 1 : 0;
+        const bSameGrade = targetInfo?.grade && b.meta.grade === String(targetInfo.grade) ? 1 : 0;
+        if (aSameGrade !== bSameGrade) return bSameGrade - aSameGrade;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [
+    classifiedImages,
+    gradeFilter,
+    categoryFilter,
+    includeBothGameTypes,
+    searchQuery,
+    targetGameCanonical,
+    isGameContext,
+    targetInfo?.grade
+  ]);
+
+  const matchingGradesSummary = useMemo(() => {
+    if (!matchingGameTargets || matchingGameTargets.length === 0) return '';
+    const uniqueGrades = Array.from(new Set(matchingGameTargets.map((t) => t.grade))).sort((a, b) => a - b);
+    return uniqueGrades.map((g) => `Khối ${g}`).join(', ');
+  }, [matchingGameTargets]);
 
   if (!isOpen) return null;
 
@@ -330,20 +421,20 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
               <span className="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1">
                 <BookOpen className="w-3.5 h-3.5 text-blue-600" /> Khối Lớp:
               </span>
-              <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
+              <div className="flex flex-wrap items-center gap-1 bg-white p-0.5 rounded-lg border border-slate-200">
                 <button
                   onClick={() => setGradeFilter('all')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
                     gradeFilter === 'all'
                       ? 'bg-blue-600 text-white shadow-xs'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  Tất cả khối ({counts.total})
+                  Tất cả ({counts.total})
                 </button>
                 <button
                   onClick={() => setGradeFilter('1')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
                     gradeFilter === '1'
                       ? 'bg-blue-700 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -352,8 +443,18 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                   Khối 1 ({counts.g1})
                 </button>
                 <button
+                  onClick={() => setGradeFilter('2')}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
+                    gradeFilter === '2'
+                      ? 'bg-sky-700 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  Khối 2 ({counts.g2})
+                </button>
+                <button
                   onClick={() => setGradeFilter('3')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
                     gradeFilter === '3'
                       ? 'bg-emerald-700 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -362,8 +463,18 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                   Khối 3 ({counts.g3})
                 </button>
                 <button
+                  onClick={() => setGradeFilter('4')}
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
+                    gradeFilter === '4'
+                      ? 'bg-amber-700 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  Khối 4 ({counts.g4})
+                </button>
+                <button
                   onClick={() => setGradeFilter('5')}
-                  className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 ${
+                  className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1 ${
                     gradeFilter === '5'
                       ? 'bg-purple-700 text-white shadow-xs'
                       : 'text-slate-700 hover:bg-slate-100'
@@ -509,14 +620,71 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
               </span>
             </button>
           </div>
+          {/* Cross-Grade Same-Name Game Search & Multi-Grade Auto-Insert Bar */}
+          {isGameContext && (
+            <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-purple-50/70 -mx-3 -mb-3 px-3 py-2.5 rounded-b-xl">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="inline-flex items-center gap-1 font-bold text-purple-900">
+                  <Gamepad2 className="w-3.5 h-3.5 text-purple-600" />
+                  <span>Tìm trò chơi dùng chung mọi khối (K1–K5)</span>
+                </span>
+                {targetGameCanonical && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGradeFilter('all');
+                      setSearchQuery((prev) =>
+                        prev.toLowerCase() === targetGameCanonical.toLowerCase() ? '' : targetGameCanonical
+                      );
+                    }}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition ${
+                      searchQuery.toLowerCase() === targetGameCanonical.toLowerCase()
+                        ? 'bg-purple-600 text-white border-purple-600'
+                        : 'bg-white text-purple-800 border-purple-300 hover:bg-purple-100'
+                    }`}
+                  >
+                    Lọc tên "{targetGameCanonical}" ({sameGameCountAcrossAllGrades} ảnh)
+                  </button>
+                )}
+                <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-700 font-medium cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeBothGameTypes}
+                    onChange={(e) => setIncludeBothGameTypes(e.target.checked)}
+                    className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span>Gộp cả TC khởi động &amp; TC vận động</span>
+                </label>
+              </div>
+
+              {onSelectImageForAllMatchingGrades && (
+                <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-900 text-[11px] font-bold cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={applyToAllMatchingGrades}
+                    onChange={(e) => setApplyToAllMatchingGrades(e.target.checked)}
+                    className="rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>
+                    Tự động chèn cho tất cả khối cùng tên trò chơi
+                    {matchingGameTargets.length > 0
+                      ? ` (${matchingGameTargets.length} tiết · ${matchingGradesSummary})`
+                      : ''}
+                  </span>
+                </label>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Results Count & Current Filter Breadcrumbs */}
         <div className="flex items-center justify-between text-xs text-slate-500 px-1 shrink-0">
           <span>
             Đang hiển thị <strong className="tabular-nums">{filteredImages.length}</strong> hình ảnh
-            {gradeFilter !== 'all' && (
+            {gradeFilter !== 'all' ? (
               <span className="font-semibold text-slate-800"> · Khối {gradeFilter}</span>
+            ) : (
+              <span className="font-semibold text-purple-700"> · Tất cả 5 khối (K1–K5)</span>
             )}
             {categoryFilter !== 'all' && (
               <span className="font-semibold text-slate-800">
@@ -527,9 +695,13 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                   : categoryFilter === 'khoi_dong'
                   ? 'Khởi động chung'
                   : categoryFilter === 'tro_choi_kd'
-                  ? 'Trò chơi khởi động'
+                  ? includeBothGameTypes
+                    ? 'Tất cả Trò chơi (Khởi động & Vận động)'
+                    : 'Trò chơi khởi động'
                   : categoryFilter === 'tro_choi_vd'
-                  ? 'Trò chơi vận động'
+                  ? includeBothGameTypes
+                    ? 'Tất cả Trò chơi (Khởi động & Vận động)'
+                    : 'Trò chơi vận động'
                   : categoryFilter === 'van_dung'
                   ? 'Vận dụng'
                   : 'Hình ảnh luyện tập'}
@@ -560,20 +732,44 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                 const gradeBadge =
                   img.meta.grade === '1'
                     ? { text: 'Khối 1', bg: 'bg-blue-100 text-blue-800 border-blue-200' }
+                    : img.meta.grade === '2'
+                    ? { text: 'Khối 2', bg: 'bg-sky-100 text-sky-800 border-sky-200' }
                     : img.meta.grade === '3'
                     ? { text: 'Khối 3', bg: 'bg-emerald-100 text-emerald-800 border-emerald-200' }
+                    : img.meta.grade === '4'
+                    ? { text: 'Khối 4', bg: 'bg-amber-100 text-amber-800 border-amber-200' }
                     : img.meta.grade === '5'
                     ? { text: 'Khối 5', bg: 'bg-purple-100 text-purple-800 border-purple-200' }
                     : { text: 'Dùng chung', bg: 'bg-slate-100 text-slate-700 border-slate-200' };
 
+                const handlePickCard = () => {
+                  const isGameImageCard =
+                    img.meta.category === 'tro_choi_kd' ||
+                    img.meta.category === 'tro_choi_vd' ||
+                    img.isSameGameName;
+                  if (
+                    applyToAllMatchingGrades &&
+                    onSelectImageForAllMatchingGrades &&
+                    (isGameContext || isGameImageCard)
+                  ) {
+                    const gameKey =
+                      targetGameCanonical || normalizeGameNameForMatch(img.title) || img.title;
+                    onSelectImageForAllMatchingGrades(img.imgUrl, img.title, gameKey);
+                  } else {
+                    onSelectImage(img.imgUrl, img.title);
+                  }
+                  onClose();
+                };
+
                 return (
                   <div
                     key={img.id}
-                    onClick={() => {
-                      onSelectImage(img.imgUrl, img.title);
-                      onClose();
-                    }}
-                    className="border border-slate-200 hover:border-blue-500 rounded-xl p-2.5 cursor-pointer transition hover:shadow-md flex flex-col justify-between bg-white group hover:bg-blue-50/20"
+                    onClick={handlePickCard}
+                    className={`border rounded-xl p-2.5 cursor-pointer transition hover:shadow-md flex flex-col justify-between bg-white group ${
+                      img.isSameGameName
+                        ? 'border-emerald-400 ring-1 ring-emerald-200 bg-emerald-50/20 hover:border-emerald-600'
+                        : 'border-slate-200 hover:border-blue-500 hover:bg-blue-50/20'
+                    }`}
                   >
                     <div>
                       {/* Top Badges */}
@@ -589,6 +785,18 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                           {img.meta.categoryLabel}
                         </span>
                       </div>
+
+                      {img.isSameGameName && (
+                        <div className="mb-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 rounded-md px-1.5 py-0.5 flex items-center gap-1 truncate">
+                          <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
+                          <span className="truncate">
+                            Khớp tên trò chơi
+                            {targetInfo?.grade && img.meta.grade !== String(targetInfo.grade)
+                              ? ` (từ ${gradeBadge.text})`
+                              : ''}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Image Thumbnail + Hover Provenance Tooltip */}
                       <div className="relative group/imgtip h-32 w-full bg-slate-50 rounded-lg p-1.5 flex items-center justify-center border border-slate-100 group-hover:border-blue-200 transition">
@@ -613,7 +821,10 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                     <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
                       <span className="text-slate-400">Trang {img.page || 1} SGK</span>
                       <span className="text-blue-600 group-hover:text-blue-800 font-bold flex items-center gap-0.5">
-                        <CheckCircle2 className="w-3 h-3" /> Chọn ảnh
+                        <CheckCircle2 className="w-3 h-3" />{' '}
+                        {applyToAllMatchingGrades && onSelectImageForAllMatchingGrades && isGameContext
+                          ? 'Chèn đa khối'
+                          : 'Chọn ảnh'}
                       </span>
                     </div>
                   </div>

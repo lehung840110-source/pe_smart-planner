@@ -10,14 +10,20 @@
 export async function enhanceSgkImage(
   imageSource: string,
   options: {
-    sharpenAmount?: number; // 0 to 2, default 1.2
-    contrastBoost?: number; // 1 to 1.5, default 1.25
+    sharpenAmount?: number; // 0 to 2, default 1.3
+    contrastBoost?: number; // 1 to 1.5, default 1.2
     cleanBackground?: boolean; // cleans grayish/yellowish paper to pure white
+    scaleFactor?: 2 | 3; // 2x or 3x super-sampling
   } = {}
 ): Promise<string> {
-  const { sharpenAmount = 1.3, contrastBoost = 1.2, cleanBackground = true } = options;
+  const {
+    sharpenAmount = 1.35,
+    contrastBoost = 1.22,
+    cleanBackground = true,
+    scaleFactor = 2,
+  } = options;
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -29,9 +35,14 @@ export async function enhanceSgkImage(
           return;
         }
 
-        // Upscale canvas to 2x for high-DPI crisp rendering
-        const width = img.width * 2;
-        const height = img.height * 2;
+        // Upscale canvas cleanly while capping maximum dimension at 3200px to stay fast in browser
+        const maxDim = 3200;
+        const rawW = img.width * scaleFactor;
+        const rawH = img.height * scaleFactor;
+        const ratio = Math.min(1, maxDim / Math.max(rawW, rawH, 1));
+        const width = Math.max(1, Math.round(rawW * ratio));
+        const height = Math.max(1, Math.round(rawH * ratio));
+
         canvas.width = width;
         canvas.height = height;
 
@@ -44,29 +55,25 @@ export async function enhanceSgkImage(
         const data = imgData.data;
 
         // 1. Contrast Adjustment and Pure White Background Cleanup
-        // In scanned textbooks, paper is often off-white (230-245 RGB) or yellowed
         for (let i = 0; i < data.length; i += 4) {
           let r = data[i];
           let g = data[i + 1];
           let b = data[i + 2];
 
-          // Boost contrast
-          r = Math.min(255, Math.max(0, ((r - 128) * contrastBoost) + 128));
-          g = Math.min(255, Math.max(0, ((g - 128) * contrastBoost) + 128));
-          b = Math.min(255, Math.max(0, ((b - 128) * contrastBoost) + 128));
+          r = Math.min(255, Math.max(0, (r - 128) * contrastBoost + 128));
+          g = Math.min(255, Math.max(0, (g - 128) * contrastBoost + 128));
+          b = Math.min(255, Math.max(0, (b - 128) * contrastBoost + 128));
 
-          // If pixel is light gray/yellow/off-white (background paper), push directly to pure #ffffff
           if (cleanBackground) {
-            const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
-            if (brightness > 225) {
+            const brightness = r * 0.299 + g * 0.587 + b * 0.114;
+            if (brightness > 224) {
               r = 255;
               g = 255;
               b = 255;
-            } else if (brightness < 60) {
-              // Deepen dark outlines for sharp vector-like printing
-              r = Math.max(0, r - 25);
-              g = Math.max(0, g - 25);
-              b = Math.max(0, b - 25);
+            } else if (brightness < 65) {
+              r = Math.max(0, r - 24);
+              g = Math.max(0, g - 24);
+              b = Math.max(0, b - 24);
             }
           }
 
@@ -83,11 +90,7 @@ export async function enhanceSgkImage(
           const src = imgData.data;
           const dst = sharpData.data;
 
-          // 3x3 Sharpen Kernel
-          //  0  -a   0
-          // -a 1+4a -a
-          //  0  -a   0
-          const a = sharpenAmount * 0.25;
+          const a = sharpenAmount * 0.24;
           const center = 1 + 4 * a;
 
           for (let y = 1; y < height - 1; y++) {
@@ -104,13 +107,13 @@ export async function enhanceSgkImage(
                   (src[top + c] + src[btm + c] + src[lft + c] + src[rgt + c]) * a;
                 dst[idx + c] = Math.min(255, Math.max(0, val));
               }
-              dst[idx + 3] = src[idx + 3]; // keep alpha
+              dst[idx + 3] = src[idx + 3];
             }
           }
           ctx.putImageData(sharpData, 0, 0);
         }
 
-        resolve(canvas.toDataURL('image/png', 0.95));
+        resolve(canvas.toDataURL('image/png', 0.96));
       } catch (err) {
         console.error('Enhance SGK image error:', err);
         resolve(imageSource);

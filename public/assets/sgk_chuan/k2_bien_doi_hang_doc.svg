@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgK2Dh" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f0f9ff"/>
+    </linearGradient>
+    <filter id="shK2Dh" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="360" fill="url(#bgK2Dh)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#bae6fd" stroke-width="1.5" rx="15"/>
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="700" fill="#0369a1">
+    BIẾN ĐỔI ĐỘI HÌNH 1 HÀNG DỌC ↔ 2 HÀNG DỌC (SGK GDTC LỚP 2)
+  </text>
+
+  <!-- Step 1: 1 Hàng dọc điểm số 1-2 -->
+  <rect x="35" y="64" width="225" height="270" rx="12" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shK2Dh)"/>
+  <rect x="35" y="64" width="225" height="30" rx="10" fill="#f1f5f9"/>
+  <text x="147" y="84" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">1. Điểm số 1 - 2 theo hàng dọc</text>
+  <line x1="147" y1="108" x2="147" y2="292" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="4 4"/>
+  <!-- 6 students standing in 1 column -->
+  <circle cx="147" cy="122" r="11" fill="#0284c7"/><text x="147" y="126" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="147" cy="154" r="11" fill="#f97316"/><text x="147" y="158" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+  <circle cx="147" cy="186" r="11" fill="#0284c7"/><text x="147" y="190" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="147" cy="218" r="11" fill="#f97316"/><text x="147" y="222" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+  <circle cx="147" cy="250" r="11" fill="#0284c7"/><text x="147" y="254" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="147" cy="282" r="11" fill="#f97316"/><text x="147" y="286" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+  <text x="147" y="318" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#475569">"Theo 1 - 2, điểm số!"</text>
+
+  <!-- Step 2: Số 2 bước chếch sang phải/trái -->
+  <rect x="287" y="64" width="225" height="270" rx="12" fill="#ffffff" stroke="#bae6fd" stroke-width="1.5" filter="url(#shK2Dh)"/>
+  <rect x="287" y="64" width="225" height="30" rx="10" fill="#e0f2fe"/>
+  <text x="400" y="84" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#0284c7">2. Thành 2 hàng dọc: BƯỚC!</text>
+  <!-- Số 1 stays, Số 2 steps diag forward-right -->
+  <circle cx="370" cy="130" r="11" fill="#0284c7"/><text x="370" y="134" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="370" cy="194" r="11" fill="#0284c7"/><text x="370" y="198" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="370" cy="258" r="11" fill="#0284c7"/><text x="370" y="262" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+
+  <circle cx="370" cy="162" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M380 156 L422 134" stroke="#f97316" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="430" cy="130" r="11" fill="#f97316"/><text x="430" y="134" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+
+  <circle cx="370" cy="226" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M380 220 L422 198" stroke="#f97316" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="430" cy="194" r="11" fill="#f97316"/><text x="430" y="198" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+
+  <circle cx="370" cy="290" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M380 284 L422 262" stroke="#f97316" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="430" cy="258" r="11" fill="#f97316"/><text x="430" y="262" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+  <text x="400" y="318" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#0369a1">Số 1 đứng yên, số 2 bước chếch</text>
+
+  <!-- Step 3: Quay, dồn về 1 hàng dọc -->
+  <rect x="540" y="64" width="225" height="270" rx="12" fill="#ffffff" stroke="#bbf7d0" stroke-width="1.5" filter="url(#shK2Dh)"/>
+  <rect x="540" y="64" width="225" height="30" rx="10" fill="#dcfce7"/>
+  <text x="652" y="84" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#15803d">3. Về vị trí cũ: BƯỚC!</text>
+  <circle cx="622" cy="130" r="11" fill="#0284c7"/><text x="622" y="134" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="622" cy="194" r="11" fill="#0284c7"/><text x="622" y="198" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+  <circle cx="622" cy="258" r="11" fill="#0284c7"/><text x="622" y="262" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">1</text>
+
+  <circle cx="682" cy="130" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M674 136 L632 158" stroke="#16a34a" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="622" cy="162" r="11" fill="#16a34a"/><text x="622" y="166" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+
+  <circle cx="682" cy="194" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M674 200 L632 222" stroke="#16a34a" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="622" cy="226" r="11" fill="#16a34a"/><text x="622" y="230" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+
+  <circle cx="682" cy="258" r="9" fill="#fed7aa" stroke="#f97316" stroke-dasharray="2 2"/>
+  <path d="M674 264 L632 286" stroke="#16a34a" stroke-width="2" stroke-dasharray="3 2"/>
+  <circle cx="622" cy="290" r="11" fill="#16a34a"/><text x="622" y="294" text-anchor="middle" font-size="10" fill="#fff" font-weight="bold">2</text>
+  <text x="652" y="318" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#15803d">Số 2 bước lùi về vị trí cũ</text>
+</svg>

@@ -285,8 +285,12 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
           >
             <option value="k1_t15">Khối 1 · Tiết 15: Vươn thở, Tay (Tiết 1)</option>
             <option value="k1_t16">Khối 1 · Tiết 16: Vươn thở, Tay (Tiết 2)</option>
+            <option value="k2_t15">Khối 2 · Tiết 15: Động tác vươn thở và động tác tay (Tiết 1)</option>
+            <option value="k2_t16">Khối 2 · Tiết 16: Động tác vươn thở và động tác tay (Tiết 2)</option>
             <option value="k3_t15">Khối 3 · Tiết 15: Đi đều, Đứng lại (Tiết 3)</option>
             <option value="k3_t16">Khối 3 · Tiết 16: Đi đều, Đứng lại (Tiết 4 - Ôn tập)</option>
+            <option value="k4_t15">Khối 4 · Tiết 15: Động tác vươn thở, tay với vòng (Tiết 1)</option>
+            <option value="k4_t16">Khối 4 · Tiết 16: Động tác vươn thở, tay với vòng (Tiết 2)</option>
             <option value="k5_t15">Khối 5 · Tiết 15: Vươn thở, Tay, Chân với gậy (Tiết 1)</option>
             <option value="k5_t16">Khối 5 · Tiết 16: Vươn thở, Tay, Chân với gậy (Tiết 2)</option>
           </select>

@@ -29,7 +29,7 @@ import {
   AlertCircle,
   Lock
 } from 'lucide-react';
-import { LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment, UserCustomTemplate } from '../types/gdtc';
+import { GradeLevel, LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment, UserCustomTemplate } from '../types/gdtc';
 import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { PlanVersionHistoryModal } from './PlanVersionHistoryModal';
 import {
@@ -105,7 +105,7 @@ interface TabGeneratorProps {
   onSwitchToExport: () => void;
   onSwitchToMasterTemplate: () => void;
   onOpenImport?: () => void;
-  onNavigateToScan?: (targetGrade: 1 | 3 | 5, targetPage?: number) => void;
+  onNavigateToScan?: (targetGrade: GradeLevel, targetPage?: number) => void;
   isGuest?: boolean;
   onRequireAuth?: (feature: string) => void;
   showToast: (msg: string) => void;
@@ -184,7 +184,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_k${grade}_t${lessonNum}_w${week}`,
-        grade: grade as 1 | 3 | 5,
+        grade: grade as GradeLevel,
         week,
         lessonNum,
         topic,
@@ -797,7 +797,9 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-800 focus:border-blue-500 focus:outline-none"
             >
               <option value={1}>Khối 1</option>
+              <option value={2}>Khối 2</option>
               <option value={3}>Khối 3</option>
+              <option value={4}>Khối 4</option>
               <option value={5}>Khối 5</option>
             </select>
           </div>
@@ -850,7 +852,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
             <div className="flex items-center gap-2 flex-wrap">
               {onNavigateToScan && (
                 <button
-                  onClick={() => onNavigateToScan(grade as 1 | 3 | 5, sgkInfo.page)}
+                  onClick={() => onNavigateToScan(grade as GradeLevel, sgkInfo.page)}
                   className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition shrink-0"
                   title={`Mở trang ${sgkInfo.page} của SGK Lớp ${grade} để bóc tách hoặc đối chiếu`}
                 >
@@ -1531,7 +1533,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                       onRequireAuth('Mở Tab 1 quét & bóc tách ảnh từ SGK');
                                       return;
                                     }
-                                    onNavigateToScan(grade as 1 | 3 | 5, missingNotice.suggestedPage);
+                                    onNavigateToScan(grade as GradeLevel, missingNotice.suggestedPage);
                                   }}
                                   className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
                                 >
@@ -2020,7 +2022,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           targets={[
             {
               week,
-              grade: grade as 1 | 3 | 5,
+              grade: grade as GradeLevel,
               lessonNum,
               title,
               currentPlan: currentPlanSnapshot,

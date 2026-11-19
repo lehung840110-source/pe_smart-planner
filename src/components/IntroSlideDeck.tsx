@@ -61,7 +61,7 @@ const SLIDE_META: SlideMeta[] = [
     kicker: 'NỖI ĐAU CHỈNH SỬA LẶP LẠI',
     durationMs: 6500,
     speakerNote:
-      'Dạy song song Khối 1, Khối 3 và Khối 5 đồng nghĩa mỗi tuần là 6 tiết dạy kèm lịch chung. Việc cắt dán từng tranh động tác, căn lại từng dòng bảng 4 cột chiếm tới 2–3 giờ mỗi cuối tuần — đó là lúc tôi tự hỏi: phải có một trợ lý thông minh giúp làm việc này nhanh hơn.'
+      'Dạy song song 5 khối Lớp 1, 2, 3, 4, 5 đồng nghĩa mỗi tuần là 10 tiết dạy kèm lịch chung. Việc cắt dán từng tranh động tác, căn lại từng dòng bảng 4 cột chiếm tới 2–3 giờ mỗi cuối tuần — đó là lúc tôi tự hỏi: phải có một trợ lý thông minh giúp làm việc này nhanh hơn.'
   },
   {
     id: 3,
@@ -125,7 +125,7 @@ const SLIDE_META: SlideMeta[] = [
     kicker: 'XEM TRƯỚC A4 · XUẤT WORD / PDF',
     durationMs: 8000,
     speakerNote:
-      'Bước cuối cùng, con trỏ mở Tab 6 xem trọn bản in A4 gộp cả 3 khối và xuất thẳng file Word hoặc PDF chỉ với 1 lần nhấn — trả lại sự thảnh thơi cho tối Chủ nhật của thầy cô.'
+      'Bước cuối cùng, con trỏ mở Tab 6 xem trọn bản in A4 gộp cả 5 khối và xuất thẳng file Word hoặc PDF chỉ với 1 lần nhấn — trả lại sự thảnh thơi cho tối Chủ nhật của thầy cô.'
   }
 ];
 
@@ -361,7 +361,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                     <span>Nhật ký tuần mới</span>
                   </div>
                   <p className="font-serif text-sm leading-relaxed text-emerald-50/90 italic">
-                    “Khối 1, Khối 3, Khối 5 — 6 tiết dạy cùng một tuần. Chỉ cần sót một hình kỹ thuật hay nhầm một sơ đồ đội hình là lại phải mở máy sửa lại từ đầu.”
+                    “Khối 1, 2, 3, 4, 5 — 10 tiết dạy cùng một tuần. Chỉ cần sót một hình kỹ thuật hay nhầm một sơ đồ đội hình là lại phải mở máy sửa lại từ đầu.”
                   </p>
                   <div className="text-[11px] text-emerald-200/80 pt-1 border-t border-white/10">
                     Bấm “Phát như Video Ngắn” để xem hành trình kèm minh họa con trỏ &amp; hiệu ứng zoom
@@ -456,7 +456,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                       </li>
                       <li className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                        <span>Dạy đồng thời Khối 1, 3, 5 dễ nhầm sơ đồ đội hình hoặc sót phần giảm tải HS khuyết tật.</span>
+                        <span>Dạy đồng thời Khối 1, 2, 3, 4, 5 dễ nhầm sơ đồ đội hình hoặc sót phần giảm tải HS khuyết tật.</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
@@ -475,7 +475,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                     <ul className="space-y-2 text-xs text-slate-800">
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-[#144A2B] shrink-0 mt-0.5" />
-                        <span>Đồng bộ PPCT 3 khối, tự phân biệt động tác mới (có diễn giải kỹ thuật) và ôn tập.</span>
+                        <span>Đồng bộ PPCT 5 khối, tự phân biệt động tác mới (có diễn giải kỹ thuật) và ôn tập.</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <CheckCircle2 className="w-4 h-4 text-[#144A2B] shrink-0 mt-0.5" />
@@ -523,7 +523,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                   {
                     num: '01',
                     title: 'Thống nhất chương trình',
-                    desc: 'Khớp đúng tuần học, PPCT Khối 1, 3, 5 và tách bạch động tác mới với nội dung ôn tập.'
+                    desc: 'Khớp đúng tuần học, PPCT Khối 1, 2, 3, 4, 5 và tách bạch động tác mới với nội dung ôn tập.'
                   },
                   {
                     num: '02',
@@ -576,7 +576,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                   <strong>02 · Sinh giáo án chuẩn (Tab 3–5):</strong> Khớp PPCT theo tuần, chèn kịch bản và ảnh kỹ thuật đúng vị trí.
                 </p>
                 <p>
-                  <strong>03 · Xem trước &amp; Xuất bản (Tab 6):</strong> Rà soát bố cục A4 cả 3 khối và xuất Word/PDF ngay lập tức.
+                  <strong>03 · Xem trước &amp; Xuất bản (Tab 6):</strong> Rà soát bố cục A4 cả 5 khối và xuất Word/PDF ngay lập tức.
                 </p>
               </div>
             </div>
@@ -615,7 +615,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
               <FeatheredDivider />
 
               <p className="font-serif text-xs sm:text-sm leading-relaxed text-[#2D3E31]">
-                Phóng to vào từng ô bảng 4 cột để gõ sửa trực tiếp, đổi tranh động tác SGK hoặc chọn nhanh sơ đồ Khối 1, Khối 3, Khối 5 mà không làm xô lệch định dạng.
+                Phóng to vào từng ô bảng 4 cột để gõ sửa trực tiếp, đổi tranh động tác SGK hoặc chọn nhanh sơ đồ từ Khối 1 đến Khối 5 mà không làm xô lệch định dạng.
               </p>
 
               <div className="inline-flex rounded-lg bg-[#E5EFE3] p-1 border border-[#C6D8C0] text-[11px] font-semibold w-fit">
@@ -787,7 +787,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                   <span>SmartPlan_Backup.json</span>
                   <ShieldCheck className="w-4 h-4" />
                 </div>
-                <div className="text-slate-600">Ảnh SGK · Giáo án 3 khối · Mẫu người dùng</div>
+                <div className="text-slate-600">Ảnh SGK · Giáo án 5 khối · Mẫu người dùng</div>
               </div>
             </div>
 

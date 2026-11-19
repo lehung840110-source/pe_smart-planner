@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
+import { GradeLevel, SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import {
   removeBackgroundCanvas,
   autoCropCanvas,
@@ -49,14 +49,17 @@ import {
   sgkCurriculumTree,
   SgkLessonFolder,
   getEffectiveSgkCurriculumTree,
+  getSgkTreeOverrides,
   saveSgkTreeLessonOverride,
   resetSgkTreeLessonOverride,
-  doesImageBelongToSgkLesson
+  doesImageBelongToSgkLesson,
+  SGK_TREE_OVERRIDES_EVENT
 } from '../data/sgkCurriculumTree';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { standardMovementsLibrary } from '../data/movementLibrary';
 import { standardFormationDiagrams } from '../data/formationDiagrams';
+import { CreateHdImageModal } from './CreateHdImageModal';
 
 // Set up pdf.js worker with local Vite asset URL
 if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
@@ -70,7 +73,8 @@ interface TabScanProps {
   onAnalyzeVision?: (img: SgkImageItem) => void;
   onOpenSmartClean?: (img: SgkImageItem) => void;
   onOpenBatchUpload?: () => void;
-  initialGrade?: 1 | 3 | 5;
+  showToast?: (msg: string) => void;
+  initialGrade?: GradeLevel;
   initialPage?: number;
 }
 
@@ -90,11 +94,13 @@ export const TabScan: React.FC<TabScanProps> = ({
   onAnalyzeVision,
   onOpenSmartClean,
   onOpenBatchUpload,
+  showToast,
   initialGrade,
   initialPage,
 }) => {
+  const [isCreateHdOpen, setIsCreateHdOpen] = useState<boolean>(false);
   // Active Grade & Textbook selection
-  const [selectedGrade, setSelectedGrade] = useState<1 | 3 | 5>(initialGrade || 1);
+  const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(initialGrade || 1);
   const [fileName, setFileName] = useState<string>('SGK GDTC Lớp 1 (Kết nối tri thức)');
   const [currentPage, setCurrentPage] = useState<number>(initialPage || 28); // Default to Bài 1 (Trang 28 PDF)
   const [totalPages, setTotalPages] = useState<number>(97);
@@ -105,9 +111,23 @@ export const TabScan: React.FC<TabScanProps> = ({
   // Effective Tree + Inline Tree Metadata Editing
   const [treeRevision, setTreeRevision] = useState<number>(0);
   const effectiveTree = useMemo(() => getEffectiveSgkCurriculumTree(), [treeRevision]);
+  const treeOverridesMap = useMemo(() => getSgkTreeOverrides(), [treeRevision]);
   const [isEditingLessonMeta, setIsEditingLessonMeta] = useState<boolean>(false);
   const [editWarmupGame, setEditWarmupGame] = useState<string>('');
   const [editPracticeGame, setEditPracticeGame] = useState<string>('');
+  const [inlineTreeEdit, setInlineTreeEdit] = useState<{
+    lessonId: string;
+    field: 'lessonName' | 'warmupGame' | 'practiceGame' | 'kyThuatItem';
+    itemIndex?: number;
+    value: string;
+    pageValue?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleSyncOverrides = () => setTreeRevision((r) => r + 1);
+    window.addEventListener(SGK_TREE_OVERRIDES_EVENT, handleSyncOverrides);
+    return () => window.removeEventListener(SGK_TREE_OVERRIDES_EVENT, handleSyncOverrides);
+  }, []);
 
   // Search by Lesson or Movement
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -139,9 +159,11 @@ export const TabScan: React.FC<TabScanProps> = ({
   const subFolderLockRef = useRef<{ page: number; folder: SubFolderType; itemTitle?: string } | null>(null);
 
   // Map grade to default local PDF file
-  const gradePdfMap = {
+  const gradePdfMap: Record<GradeLevel, { file: string; name: string; defaultPage: number }> = {
     1: { file: '/assets/aistudio/SGK_GDTC1_8dda41ef.pdf', name: 'SGK GDTC Lớp 1 (Kết nối tri thức)', defaultPage: 28 },
+    2: { file: '/assets/aistudio/giao-duc-the-chat-2-ket-noi-tri-thuc-voi-cuoc-song_1806713a.pdf', name: 'SGK GDTC Lớp 2 (Kết nối tri thức)', defaultPage: 23 },
     3: { file: '/assets/aistudio/SGK_GDTC_3_e88153f9.pdf', name: 'SGK GDTC Lớp 3 (Kết nối tri thức)', defaultPage: 27 },
+    4: { file: '/assets/aistudio/SGK-GDTC-4-KNTT_1eb26d75.pdf', name: 'SGK GDTC Lớp 4 (Kết nối tri thức)', defaultPage: 26 },
     5: { file: '/assets/aistudio/SGK_GDTC_5_fe099e32.pdf', name: 'SGK GDTC Lớp 5 (Kết nối tri thức)', defaultPage: 25 },
   };
 
@@ -209,6 +231,7 @@ export const TabScan: React.FC<TabScanProps> = ({
   const loadPdfFromPath = async (url: string, name: string, targetPage = 10) => {
     setIsLoading(true);
     setLoadingText(`Đang mở sách ${name}...`);
+    pdfDocRef.current = null;
     try {
       const loadingTask = pdfjsLib.getDocument({ url });
       const pdf = await loadingTask.promise;
@@ -220,8 +243,13 @@ export const TabScan: React.FC<TabScanProps> = ({
       await renderPdfPage(pdf, pageToRender, zoomScale);
     } catch (err) {
       console.warn('PDF path loading fallback notice:', err);
+      pdfDocRef.current = null;
+      setFileName(name);
+      setTotalPages(97);
+      const safePage = Math.max(1, Math.min(targetPage, 97));
+      setCurrentPage(safePage);
       // Fallback: draw high-resolution mock textbook page if file path unavailable
-      renderFallbackPage(targetPage);
+      renderFallbackPage(safePage);
     } finally {
       setIsLoading(false);
     }
@@ -851,13 +879,73 @@ export const TabScan: React.FC<TabScanProps> = ({
     });
     setTreeRevision((r) => r + 1);
     setIsEditingLessonMeta(false);
+    showToast?.('✅ Đã lưu tên trò chơi mới cho cây thư mục & giáo án!');
   };
 
-  const handleResetLessonMeta = () => {
-    if (!activeLessonFolder) return;
-    resetSgkTreeLessonOverride(activeLessonFolder.id);
+  const handleResetLessonMeta = (targetLessonId?: string) => {
+    const idToReset = targetLessonId || activeLessonFolder?.id;
+    if (!idToReset) return;
+    resetSgkTreeLessonOverride(idToReset);
     setTreeRevision((r) => r + 1);
-    setIsEditingLessonMeta(false);
+    if (!targetLessonId) setIsEditingLessonMeta(false);
+    if (inlineTreeEdit?.lessonId === idToReset) setInlineTreeEdit(null);
+    showToast?.('↩️ Đã khôi phục tên gốc theo dữ liệu SGK mặc định!');
+  };
+
+  const handleStartInlineTreeEdit = (
+    e: React.MouseEvent,
+    lessonId: string,
+    field: 'lessonName' | 'warmupGame' | 'practiceGame' | 'kyThuatItem',
+    currentValue: string,
+    options?: { page?: number; itemIndex?: number }
+  ) => {
+    e.stopPropagation();
+    setInlineTreeEdit({
+      lessonId,
+      field,
+      itemIndex: options?.itemIndex,
+      value: currentValue,
+      pageValue: options?.page ? String(options.page) : undefined
+    });
+  };
+
+  const handleCommitInlineTreeEdit = () => {
+    if (!inlineTreeEdit) return;
+    const trimmed = inlineTreeEdit.value.trim();
+    if (!trimmed) {
+      showToast?.('Vui lòng nhập tên hợp lệ trước khi lưu!');
+      return;
+    }
+
+    const parsedPage = inlineTreeEdit.pageValue ? parseInt(inlineTreeEdit.pageValue, 10) : NaN;
+    const validPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : undefined;
+
+    if (inlineTreeEdit.field === 'warmupGame') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, {
+        warmupGameName: trimmed,
+        ...(validPage ? { warmupGamePage: validPage } : {})
+      });
+      showToast?.(`✅ Đã đổi tên Trò chơi khởi động thành "${trimmed}"!`);
+    } else if (inlineTreeEdit.field === 'practiceGame') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, {
+        practiceGameName: trimmed,
+        ...(validPage ? { practiceGamePage: validPage } : {})
+      });
+      showToast?.(`✅ Đã đổi tên Trò chơi vận động thành "${trimmed}"!`);
+    } else if (inlineTreeEdit.field === 'lessonName') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, {
+        lessonName: trimmed
+      });
+      showToast?.(`✅ Đã đổi tên bài học thành "${trimmed}"!`);
+    } else if (inlineTreeEdit.field === 'kyThuatItem' && typeof inlineTreeEdit.itemIndex === 'number') {
+      saveSgkTreeLessonOverride(inlineTreeEdit.lessonId, {
+        kyThuatItemNames: { [inlineTreeEdit.itemIndex]: trimmed }
+      });
+      showToast?.(`✅ Đã đổi tên mục kỹ thuật thành "${trimmed}"!`);
+    }
+
+    setTreeRevision((r) => r + 1);
+    setInlineTreeEdit(null);
   };
 
   // Filter lessons for the Tree View
@@ -891,10 +979,10 @@ export const TabScan: React.FC<TabScanProps> = ({
     });
   }, [effectiveTree, selectedGrade, selectedTopicFilter, searchQuery]);
 
-  // One-time auto-loader of authentic textbook figures for all 3 grades
+  // One-time auto-loader of authentic textbook figures for all 5 grades
   const handleAutoLoadDefaultSgkFigures = async () => {
     setIsLoading(true);
-    setLoadingText('Đang nạp bộ sưu tập ảnh động tác SGK chuẩn của 3 khối lớp...');
+    setLoadingText('Đang nạp bộ sưu tập ảnh động tác SGK chuẩn của 5 khối lớp...');
 
     const sampleImages: SgkImageItem[] = [
       // ===== KHỐI 1 =====
@@ -963,6 +1051,40 @@ export const TabScan: React.FC<TabScanProps> = ({
         createdAt: Date.now()
       },
 
+      // ===== KHỐI 2 =====
+      {
+        id: 'auto_k2_vuon_tho',
+        title: 'Động tác Vươn thở - SGK Lớp 2 (PDF Tr.24)',
+        grade: '2',
+        topicId: 'k2_cd2',
+        topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+        lessonId: 'b1',
+        lessonTitle: 'Bài 1: Động tác vươn thở, động tác tay',
+        folder: 'kyThuat',
+        page: 24,
+        category: 'dong_tac',
+        imgUrl: '/assets/sgk_chuan/k2_vuon_tho.svg',
+        caption: 'Động tác Vươn thở chuẩn SGK Lớp 2 (Kết nối tri thức)',
+        selected: false,
+        createdAt: Date.now()
+      },
+      {
+        id: 'auto_k2_dua_ngua',
+        title: 'Trò chơi: Ném trúng đích - SGK Lớp 2 (PDF Tr.25)',
+        grade: '2',
+        topicId: 'k2_cd2',
+        topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+        lessonId: 'b1',
+        lessonTitle: 'Bài 1: Động tác vươn thở, động tác tay',
+        folder: 'troChoi',
+        page: 25,
+        category: 'tro_choi',
+        imgUrl: '/assets/sgk_chuan/k2_tro_choi_dua_ngua.svg',
+        caption: 'Trò chơi vận động Ném trúng đích SGK Lớp 2 rèn lực tay và định hướng mục tiêu',
+        selected: false,
+        createdAt: Date.now()
+      },
+
       // ===== KHỐI 3 =====
       {
         id: 'auto_k3_di_deu',
@@ -1009,6 +1131,40 @@ export const TabScan: React.FC<TabScanProps> = ({
         category: 'tap_luyen',
         imgUrl: standardFormationDiagrams[5].svgDataUrl,
         caption: 'Hai học sinh đứng đối diện nhau, 1 bạn đếm nhịp và 1 bạn bước chân kiểm tra',
+        selected: false,
+        createdAt: Date.now()
+      },
+
+      // ===== KHỐI 4 =====
+      {
+        id: 'auto_k4_vuon_tho_vong',
+        title: 'Động tác Vươn thở với vòng - SGK Lớp 4 (PDF Tr.27)',
+        grade: '4',
+        topicId: 'k4_cd2',
+        topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+        lessonId: 'b1',
+        lessonTitle: 'Bài 1: Động tác vươn thở, động tác tay, động tác chân với vòng',
+        folder: 'kyThuat',
+        page: 27,
+        category: 'dong_tac',
+        imgUrl: '/assets/sgk_chuan/k4_vuon_tho_vong.svg',
+        caption: 'Bài tập thể dục phát triển chung với vòng thể dục chuẩn SGK Lớp 4',
+        selected: false,
+        createdAt: Date.now()
+      },
+      {
+        id: 'auto_k4_chuyen_vong',
+        title: 'Trò chơi: Chuyền vòng tiếp sức - SGK Lớp 4 (PDF Tr.37)',
+        grade: '4',
+        topicId: 'k4_cd2',
+        topicTitle: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI VÒNG',
+        lessonId: 'b3',
+        lessonTitle: 'Bài 3: Động tác nhảy, động tác điều hoà với vòng',
+        folder: 'troChoi',
+        page: 37,
+        category: 'tro_choi',
+        imgUrl: '/assets/sgk_chuan/k4_tro_choi_chuyen_vong.svg',
+        caption: 'Trò chơi Chuyền vòng tiếp sức SGK Lớp 4 phát triển khéo léo và tinh thần đồng đội',
         selected: false,
         createdAt: Date.now()
       },
@@ -1065,7 +1221,7 @@ export const TabScan: React.FC<TabScanProps> = ({
     ];
 
     const confirmLoad = window.confirm(
-      'Bạn có chắc chắn muốn nạp bộ sưu tập ảnh động tác SGK mẫu cho cả 3 khối lớp vào Thư viện không?'
+      'Bạn có chắc chắn muốn nạp bộ sưu tập ảnh động tác SGK mẫu cho cả 5 khối lớp vào Thư viện không?'
     );
     if (!confirmLoad) {
       setIsLoading(false);
@@ -1086,34 +1242,19 @@ export const TabScan: React.FC<TabScanProps> = ({
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Grade Selector */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
-            <button
-              onClick={() => setSelectedGrade(1)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                selectedGrade === 1 ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Khối 1</span>
-            </button>
-            <button
-              onClick={() => setSelectedGrade(3)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                selectedGrade === 3 ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Khối 3</span>
-            </button>
-            <button
-              onClick={() => setSelectedGrade(5)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-                selectedGrade === 5 ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Khối 5</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-xl">
+            {([1, 2, 3, 4, 5] as GradeLevel[]).map((g) => (
+              <button
+                key={g}
+                onClick={() => setSelectedGrade(g)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 transition flex items-center gap-1.5 ${
+                  selectedGrade === g ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Khối {g}</span>
+              </button>
+            ))}
           </div>
 
           {/* Search Box by Lesson or Movement */}
@@ -1129,7 +1270,17 @@ export const TabScan: React.FC<TabScanProps> = ({
           </div>
 
           {/* Quick Upload or Auto Load */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsCreateHdOpen(true)}
+              className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0"
+              title="Tạo mới hoàn toàn hình ảnh minh họa độ phân giải 2K/4K thay vì cắt từ trang SGK mờ"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>Tạo Ảnh Mới (2K/4K)</span>
+            </button>
+
             {onOpenBatchUpload && (
               <button
                 onClick={onOpenBatchUpload}
@@ -1160,7 +1311,7 @@ export const TabScan: React.FC<TabScanProps> = ({
             <button
               onClick={handleAutoLoadDefaultSgkFigures}
               className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
-              title="Tự động đồng bộ các ảnh kỹ thuật trọng tâm của SGK 1, 3, 5 vào Thư viện ảnh"
+              title="Tự động đồng bộ các ảnh kỹ thuật trọng tâm của SGK 1, 2, 3, 4, 5 vào Thư viện ảnh"
             >
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
               <span>Nạp SGK Mặc Định</span>
@@ -1279,7 +1430,7 @@ export const TabScan: React.FC<TabScanProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 1. Left Column: Detailed 6-Branch Curriculum Tree Navigation */}
         <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200 p-3.5 shadow-xs flex flex-col max-h-[800px]">
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
             <h3 className="font-bold text-xs text-slate-900 flex items-center gap-1.5">
               <FolderTree className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Cây Thư Mục SGK · Khối {selectedGrade}</span>
@@ -1288,13 +1439,17 @@ export const TabScan: React.FC<TabScanProps> = ({
               {filteredTree.length} bài · 6 phân mục/bài
             </span>
           </div>
+          <p className="text-[10.5px] text-slate-500 mb-2 flex items-center gap-1 leading-snug">
+            <Edit3 className="w-3 h-3 text-blue-500 shrink-0" />
+            <span>Bấm biểu tượng bút hoặc nháy đúp vào tên trò chơi / bài học để đổi tên thủ công khớp SGK.</span>
+          </p>
 
           {/* Quick Topic Filter Buttons */}
           <div className="flex flex-wrap gap-1 pb-2 mb-2.5 border-b border-slate-100">
             {[
               { id: 'all', label: 'Tất cả' },
               { id: 'dhdn', label: 'ĐHĐN' },
-              { id: 'the_duc', label: selectedGrade === 5 ? 'TD gậy' : 'Bài TD' },
+              { id: 'the_duc', label: selectedGrade === 5 ? 'TD gậy' : selectedGrade === 4 ? 'TD vòng' : 'Bài TD' },
               { id: 'knvd', label: 'KN Vận động' },
               { id: 'bong_ro', label: 'Bóng rổ' },
               { id: 'boi', label: 'Bơi lội' },
@@ -1325,6 +1480,13 @@ export const TabScan: React.FC<TabScanProps> = ({
               const vdCount = getFolderSubCount(lesson, 'vanDung');
               const warmupGameTitle = lesson.subFolders.troChoiKhoiDong.items[0]?.gameName || 'Trò chơi khởi động';
               const practiceGameTitle = lesson.subFolders.troChoi.items[0]?.gameName || 'Trò chơi vận động';
+              const hasCustomOverride = Boolean(treeOverridesMap[lesson.id] && Object.keys(treeOverridesMap[lesson.id]).length > 0);
+              const isEditingLessonName =
+                inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'lessonName';
+              const isEditingWarmup =
+                inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'warmupGame';
+              const isEditingPractice =
+                inlineTreeEdit?.lessonId === lesson.id && inlineTreeEdit.field === 'practiceGame';
 
               return (
                 <div
@@ -1336,19 +1498,84 @@ export const TabScan: React.FC<TabScanProps> = ({
                   {/* Topic + Grade + Page Range */}
                   <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                     <span className="text-blue-800 truncate">{lesson.topicName}</span>
-                    <span className="tabular-nums whitespace-nowrap shrink-0 text-slate-500">
-                      Tr.{lesson.startPage}-{lesson.endPage} · {totalLessonImgs} ảnh
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {hasCustomOverride && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleResetLessonMeta(lesson.id);
+                          }}
+                          title="Khôi phục toàn bộ tên gốc của bài học này"
+                          className="normal-case tracking-normal inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold transition"
+                        >
+                          <RotateCcw className="w-2.5 h-2.5" />
+                          <span>Gốc</span>
+                        </button>
+                      )}
+                      <span className="tabular-nums whitespace-nowrap text-slate-500">
+                        Tr.{lesson.startPage}-{lesson.endPage} · {totalLessonImgs} ảnh
+                      </span>
+                    </div>
                   </div>
 
-                  {/* Lesson Title */}
-                  <div
-                    onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', lesson.subFolders.kyThuat.items[0]?.page || lesson.startPage)}
-                    className="font-bold text-slate-900 text-xs mt-1 cursor-pointer hover:text-blue-700 leading-snug flex items-start gap-1.5"
-                  >
-                    <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                    <span>{lesson.lessonName}</span>
-                  </div>
+                  {/* Lesson Title (with inline rename) */}
+                  {isEditingLessonName ? (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-1 flex items-center gap-1 bg-white border border-blue-400 rounded-lg p-1 shadow-2xs"
+                    >
+                      <input
+                        type="text"
+                        autoFocus
+                        value={inlineTreeEdit.value}
+                        onChange={(e) =>
+                          setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                          if (e.key === 'Escape') setInlineTreeEdit(null);
+                        }}
+                        className="flex-1 min-w-0 text-xs font-semibold text-slate-900 px-1.5 py-0.5 focus:outline-none"
+                        placeholder="Nhập tên bài học..."
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCommitInlineTreeEdit}
+                        title="Lưu tên bài học"
+                        className="p-1 rounded bg-blue-600 hover:bg-blue-700 text-white shrink-0"
+                      >
+                        <Check className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInlineTreeEdit(null)}
+                        title="Hủy"
+                        className="p-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', lesson.subFolders.kyThuat.items[0]?.page || lesson.startPage)}
+                      onDoubleClick={(e) => handleStartInlineTreeEdit(e, lesson.id, 'lessonName', lesson.lessonName)}
+                      className="group font-bold text-slate-900 text-xs mt-1 cursor-pointer hover:text-blue-700 leading-snug flex items-start justify-between gap-1.5"
+                    >
+                      <div className="flex items-start gap-1.5 min-w-0">
+                        <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <span>{lesson.lessonName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleStartInlineTreeEdit(e, lesson.id, 'lessonName', lesson.lessonName)}
+                        title="Đổi tên bài học thủ công"
+                        className="p-0.5 rounded text-slate-400 hover:text-blue-700 hover:bg-blue-100/80 opacity-70 group-hover:opacity-100 shrink-0 transition"
+                      >
+                        <Edit3 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
 
                   {/* 6 Authentic SGK Sub-folders */}
                   <div className="mt-2 pl-2.5 space-y-1 border-l border-slate-300 text-[11px]">
@@ -1370,23 +1597,107 @@ export const TabScan: React.FC<TabScanProps> = ({
                       </span>
                     </div>
 
-                    {/* 2. Trò chơi khởi động + Tên trò chơi */}
-                    <div
-                      onClick={() => handleSelectLessonFolder(lesson, 'troChoiKhoiDong', lesson.subFolders.troChoiKhoiDong.suggestedPage, warmupGameTitle)}
-                      className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
-                        isSelected && selectedSubCategory === 'troChoiKhoiDong'
-                          ? 'bg-amber-600 text-white font-semibold'
-                          : 'text-amber-900 bg-amber-50/70 hover:bg-amber-100'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5 min-w-0">
-                        <Gamepad2 className="w-3 h-3 shrink-0" />
-                        <span className="truncate">2. TC Khởi động: <strong>{warmupGameTitle}</strong></span>
-                      </span>
-                      <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
-                        P.{lesson.subFolders.troChoiKhoiDong.suggestedPage} · {tckdCount} ảnh
-                      </span>
-                    </div>
+                    {/* 2. Trò chơi khởi động + Tên trò chơi (Inline Editable) */}
+                    {isEditingWarmup ? (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded-md bg-white border-2 border-amber-500 shadow-xs space-y-1.5"
+                      >
+                        <div className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                          <Gamepad2 className="w-3 h-3" />
+                          <span>Sửa tên Trò chơi khởi động khớp SGK</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={inlineTreeEdit.value}
+                            onChange={(e) =>
+                              setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                              if (e.key === 'Escape') setInlineTreeEdit(null);
+                            }}
+                            className="flex-1 min-w-0 px-2 py-1 border border-slate-300 rounded text-[11px] font-semibold text-slate-900 focus:outline-none focus:border-amber-500"
+                            placeholder="Nhập tên trò chơi khởi động..."
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            value={inlineTreeEdit.pageValue || ''}
+                            onChange={(e) =>
+                              setInlineTreeEdit((prev) => (prev ? { ...prev, pageValue: e.target.value } : null))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                              if (e.key === 'Escape') setInlineTreeEdit(null);
+                            }}
+                            title="Trang SGK"
+                            className="w-12 px-1.5 py-1 border border-slate-300 rounded text-[11px] text-center tabular-nums text-slate-900 focus:outline-none focus:border-amber-500"
+                            placeholder="Tr."
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setInlineTreeEdit(null)}
+                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCommitInlineTreeEdit}
+                            className="px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Lưu tên
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => handleSelectLessonFolder(lesson, 'troChoiKhoiDong', lesson.subFolders.troChoiKhoiDong.suggestedPage, warmupGameTitle)}
+                        onDoubleClick={(e) =>
+                          handleStartInlineTreeEdit(e, lesson.id, 'warmupGame', warmupGameTitle, {
+                            page: lesson.subFolders.troChoiKhoiDong.suggestedPage
+                          })
+                        }
+                        className={`group cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                          isSelected && selectedSubCategory === 'troChoiKhoiDong'
+                            ? 'bg-amber-600 text-white font-semibold'
+                            : 'text-amber-900 bg-amber-50/70 hover:bg-amber-100'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <Gamepad2 className="w-3 h-3 shrink-0" />
+                          <span className="truncate" title={`2. TC Khởi động: ${warmupGameTitle} (Nháy đúp hoặc bấm bút để đổi tên)`}>
+                            2. TC Khởi động: <strong>{warmupGameTitle}</strong>
+                          </span>
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] tabular-nums whitespace-nowrap opacity-85">
+                            P.{lesson.subFolders.troChoiKhoiDong.suggestedPage} · {tckdCount} ảnh
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) =>
+                              handleStartInlineTreeEdit(e, lesson.id, 'warmupGame', warmupGameTitle, {
+                                page: lesson.subFolders.troChoiKhoiDong.suggestedPage
+                              })
+                            }
+                            title="Đổi tên Trò chơi khởi động khớp SGK"
+                            className={`p-0.5 rounded transition ${
+                              isSelected && selectedSubCategory === 'troChoiKhoiDong'
+                                ? 'text-amber-100 hover:bg-amber-700 hover:text-white'
+                                : 'text-amber-700 hover:bg-amber-200/80 hover:text-amber-950'
+                            }`}
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* 3. Kỹ thuật động tác */}
                     <div className="space-y-0.5">
@@ -1406,16 +1717,76 @@ export const TabScan: React.FC<TabScanProps> = ({
                           {ktCount} ảnh
                         </span>
                       </div>
-                      {lesson.subFolders.kyThuat.items.map((it, idx) => (
-                        <div
-                          key={idx}
-                          onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', it.page, it.name)}
-                          className="pl-4 py-0.5 text-[10.5px] text-slate-600 hover:text-blue-700 cursor-pointer flex items-center justify-between gap-1.5"
-                        >
-                          <span className="truncate">• {it.name}</span>
-                          <span className="text-[10px] text-slate-400 tabular-nums whitespace-nowrap shrink-0">P.{it.page}</span>
-                        </div>
-                      ))}
+                      {lesson.subFolders.kyThuat.items.map((it, idx) => {
+                        const isEditingItem =
+                          inlineTreeEdit?.lessonId === lesson.id &&
+                          inlineTreeEdit.field === 'kyThuatItem' &&
+                          inlineTreeEdit.itemIndex === idx;
+                        if (isEditingItem) {
+                          return (
+                            <div
+                              key={idx}
+                              onClick={(e) => e.stopPropagation()}
+                              className="pl-3 py-0.5 flex items-center gap-1"
+                            >
+                              <input
+                                type="text"
+                                autoFocus
+                                value={inlineTreeEdit.value}
+                                onChange={(e) =>
+                                  setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                                  if (e.key === 'Escape') setInlineTreeEdit(null);
+                                }}
+                                className="flex-1 min-w-0 px-1.5 py-0.5 bg-white border border-blue-400 rounded text-[10.5px] text-slate-900 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleCommitInlineTreeEdit}
+                                className="p-0.5 rounded bg-blue-600 text-white"
+                                title="Lưu"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setInlineTreeEdit(null)}
+                                className="p-0.5 rounded bg-slate-200 text-slate-600"
+                                title="Hủy"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => handleSelectLessonFolder(lesson, 'kyThuat', it.page, it.name)}
+                            onDoubleClick={(e) =>
+                              handleStartInlineTreeEdit(e, lesson.id, 'kyThuatItem', it.name, { itemIndex: idx })
+                            }
+                            className="group pl-4 py-0.5 text-[10.5px] text-slate-600 hover:text-blue-700 cursor-pointer flex items-center justify-between gap-1.5"
+                          >
+                            <span className="truncate">• {it.name}</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className="text-[10px] text-slate-400 tabular-nums whitespace-nowrap">P.{it.page}</span>
+                              <button
+                                type="button"
+                                onClick={(e) =>
+                                  handleStartInlineTreeEdit(e, lesson.id, 'kyThuatItem', it.name, { itemIndex: idx })
+                                }
+                                title="Đổi tên mục kỹ thuật"
+                                className="p-0.5 rounded text-slate-400 hover:text-blue-700 hover:bg-blue-100 opacity-0 group-hover:opacity-100 transition"
+                              >
+                                <Edit3 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     {/* 4. Luyện tập */}
@@ -1438,23 +1809,107 @@ export const TabScan: React.FC<TabScanProps> = ({
                       </div>
                     </div>
 
-                    {/* 5. Trò chơi vận động + Tên trò chơi */}
-                    <div
-                      onClick={() => handleSelectLessonFolder(lesson, 'troChoi', lesson.subFolders.troChoi.suggestedPage, practiceGameTitle)}
-                      className={`cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
-                        isSelected && selectedSubCategory === 'troChoi'
-                          ? 'bg-purple-600 text-white font-semibold'
-                          : 'text-purple-900 bg-purple-50/70 hover:bg-purple-100'
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5 min-w-0">
-                        <Target className="w-3 h-3 shrink-0" />
-                        <span className="truncate">5. TC Vận động: <strong>{practiceGameTitle}</strong></span>
-                      </span>
-                      <span className="text-[10px] tabular-nums whitespace-nowrap shrink-0 opacity-85">
-                        P.{lesson.subFolders.troChoi.suggestedPage} · {tcCount} ảnh
-                      </span>
-                    </div>
+                    {/* 5. Trò chơi vận động + Tên trò chơi (Inline Editable) */}
+                    {isEditingPractice ? (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="p-1.5 rounded-md bg-white border-2 border-purple-500 shadow-xs space-y-1.5"
+                      >
+                        <div className="text-[10px] font-bold text-purple-800 flex items-center gap-1">
+                          <Target className="w-3 h-3" />
+                          <span>Sửa tên Trò chơi vận động khớp SGK</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={inlineTreeEdit.value}
+                            onChange={(e) =>
+                              setInlineTreeEdit((prev) => (prev ? { ...prev, value: e.target.value } : null))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                              if (e.key === 'Escape') setInlineTreeEdit(null);
+                            }}
+                            className="flex-1 min-w-0 px-2 py-1 border border-slate-300 rounded text-[11px] font-semibold text-slate-900 focus:outline-none focus:border-purple-500"
+                            placeholder="Nhập tên trò chơi vận động..."
+                          />
+                          <input
+                            type="number"
+                            min={1}
+                            value={inlineTreeEdit.pageValue || ''}
+                            onChange={(e) =>
+                              setInlineTreeEdit((prev) => (prev ? { ...prev, pageValue: e.target.value } : null))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleCommitInlineTreeEdit();
+                              if (e.key === 'Escape') setInlineTreeEdit(null);
+                            }}
+                            title="Trang SGK"
+                            className="w-12 px-1.5 py-1 border border-slate-300 rounded text-[11px] text-center tabular-nums text-slate-900 focus:outline-none focus:border-purple-500"
+                            placeholder="Tr."
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setInlineTreeEdit(null)}
+                            className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-semibold"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCommitInlineTreeEdit}
+                            className="px-2 py-0.5 rounded bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Lưu tên
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => handleSelectLessonFolder(lesson, 'troChoi', lesson.subFolders.troChoi.suggestedPage, practiceGameTitle)}
+                        onDoubleClick={(e) =>
+                          handleStartInlineTreeEdit(e, lesson.id, 'practiceGame', practiceGameTitle, {
+                            page: lesson.subFolders.troChoi.suggestedPage
+                          })
+                        }
+                        className={`group cursor-pointer py-1 px-2 rounded-md flex items-center justify-between gap-1.5 transition ${
+                          isSelected && selectedSubCategory === 'troChoi'
+                            ? 'bg-purple-600 text-white font-semibold'
+                            : 'text-purple-900 bg-purple-50/70 hover:bg-purple-100'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <Target className="w-3 h-3 shrink-0" />
+                          <span className="truncate" title={`5. TC Vận động: ${practiceGameTitle} (Nháy đúp hoặc bấm bút để đổi tên)`}>
+                            5. TC Vận động: <strong>{practiceGameTitle}</strong>
+                          </span>
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[10px] tabular-nums whitespace-nowrap opacity-85">
+                            P.{lesson.subFolders.troChoi.suggestedPage} · {tcCount} ảnh
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) =>
+                              handleStartInlineTreeEdit(e, lesson.id, 'practiceGame', practiceGameTitle, {
+                                page: lesson.subFolders.troChoi.suggestedPage
+                              })
+                            }
+                            title="Đổi tên Trò chơi vận động khớp SGK"
+                            className={`p-0.5 rounded transition ${
+                              isSelected && selectedSubCategory === 'troChoi'
+                                ? 'text-purple-100 hover:bg-purple-700 hover:text-white'
+                                : 'text-purple-700 hover:bg-purple-200/80 hover:text-purple-950'
+                            }`}
+                          >
+                            <Edit3 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* 6. Hình ảnh & Câu hỏi Vận dụng */}
                     <div
@@ -1585,7 +2040,7 @@ export const TabScan: React.FC<TabScanProps> = ({
                   <div className="flex items-center justify-end gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={handleResetLessonMeta}
+                      onClick={() => handleResetLessonMeta()}
                       className="px-2.5 py-1 rounded-md border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-semibold flex items-center gap-1"
                     >
                       <RotateCcw className="w-3 h-3" /> Khôi phục gốc
@@ -1798,7 +2253,9 @@ export const TabScan: React.FC<TabScanProps> = ({
                     className="w-full border border-slate-300 rounded-xl px-3 py-1.5 text-slate-800 font-medium focus:outline-none focus:border-blue-500"
                   >
                     <option value="1">Khối Lớp 1</option>
+                    <option value="2">Khối Lớp 2</option>
                     <option value="3">Khối Lớp 3</option>
+                    <option value="4">Khối Lớp 4</option>
                     <option value="5">Khối Lớp 5</option>
                   </select>
                 </div>
@@ -1926,6 +2383,18 @@ export const TabScan: React.FC<TabScanProps> = ({
           </div>
         </div>
       )}
+
+      <CreateHdImageModal
+        isOpen={isCreateHdOpen}
+        onClose={() => setIsCreateHdOpen(false)}
+        defaultGrade={String(selectedGrade)}
+        onSaveToLibrary={(newImg) => {
+          onImageExtracted(newImg);
+        }}
+        showToast={(msg) => {
+          if (showToast) showToast(msg);
+        }}
+      />
     </div>
   );
 };

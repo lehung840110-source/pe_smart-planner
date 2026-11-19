@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgK4Nd" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#ecfeff"/>
+    </linearGradient>
+    <filter id="shK4Nd" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+  <rect width="800" height="360" fill="url(#bgK4Nd)" rx="16"/>
+  <rect x="1" y="1" width="798" height="358" fill="none" stroke="#a5f3fc" stroke-width="1.5" rx="15"/>
+  <rect x="20" y="14" width="760" height="36" rx="8" fill="#cffafe" stroke="#22d3ee" stroke-width="1"/>
+  <text x="400" y="38" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="14" font-weight="700" fill="#0e7490">
+    NHẢY DÂY KIỂU CHÂN TRƯỚC CHÂN SAU – VẬN ĐỘNG CƠ BẢN (SGK GDTC LỚP 4)
+  </text>
+  <line x1="30" y1="285" x2="770" y2="285" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 4"/>
+
+  <rect x="40" y="64" width="220" height="260" rx="12" fill="#fff" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shK4Nd)"/>
+  <rect x="40" y="64" width="220" height="28" rx="10" fill="#f1f5f9"/>
+  <text x="150" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#334155">1. So dây &amp; Trao dây chuẩn bị</text>
+  <g transform="translate(150, 185)">
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0891b2" stroke-width="2"/>
+    <line x1="-14" y1="-48" x2="-34" y2="-32" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-48" x2="34" y2="-32" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-36 -30 Q0 82 36 -30" fill="none" stroke="#ef4444" stroke-width="2.5"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#164e63"/>
+    <line x1="-7" y1="15" x2="-7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <line x1="7" y1="15" x2="7" y2="72" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-8" cy="74" rx="7" ry="4" fill="#0891b2"/>
+    <ellipse cx="8" cy="74" rx="7" ry="4" fill="#0891b2"/>
+  </g>
+  <text x="150" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" fill="#475569">Chân giẫm giữa dây, tay ngang ngực</text>
+
+  <rect x="290" y="64" width="220" height="260" rx="12" fill="#fff" stroke="#a5f3fc" stroke-width="1.5" filter="url(#shK4Nd)"/>
+  <rect x="290" y="64" width="220" height="28" rx="10" fill="#cffafe"/>
+  <text x="400" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#0e7490">2. Bật nhảy luân phiên chân</text>
+  <g transform="translate(400, 178)">
+    <path d="M-40 -34 Q0 -116 40 -34" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-dasharray="5 3"/>
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0891b2" stroke-width="2"/>
+    <line x1="-14" y1="-48" x2="-38" y2="-34" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-48" x2="38" y2="-34" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#164e63"/>
+    <polyline points="-8,15 -22,38 -16,60" fill="none" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <polyline points="8,15 18,40 16,68" fill="none" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-16" cy="61" rx="7" ry="4" fill="#0891b2"/>
+    <ellipse cx="16" cy="70" rx="7" ry="4" fill="#0891b2"/>
+  </g>
+  <text x="400" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#0e7490">Quay dây bằng cổ tay, bật chân trước sau</text>
+
+  <rect x="540" y="64" width="220" height="260" rx="12" fill="#fff" stroke="#a5f3fc" stroke-width="1.5" filter="url(#shK4Nd)"/>
+  <rect x="540" y="64" width="220" height="28" rx="10" fill="#cffafe"/>
+  <text x="650" y="83" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="12" font-weight="bold" fill="#0e7490">3. Đổi nhịp chân nhịp nhàng</text>
+  <g transform="translate(650, 178)">
+    <path d="M-40 -34 Q0 92 40 -34" fill="none" stroke="#ef4444" stroke-width="2.5"/>
+    <circle cx="0" cy="-68" r="13" fill="#fed7aa" stroke="#334155" stroke-width="2"/>
+    <path d="M-13 -72 Q0 -85 13 -72 Q10 -60 0 -60 Q-10 -60 -13 -72" fill="#1e293b"/>
+    <path d="M-14 -55 L14 -55 L12 -10 L-12 -10 Z" fill="#fff" stroke="#0891b2" stroke-width="2"/>
+    <line x1="-14" y1="-48" x2="-38" y2="-34" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="14" y1="-48" x2="38" y2="-34" stroke="#fed7aa" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M-12 -10 L12 -10 L14 15 L3 15 L0 -2 L-3 15 L-14 15 Z" fill="#164e63"/>
+    <polyline points="-8,15 -18,40 -16,68" fill="none" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <polyline points="8,15 22,38 16,60" fill="none" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+    <ellipse cx="-16" cy="70" rx="7" ry="4" fill="#0891b2"/>
+    <ellipse cx="16" cy="61" rx="7" ry="4" fill="#0891b2"/>
+  </g>
+  <text x="650" y="305" text-anchor="middle" font-family="'Segoe UI', Arial" font-size="11" font-weight="600" fill="#0e7490">Tiếp đất nửa bàn chân trên nhẹ nhàng</text>
+</svg>

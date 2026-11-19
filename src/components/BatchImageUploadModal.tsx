@@ -31,7 +31,7 @@ interface PendingImageItem {
   file: File;
   previewUrl: string;
   name: string;
-  grade: string; // '1' | '3' | '5'
+  grade: string; // '1' | '2' | '3' | '4' | '5'
   folder: SubFolderType;
   category: ImageCategory;
   topicId?: string;
@@ -67,8 +67,12 @@ export function autoDetectMetadataFromFilename(
   let detectedGrade = fallbackGrade === 'all' ? '1' : fallbackGrade;
   if (lower.includes('k1') || lower.includes('khoi 1') || lower.includes('khoi1') || lower.includes('lop 1') || lower.includes('lop1')) {
     detectedGrade = '1';
+  } else if (lower.includes('k2') || lower.includes('khoi 2') || lower.includes('khoi2') || lower.includes('lop 2') || lower.includes('lop2')) {
+    detectedGrade = '2';
   } else if (lower.includes('k3') || lower.includes('khoi 3') || lower.includes('khoi3') || lower.includes('lop 3') || lower.includes('lop3')) {
     detectedGrade = '3';
+  } else if (lower.includes('k4') || lower.includes('khoi 4') || lower.includes('khoi4') || lower.includes('lop 4') || lower.includes('lop4')) {
+    detectedGrade = '4';
   } else if (lower.includes('k5') || lower.includes('khoi 5') || lower.includes('khoi5') || lower.includes('lop 5') || lower.includes('lop5')) {
     detectedGrade = '5';
   }
@@ -451,12 +455,12 @@ export const BatchImageUploadModal: React.FC<BatchImageUploadModalProps> = ({
                   {/* Select Grade for All */}
                   <div className="flex items-center gap-1.5">
                     <span className="text-slate-500 font-medium">Khối:</span>
-                    <div className="inline-flex rounded-lg border border-slate-300 p-0.5 bg-white">
-                      {['1', '3', '5'].map((g) => (
+                    <div className="inline-flex flex-wrap rounded-lg border border-slate-300 p-0.5 bg-white">
+                      {['1', '2', '3', '4', '5'].map((g) => (
                         <button
                           key={g}
                           onClick={() => handleGradeBatchChange(g)}
-                          className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                          className={`px-2.5 py-1 text-xs font-bold whitespace-nowrap shrink-0 rounded-md transition ${
                             selectedTargetGrade === g
                               ? 'bg-blue-600 text-white shadow-2xs'
                               : 'text-slate-600 hover:bg-slate-100'
@@ -559,7 +563,9 @@ export const BatchImageUploadModal: React.FC<BatchImageUploadModalProps> = ({
                           className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5"
                         >
                           <option value="1">K1</option>
+                          <option value="2">K2</option>
                           <option value="3">K3</option>
+                          <option value="4">K4</option>
                           <option value="5">K5</option>
                         </select>
 

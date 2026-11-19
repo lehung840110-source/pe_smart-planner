@@ -1,6 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, Image as ImageIcon, LayoutGrid, Users } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Check, Image as ImageIcon, LayoutGrid, Users, Gamepad2, Sparkles } from 'lucide-react';
 import { SgkImageItem, LessonRow } from '../types/gdtc';
+import {
+  CrossGradeGameMatchTarget,
+  normalizeGameNameForMatch
+} from '../utils/planAutoMatcher';
 
 interface SelectCellModalProps {
   isOpen: boolean;
@@ -8,6 +12,8 @@ interface SelectCellModalProps {
   imageItem: SgkImageItem | null;
   lessonRows: LessonRow[];
   onConfirm: (rowIndex: number, column: 'content' | 'hs') => void;
+  getMatchingMultiGradeTargets?: (gameName: string) => CrossGradeGameMatchTarget[];
+  onConfirmAllMatchingGrades?: (gameName: string) => void;
 }
 
 export const SelectCellModal: React.FC<SelectCellModalProps> = ({
@@ -16,11 +22,26 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
   imageItem,
   lessonRows,
   onConfirm,
+  getMatchingMultiGradeTargets,
+  onConfirmAllMatchingGrades
 }) => {
   const [selectedRow, setSelectedRow] = useState<number>(1);
   const [targetColumn, setTargetColumn] = useState<'content' | 'hs'>('content');
+  const [gameMatchQuery, setGameMatchQuery] = useState<string>('');
+
+  const isGameImage = Boolean(
+    imageItem &&
+      (imageItem.category === 'tro_choi' ||
+        imageItem.category === 'tro_choi_khoi_dong' ||
+        imageItem.folder === 'troChoi' ||
+        imageItem.folder === 'troChoiKhoiDong' ||
+        (imageItem.title || '').toLowerCase().includes('trò chơi'))
+  );
 
   useEffect(() => {
+    if (imageItem) {
+      setGameMatchQuery(normalizeGameNameForMatch(imageItem.title || ''));
+    }
     if (imageItem && lessonRows && lessonRows.length > 0) {
       if (imageItem.category === 'dong_tac') {
         // Động tác kỹ thuật: Luôn ở Cột 1 của Hoạt động Hình thành kiến thức mới (Hàng 2 / index 1)
@@ -45,6 +66,15 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
     }
   }, [imageItem, lessonRows]);
 
+  const multiGradeMatches = useMemo(() => {
+    if (!isOpen || !imageItem || !getMatchingMultiGradeTargets || !gameMatchQuery.trim()) return [];
+    return getMatchingMultiGradeTargets(gameMatchQuery.trim());
+  }, [isOpen, imageItem, getMatchingMultiGradeTargets, gameMatchQuery]);
+
+  const matchedGradesList = useMemo(() => {
+    return Array.from(new Set(multiGradeMatches.map((m) => m.grade))).sort((a, b) => a - b);
+  }, [multiGradeMatches]);
+
   if (!isOpen || !imageItem) return null;
 
   const handleConfirm = () => {
@@ -52,9 +82,15 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
     onClose();
   };
 
+  const handleConfirmMultiGrade = () => {
+    if (!onConfirmAllMatchingGrades || !gameMatchQuery.trim()) return;
+    onConfirmAllMatchingGrades(gameMatchQuery.trim());
+    onClose();
+  };
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200">
+      <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-xl border border-slate-200 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-3">
           <div className="flex items-center gap-2">
             <LayoutGrid className="w-5 h-5 text-blue-600" />
@@ -78,11 +114,78 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
           </div>
         </div>
 
+        {/* Cross-grade same-name game batch insert panel */}
+        {(isGameImage || multiGradeMatches.length > 0) && onConfirmAllMatchingGrades && (
+          <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-purple-200 space-y-2 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold text-purple-900 flex items-center gap-1.5">
+                <Gamepad2 className="w-4 h-4 text-purple-600 shrink-0" />
+                <span>Chèn Tự Động Cho Tất Cả Khối Cùng Tên Trò Chơi</span>
+              </span>
+              {multiGradeMatches.length > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-600 text-white tabular-nums whitespace-nowrap">
+                  {multiGradeMatches.length} tiết ({matchedGradesList.map((g) => `K${g}`).join(', ')})
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                value={gameMatchQuery}
+                onChange={(e) => setGameMatchQuery(e.target.value)}
+                placeholder="Nhập tên trò chơi để đối chiếu trên cả 5 khối..."
+                className="flex-1 px-2.5 py-1.5 bg-white border border-purple-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-purple-600"
+              />
+            </div>
+
+            {multiGradeMatches.length > 0 ? (
+              <>
+                <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                  {multiGradeMatches.slice(0, 8).map((m, idx) => (
+                    <div
+                      key={`${m.planId}_${m.rowIndex}_${idx}`}
+                      className="flex items-center justify-between gap-2 text-[11px] bg-white/80 px-2 py-1 rounded border border-purple-100"
+                    >
+                      <span className="font-semibold text-slate-800 truncate">
+                        Khối {m.grade} · Tuần {m.week} · Tiết {m.lessonNum}
+                      </span>
+                      <span className="text-purple-700 font-medium truncate max-w-[180px]">
+                        "{m.rowGameName}"
+                      </span>
+                    </div>
+                  ))}
+                  {multiGradeMatches.length > 8 && (
+                    <div className="text-[10.5px] text-purple-700 font-semibold pl-1">
+                      ...và {multiGradeMatches.length - 8} tiết khác cùng tên trò chơi.
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmMultiGrade}
+                  className="w-full py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                  <span>
+                    Tự Động Chèn Vào {multiGradeMatches.length} Tiết Cùng Trò Chơi ({matchedGradesList.map((g) => `Khối ${g}`).join(', ')})
+                  </span>
+                </button>
+              </>
+            ) : (
+              <p className="text-[11px] text-purple-800/80 leading-snug">
+                Nhập đúng tên trò chơi (ví dụ: <em>Làm theo hiệu lệnh</em>, <em>Lò cò tiếp sức</em>, <em>Kết bạn</em>...) để tìm và chèn nhanh vào các khối lớp đang dùng trò chơi này.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4 text-xs">
           {/* Pick Row */}
           <div>
             <label className="block font-semibold text-slate-700 mb-1.5">
-              1. Chọn Hoạt Động Cần Chèn (Hàng trong Bảng):
+              1. Chọn Hoạt Động Cần Chèn Cho Tiết Hiện Tại (Hàng trong Bảng):
             </label>
             <select
               value={selectedRow}
@@ -190,7 +293,7 @@ export const SelectCellModal: React.FC<SelectCellModalProps> = ({
             onClick={handleConfirm}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition"
           >
-            <Check className="w-3.5 h-3.5" /> Xác Nhận Chèn Ảnh
+            <Check className="w-3.5 h-3.5" /> Chèn Vào Tiết Hiện Tại
           </button>
         </div>
       </div>

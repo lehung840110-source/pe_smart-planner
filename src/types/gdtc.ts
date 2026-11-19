@@ -41,12 +41,14 @@ export interface ScenarioItem {
   hs: string;      // Cột 4: Hoạt động của HS
 }
 
+export type GradeLevel = 1 | 2 | 3 | 4 | 5;
+
 export interface WeeklyMasterScheduleRow {
   id: string;
   dayOfWeek: string;        // e.g. "Thứ 2 – Sáng", "Thứ 2 – Chiều"
   period: number;           // Tiết trong buổi: 1, 2, 3, 4
-  className: string;        // Lớp: "1A4", "1A5", "3A1", "5A1", "5A2"
-  grade: 1 | 3 | 5;         // Khối lớp: 1, 3, hoặc 5
+  className: string;        // Lớp: "1A4", "2A1", "3A1", "4A1", "5A1"...
+  grade: GradeLevel;        // Khối lớp: 1, 2, 3, 4, hoặc 5
   lessonTitle: string;      // Bài học: Bài 2: Động tác chân...
   ppct: number;             // Tiết PPCT: 17, 18
   integrationNotes: string; // ND Tích hợp / Điều chỉnh
@@ -59,7 +61,7 @@ export type SubFolderType = 'kyThuat' | 'luyenTap' | 'vanDung' | 'khoiDong' | 't
 export interface SgkImageItem {
   id: string;
   title: string;
-  grade: string; // "1", "3", "5"
+  grade: string; // "1", "2", "3", "4", "5"
   topicId?: string;
   topicTitle?: string;
   lessonId?: string;
@@ -85,7 +87,7 @@ export interface SchoolSettings {
 
 export interface PpctItem {
   id: string;
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   week: number;
   period: number; // 1 to 70
   topic: string;
@@ -95,7 +97,7 @@ export interface PpctItem {
 }
 
 export interface PpctAuditResult {
-  grade: 1 | 3 | 5;
+  grade: GradeLevel;
   week: number;
   period: number;
   scheduledTitle: string;

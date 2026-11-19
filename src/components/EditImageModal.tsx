@@ -32,7 +32,7 @@ export const EditImageModal: React.FC<EditImageModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [lessonTitle, setLessonTitle] = useState('');
-  const [grade, setGrade] = useState<'1' | '3' | '5'>('1');
+  const [grade, setGrade] = useState<'1' | '2' | '3' | '4' | '5'>('1');
   const [folder, setFolder] = useState<SubFolderType>('kyThuat');
   const [page, setPage] = useState<number | string>('');
   const [caption, setCaption] = useState('');
@@ -46,7 +46,7 @@ export const EditImageModal: React.FC<EditImageModalProps> = ({
     if (imageItem && isOpen) {
       setTitle(imageItem.title || '');
       setLessonTitle(imageItem.lessonTitle || '');
-      setGrade((imageItem.grade as '1' | '3' | '5') || '1');
+      setGrade((imageItem.grade as '1' | '2' | '3' | '4' | '5') || '1');
       setFolder(imageItem.folder || 'kyThuat');
       setPage(imageItem.page || '');
       setCaption(imageItem.caption || '');
@@ -276,11 +276,13 @@ export const EditImageModal: React.FC<EditImageModalProps> = ({
                   </label>
                   <select
                     value={grade}
-                    onChange={(e) => setGrade(e.target.value as '1' | '3' | '5')}
+                    onChange={(e) => setGrade(e.target.value as '1' | '2' | '3' | '4' | '5')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-blue-500 font-bold"
                   >
                     <option value="1">Khối Lớp 1</option>
+                    <option value="2">Khối Lớp 2</option>
                     <option value="3">Khối Lớp 3</option>
+                    <option value="4">Khối Lớp 4</option>
                     <option value="5">Khối Lớp 5</option>
                   </select>
                 </div>
