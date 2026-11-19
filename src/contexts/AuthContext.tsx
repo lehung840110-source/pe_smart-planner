@@ -1,4 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  isLocalSessionToken,
+  localRegister,
+  localLogin,
+  localGetMe,
+  localLogout,
+  localFindAccount,
+  localRequestPasswordReset,
+  localResetPassword,
+  localChangePassword,
+  localGetRegistrationNotifications,
+  localMarkNotificationSent,
+  localConfirmRegistrationNotification,
+  localPullWorkspace,
+  localPushWorkspace
+} from '../utils/localAuthFallback';
 
 export interface AuthUser {
   id: string;
@@ -152,6 +168,42 @@ function readRememberedAccounts(): RememberedAccount[] {
   }
 }
 
+type BackendApiResult<T = any> =
+  | { unavailable: true }
+  | { unavailable: false; ok: boolean; status: number; data: T };
+
+/**
+ * Calls the Express backend API and distinguishes legitimate API JSON responses
+ * (including 400/401/403/404/409/429 validation errors) from missing/unreachable
+ * backend deployments (e.g., static Vercel hosting returning HTML 404/index.html or network errors).
+ */
+async function tryBackendJson<T = any>(url: string, init?: RequestInit): Promise<BackendApiResult<T>> {
+  try {
+    const res = await fetch(url, init);
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (!contentType.includes('application/json')) {
+      return { unavailable: true };
+    }
+    let data: any = null;
+    try {
+      data = await res.json();
+    } catch {
+      return { unavailable: true };
+    }
+    const isRecognizedApiPayload =
+      data !== null &&
+      typeof data === 'object' &&
+      ('success' in data || 'authenticated' in data);
+
+    if (!isRecognizedApiPayload && (res.status === 404 || res.status === 405 || res.status >= 500)) {
+      return { unavailable: true };
+    }
+    return { unavailable: false, ok: res.ok, status: res.status, data };
+  } catch {
+    return { unavailable: true };
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(() => readStoredToken());
@@ -160,6 +212,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [rememberedAccounts, setRememberedAccounts] = useState<RememberedAccount[]>(() =>
     readRememberedAccounts()
+  );
+
+  const getActiveToken = useCallback(
+    (overrideToken?: string | null): string | null => {
+      if (overrideToken !== undefined) return overrideToken;
+      return token || readStoredToken();
+    },
+    [token]
   );
 
   const upsertRememberedAccount = useCallback((u: AuthUser) => {
@@ -192,7 +252,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const authHeaders = useCallback(
     (overrideToken?: string | null) => {
-      const activeToken = overrideToken !== undefined ? overrideToken : token;
+      const activeToken = getActiveToken(overrideToken);
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };
@@ -201,21 +261,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return headers;
     },
-    [token]
+    [getActiveToken]
   );
 
   useEffect(() => {
     let cancelled = false;
     async function checkSession() {
       try {
-        const res = await fetch('/api/auth/me', {
+        const activeToken = getActiveToken();
+        if (isLocalSessionToken(activeToken)) {
+          const localRes = localGetMe(activeToken);
+          if (!cancelled) {
+            setUser(localRes.authenticated ? localRes.user : null);
+          }
+          return;
+        }
+
+        const apiRes = await tryBackendJson<{ authenticated?: boolean; user?: AuthUser | null }>('/api/auth/me', {
           method: 'GET',
-          headers: authHeaders(),
+          headers: authHeaders(activeToken),
           credentials: 'include'
         });
-        const data = await res.json();
-        if (!cancelled && data?.authenticated && data?.user) {
-          setUser(data.user);
+
+        if (apiRes.unavailable) {
+          const localRes = localGetMe(activeToken);
+          if (!cancelled) {
+            setUser(localRes.authenticated ? localRes.user : null);
+          }
+          return;
+        }
+
+        if (!cancelled && apiRes.data?.authenticated && apiRes.data?.user) {
+          setUser(apiRes.data.user);
         } else if (!cancelled) {
           setUser(null);
         }
@@ -229,32 +306,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       cancelled = true;
     };
-  }, [authHeaders]);
+  }, [authHeaders, getActiveToken]);
 
   const login = async (email: string, password: string, rememberMe = true) => {
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email, password, rememberMe })
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Đăng nhập thất bại.' };
+    const apiRes = await tryBackendJson('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password, rememberMe })
+    });
+
+    if (apiRes.unavailable) {
+      const localRes = await localLogin(email, password, rememberMe);
+      if (!localRes.success || !localRes.user) {
+        return { success: false, error: localRes.error || 'Đăng nhập thất bại.' };
       }
-      if (data.token) {
-        saveStoredToken(data.token, rememberMe);
-        setToken(data.token);
+      if (localRes.token) {
+        saveStoredToken(localRes.token, rememberMe);
+        setToken(localRes.token);
       }
-      setUser(data.user);
-      if (rememberMe && data.user) {
-        upsertRememberedAccount(data.user);
+      setUser(localRes.user);
+      if (rememberMe) {
+        upsertRememberedAccount(localRes.user);
       }
-      return { success: true, user: data.user };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ để đăng nhập.' };
+      return { success: true, user: localRes.user };
     }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Đăng nhập thất bại.' };
+    }
+    if (data.token) {
+      saveStoredToken(data.token, rememberMe);
+      setToken(data.token);
+    }
+    setUser(data.user);
+    if (rememberMe && data.user) {
+      upsertRememberedAccount(data.user);
+    }
+    return { success: true, user: data.user };
   };
 
   const register = async (params: {
@@ -264,44 +354,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     schoolName: string;
     rememberMe?: boolean;
   }) => {
-    try {
-      const rememberMe = params.rememberMe !== false;
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ ...params, rememberMe })
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Đăng ký tài khoản thất bại.' };
+    const rememberMe = params.rememberMe !== false;
+    const apiRes = await tryBackendJson('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ...params, rememberMe })
+    });
+
+    if (apiRes.unavailable) {
+      const localRes = await localRegister({ ...params, rememberMe });
+      if (!localRes.success || !localRes.user) {
+        return { success: false, error: localRes.error || 'Đăng ký tài khoản thất bại.' };
       }
-      if (data.token) {
-        saveStoredToken(data.token, rememberMe);
-        setToken(data.token);
+      if (localRes.token) {
+        saveStoredToken(localRes.token, rememberMe);
+        setToken(localRes.token);
       }
-      setUser(data.user);
-      if (rememberMe && data.user) {
-        upsertRememberedAccount(data.user);
+      setUser(localRes.user);
+      if (rememberMe) {
+        upsertRememberedAccount(localRes.user);
       }
       return {
         success: true,
-        user: data.user,
-        registrationNotification: data.registrationNotification
+        user: localRes.user,
+        registrationNotification: localRes.registrationNotification
       };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ để đăng ký.' };
     }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Đăng ký tài khoản thất bại.' };
+    }
+    if (data.token) {
+      saveStoredToken(data.token, rememberMe);
+      setToken(data.token);
+    }
+    setUser(data.user);
+    if (rememberMe && data.user) {
+      upsertRememberedAccount(data.user);
+    }
+    return {
+      success: true,
+      user: data.user,
+      registrationNotification: data.registrationNotification
+    };
   };
 
   const logout = async () => {
-    try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        headers: authHeaders(),
-        credentials: 'include'
-      });
-    } catch {}
+    const activeToken = getActiveToken();
+    if (isLocalSessionToken(activeToken)) {
+      localLogout(activeToken);
+    } else {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: authHeaders(activeToken),
+          credentials: 'include'
+        });
+      } catch {}
+    }
     clearStoredToken();
     setToken(null);
     setUser(null);
@@ -309,204 +421,277 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const findAccount = async (query: string) => {
-    try {
-      const res = await fetch('/api/auth/find-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query })
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Không thể tra cứu tài khoản.' };
-      }
-      return { success: true, accounts: data.accounts || [] };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ.' };
+    const apiRes = await tryBackendJson('/api/auth/find-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+
+    if (apiRes.unavailable) {
+      return localFindAccount(query);
     }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Không thể tra cứu tài khoản.' };
+    }
+    return { success: true, accounts: data.accounts || [] };
   };
 
   const requestPasswordReset = async (email: string) => {
-    try {
-      const res = await fetch('/api/auth/request-reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Không thể tạo mã khôi phục mật khẩu.' };
-      }
-      return {
-        success: true,
-        email: data.email,
-        maskedEmail: data.maskedEmail,
-        fullName: data.fullName,
-        expiresAt: data.expiresAt,
-        recoveryCode: data.recoveryCode,
-        notifyEmail: data.notifyEmail
-      };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ.' };
+    const apiRes = await tryBackendJson('/api/auth/request-reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+
+    if (apiRes.unavailable) {
+      return localRequestPasswordReset(email);
     }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Không thể tạo mã khôi phục mật khẩu.' };
+    }
+    return {
+      success: true,
+      email: data.email,
+      maskedEmail: data.maskedEmail,
+      fullName: data.fullName,
+      expiresAt: data.expiresAt,
+      recoveryCode: data.recoveryCode,
+      notifyEmail: data.notifyEmail
+    };
   };
 
   const resetPassword = async (params: { email: string; code: string; newPassword: string }) => {
-    try {
-      const res = await fetch('/api/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(params)
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Đặt lại mật khẩu thất bại.' };
+    const apiRes = await tryBackendJson('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(params)
+    });
+
+    if (apiRes.unavailable) {
+      const localRes = await localResetPassword(params);
+      if (!localRes.success) {
+        return { success: false, error: localRes.error || 'Đặt lại mật khẩu thất bại.' };
       }
-      if (data.token) {
-        saveStoredToken(data.token, true);
-        setToken(data.token);
+      if (localRes.token) {
+        saveStoredToken(localRes.token, true);
+        setToken(localRes.token);
       }
-      if (data.user) {
-        setUser(data.user);
-        upsertRememberedAccount(data.user);
+      if (localRes.user) {
+        setUser(localRes.user);
+        upsertRememberedAccount(localRes.user);
       }
-      return { success: true, user: data.user };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ.' };
+      return { success: true, user: localRes.user };
     }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Đặt lại mật khẩu thất bại.' };
+    }
+    if (data.token) {
+      saveStoredToken(data.token, true);
+      setToken(data.token);
+    }
+    if (data.user) {
+      setUser(data.user);
+      upsertRememberedAccount(data.user);
+    }
+    return { success: true, user: data.user };
   };
 
   const changePassword = async (params: { currentPassword: string; newPassword: string }) => {
-    try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'POST',
-        headers: authHeaders(),
-        credentials: 'include',
-        body: JSON.stringify(params)
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Đổi mật khẩu thất bại.' };
-      }
-      return { success: true };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ.' };
+    const activeToken = getActiveToken();
+    if (isLocalSessionToken(activeToken)) {
+      return localChangePassword(activeToken, params);
     }
+
+    const apiRes = await tryBackendJson('/api/auth/change-password', {
+      method: 'POST',
+      headers: authHeaders(activeToken),
+      credentials: 'include',
+      body: JSON.stringify(params)
+    });
+
+    if (apiRes.unavailable) {
+      return localChangePassword(activeToken, params);
+    }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Đổi mật khẩu thất bại.' };
+    }
+    return { success: true };
   };
 
   const getRegistrationNotifications = useCallback(async () => {
-    try {
-      const res = await fetch('/api/auth/notifications', {
-        method: 'GET',
-        headers: authHeaders(),
-        credentials: 'include'
-      });
-      const data = await res.json();
-      if (!res.ok || !data?.success) {
-        return { success: false, error: data?.error || 'Không thể tải danh sách thông báo.' };
-      }
-      return {
-        success: true,
-        notifyEmail: data.notifyEmail,
-        isAdmin: data.isAdmin,
-        notifications: data.notifications || []
-      };
-    } catch {
-      return { success: false, error: 'Không thể kết nối máy chủ.' };
+    const activeToken = getActiveToken();
+    if (isLocalSessionToken(activeToken)) {
+      return localGetRegistrationNotifications(activeToken);
     }
-  }, [authHeaders]);
+
+    const apiRes = await tryBackendJson('/api/auth/notifications', {
+      method: 'GET',
+      headers: authHeaders(activeToken),
+      credentials: 'include'
+    });
+
+    if (apiRes.unavailable) {
+      return localGetRegistrationNotifications(activeToken);
+    }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Không thể tải danh sách thông báo.' };
+    }
+    return {
+      success: true,
+      notifyEmail: data.notifyEmail,
+      isAdmin: data.isAdmin,
+      notifications: data.notifications || []
+    };
+  }, [authHeaders, getActiveToken]);
 
   const markNotificationSent = useCallback(
     async (id: string, payload: { gmailMessageId?: string; sentByEmail?: string }) => {
-      try {
-        const res = await fetch(`/api/auth/notifications/${encodeURIComponent(id)}/mark-sent`, {
-          method: 'POST',
-          headers: authHeaders(),
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (!res.ok || !data?.success) {
-          return { success: false, error: data?.error || 'Không thể cập nhật trạng thái gửi email.' };
-        }
-        return { success: true, notification: data.notification };
-      } catch {
-        return { success: false, error: 'Không thể kết nối máy chủ.' };
+      const activeToken = getActiveToken();
+      if (isLocalSessionToken(activeToken)) {
+        return localMarkNotificationSent(activeToken, id, payload);
       }
+
+      const apiRes = await tryBackendJson(`/api/auth/notifications/${encodeURIComponent(id)}/mark-sent`, {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
+
+      if (apiRes.unavailable) {
+        return localMarkNotificationSent(activeToken, id, payload);
+      }
+
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể cập nhật trạng thái gửi email.' };
+      }
+      return { success: true, notification: data.notification };
     },
-    [authHeaders]
+    [authHeaders, getActiveToken]
   );
 
   const confirmRegistrationNotification = useCallback(
     async (id: string, confirmationCode?: string) => {
-      try {
-        const res = await fetch(`/api/auth/notifications/${encodeURIComponent(id)}/confirm`, {
-          method: 'POST',
-          headers: authHeaders(),
-          credentials: 'include',
-          body: JSON.stringify({ confirmationCode })
-        });
-        const data = await res.json();
-        if (!res.ok || !data?.success) {
-          return { success: false, error: data?.error || 'Không thể xác nhận tài khoản.' };
-        }
-        if (data.notification && user && data.notification.userId === user.id) {
+      const activeToken = getActiveToken();
+      if (isLocalSessionToken(activeToken)) {
+        const localRes = localConfirmRegistrationNotification(activeToken, id, confirmationCode);
+        if (localRes.success && localRes.notification && user && localRes.notification.userId === user.id) {
           setUser((prev) => (prev ? { ...prev, registrationConfirmed: true, confirmedAt: Date.now() } : prev));
         }
-        return { success: true, notification: data.notification };
-      } catch {
-        return { success: false, error: 'Không thể kết nối máy chủ.' };
+        return localRes;
       }
+
+      const apiRes = await tryBackendJson(`/api/auth/notifications/${encodeURIComponent(id)}/confirm`, {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify({ confirmationCode })
+      });
+
+      if (apiRes.unavailable) {
+        const localRes = localConfirmRegistrationNotification(activeToken, id, confirmationCode);
+        if (localRes.success && localRes.notification && user && localRes.notification.userId === user.id) {
+          setUser((prev) => (prev ? { ...prev, registrationConfirmed: true, confirmedAt: Date.now() } : prev));
+        }
+        return localRes;
+      }
+
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể xác nhận tài khoản.' };
+      }
+      if (data.notification && user && data.notification.userId === user.id) {
+        setUser((prev) => (prev ? { ...prev, registrationConfirmed: true, confirmedAt: Date.now() } : prev));
+      }
+      return { success: true, notification: data.notification };
     },
-    [authHeaders, user]
+    [authHeaders, getActiveToken, user]
   );
 
   const pullWorkspace = useCallback(async () => {
-    if (!token && !user) return null;
+    const activeToken = getActiveToken();
+    if (!activeToken && !user) return null;
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/workspace', {
+      if (isLocalSessionToken(activeToken)) {
+        const ws = await localPullWorkspace(activeToken);
+        if (ws?.updatedAt) setLastSyncedAt(ws.updatedAt);
+        return ws;
+      }
+
+      const apiRes = await tryBackendJson('/api/workspace', {
         method: 'GET',
-        headers: authHeaders(),
+        headers: authHeaders(activeToken),
         credentials: 'include'
       });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data?.workspace?.updatedAt) {
-        setLastSyncedAt(data.workspace.updatedAt);
+
+      if (apiRes.unavailable) {
+        const ws = await localPullWorkspace(activeToken);
+        if (ws?.updatedAt) setLastSyncedAt(ws.updatedAt);
+        return ws;
       }
-      return data?.workspace || null;
+
+      if (!apiRes.ok) return null;
+      if (apiRes.data?.workspace?.updatedAt) {
+        setLastSyncedAt(apiRes.data.workspace.updatedAt);
+      }
+      return apiRes.data?.workspace || null;
     } catch {
       return null;
     } finally {
       setIsSyncing(false);
     }
-  }, [token, user, authHeaders]);
+  }, [getActiveToken, user, authHeaders]);
 
   const pushWorkspace = useCallback(
     async (workspace: any): Promise<boolean> => {
-      if (!token && !user) return false;
+      const activeToken = getActiveToken();
+      if (!activeToken && !user) return false;
       setIsSyncing(true);
       try {
-        const res = await fetch('/api/workspace', {
+        if (isLocalSessionToken(activeToken)) {
+          const localRes = await localPushWorkspace(activeToken, workspace);
+          if (localRes.updatedAt) setLastSyncedAt(localRes.updatedAt);
+          return localRes.success;
+        }
+
+        const apiRes = await tryBackendJson('/api/workspace', {
           method: 'PUT',
-          headers: authHeaders(),
+          headers: authHeaders(activeToken),
           credentials: 'include',
           body: JSON.stringify({ workspace })
         });
-        if (!res.ok) return false;
-        const data = await res.json();
-        if (data?.updatedAt) {
-          setLastSyncedAt(data.updatedAt);
+
+        if (apiRes.unavailable) {
+          const localRes = await localPushWorkspace(activeToken, workspace);
+          if (localRes.updatedAt) setLastSyncedAt(localRes.updatedAt);
+          return localRes.success;
         }
-        return Boolean(data?.success);
+
+        if (!apiRes.ok) return false;
+        if (apiRes.data?.updatedAt) {
+          setLastSyncedAt(apiRes.data.updatedAt);
+        }
+        return Boolean(apiRes.data?.success);
       } catch {
         return false;
       } finally {
         setIsSyncing(false);
       }
     },
-    [token, user, authHeaders]
+    [getActiveToken, user, authHeaders]
   );
 
   return (
