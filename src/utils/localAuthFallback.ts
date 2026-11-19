@@ -114,19 +114,28 @@ function maskEmailAddress(email: string): string {
   return `${localPart.slice(0, 2)}${'*'.repeat(Math.min(5, Math.max(2, localPart.length - 2)))}${localPart.slice(-1)}@${domain}`;
 }
 
+const memoryJsonStore = new Map<string, string>();
+
 function readJsonStore<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(key) ?? memoryJsonStore.get(key) ?? null;
     if (!raw) return fallback;
     const parsed = JSON.parse(raw);
     return parsed ?? fallback;
   } catch {
-    return fallback;
+    try {
+      const mem = memoryJsonStore.get(key);
+      return mem ? (JSON.parse(mem) ?? fallback) : fallback;
+    } catch {
+      return fallback;
+    }
   }
 }
 
 function writeJsonStore<T>(key: string, value: T): void {
-  safeLocalStorageSet(key, JSON.stringify(value));
+  const serialized = JSON.stringify(value);
+  memoryJsonStore.set(key, serialized);
+  safeLocalStorageSet(key, serialized);
 }
 
 function readUsers(): LocalStoredUser[] {

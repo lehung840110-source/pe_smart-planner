@@ -178,8 +178,13 @@ type BackendApiResult<T = any> =
  * backend deployments (e.g., static Vercel hosting returning HTML 404/index.html or network errors).
  */
 async function tryBackendJson<T = any>(url: string, init?: RequestInit): Promise<BackendApiResult<T>> {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
   try {
-    const res = await fetch(url, init);
+    const res = await fetch(url, {
+      ...init,
+      ...(controller ? { signal: controller.signal } : {})
+    });
     const contentType = (res.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('application/json')) {
       return { unavailable: true };
@@ -195,12 +200,14 @@ async function tryBackendJson<T = any>(url: string, init?: RequestInit): Promise
       typeof data === 'object' &&
       ('success' in data || 'authenticated' in data);
 
-    if (!isRecognizedApiPayload && (res.status === 404 || res.status === 405 || res.status >= 500)) {
+    if (!isRecognizedApiPayload) {
       return { unavailable: true };
     }
     return { unavailable: false, ok: res.ok, status: res.status, data };
   } catch {
     return { unavailable: true };
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
