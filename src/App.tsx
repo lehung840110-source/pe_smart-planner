@@ -65,7 +65,12 @@ import {
 import { getGradePpctInfo } from './utils/academicCalendar';
 import { createBalancedGranularLessonRows } from './utils/planAutoMatcher';
 import { User as FirebaseGoogleUser } from 'firebase/auth';
-import { initAuth, googleSignIn, logoutGoogle, getAccessToken } from './services/googleAuth';
+import {
+  initAuth,
+  googleSignIn,
+  logoutGoogle,
+  getCachedAccessTokenSync
+} from './services/googleAuth';
 import {
   getSgkTreeOverrides,
   saveSgkTreeLessonOverride,
@@ -762,7 +767,8 @@ export default function App() {
     }));
 
     try {
-      let token = await getAccessToken();
+      // Check cached token synchronously so googleSignIn() runs directly inside the click gesture
+      let token = getCachedAccessTokenSync();
       if (!token) {
         if (!opts?.interactiveSignIn) {
           setCloudSyncStatus((prev) => ({
@@ -773,8 +779,18 @@ export default function App() {
           return false;
         }
         const signInRes = await googleSignIn();
-        if (!signInRes?.accessToken) {
-          throw new Error('Không lấy được quyền truy cập Google Drive.');
+        if (!signInRes) {
+          // User closed the Google sign-in popup before completing
+          setCloudSyncStatus((prev) => ({
+            ...prev,
+            phase: prev.lastSyncedAt ? 'needs_reconnect' : 'idle',
+            errorMessage:
+              'Bạn đã đóng cửa sổ đăng nhập Google trước khi hoàn tất. Hãy bấm lại nút đăng nhập và chọn tài khoản Google để đồng bộ.'
+          }));
+          if (!opts?.silent) {
+            showToast('ℹ️ Đã đóng cửa sổ đăng nhập Google. Bấm lại khi bạn sẵn sàng đồng bộ.');
+          }
+          return false;
         }
         setCloudGoogleUser(signInRes.user);
         token = signInRes.accessToken;
@@ -835,7 +851,6 @@ export default function App() {
       }
       return true;
     } catch (err: any) {
-      console.error('Cloud Auto-Sync error:', err);
       const isUnauthorized =
         err?.code === 'auth/unauthorized-domain' ||
         (typeof err?.message === 'string' && err.message.toLowerCase().includes('unauthorized-domain'));
@@ -845,6 +860,10 @@ export default function App() {
       const msg = isUnauthorized
         ? `Tên miền "${currentDomain}" chưa được thêm vào Authorized Domains của Firebase.`
         : err?.message || 'Đồng bộ Google Drive chưa thành công. Vui lòng thử lại.';
+
+      if (!isUnauthorized) {
+        console.warn('Cloud Auto-Sync notice:', err?.code || msg);
+      }
 
       setCloudSyncStatus((prev) => ({
         ...prev,

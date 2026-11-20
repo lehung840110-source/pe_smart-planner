@@ -30,7 +30,7 @@ import {
   RegistrationNotificationItem,
   FoundAccountHint
 } from '../contexts/AuthContext';
-import { googleSignIn, getAccessToken } from '../services/googleAuth';
+import { googleSignIn, getCachedAccessTokenSync } from '../services/googleAuth';
 import {
   ADMIN_NOTIFICATION_EMAIL,
   sendEmailViaGmailApi,
@@ -211,7 +211,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setIsSendingGmail(true);
     setEmailStatusMsg(null);
     try {
-      let token = await getAccessToken();
+      let token = getCachedAccessTokenSync();
       let senderEmail = user?.email || '';
       if (!token) {
         const signInRes = await googleSignIn();
@@ -219,7 +219,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         senderEmail = signInRes?.user?.email || senderEmail;
       }
       if (!token) {
-        throw new Error('Chưa hoàn tất đăng nhập Google để cấp quyền gửi Gmail.');
+        setEmailStatusMsg({
+          type: 'error',
+          text: 'Cửa sổ đăng nhập Google đã đóng trước khi hoàn tất. Vui lòng bấm lại để cấp quyền gửi Gmail.'
+        });
+        return;
       }
 
       const sendRes = await sendEmailViaGmailApi(pendingEmailConfirm.emailParams);

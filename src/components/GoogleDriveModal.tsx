@@ -162,9 +162,13 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           type: 'success',
           text: `Đăng nhập thành công: ${res.user.displayName || res.user.email}`
         });
+      } else {
+        setStatusMessage({
+          type: 'info',
+          text: 'Cửa sổ đăng nhập Google đã đóng trước khi hoàn tất. Vui lòng bấm lại để kết nối.'
+        });
       }
     } catch (err: any) {
-      console.error(err);
       const isUnauthorized =
         err?.code === 'auth/unauthorized-domain' ||
         (typeof err?.message === 'string' && err.message.toLowerCase().includes('unauthorized-domain'));
@@ -178,6 +182,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           text: `Firebase Error (auth/unauthorized-domain): Tên miền "${currentDomain}" chưa được thêm vào mục Authorized Domains của dự án Firebase.`
         });
       } else {
+        console.warn('Google Drive sign-in notice:', err?.code || err?.message);
         setStatusMessage({
           type: 'error',
           text: err?.message || 'Đăng nhập Google thất bại. Vui lòng thử lại.'
@@ -203,9 +208,14 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
           type: 'success',
           text: `Cấp quyền thành công: ${res.user.displayName || res.user.email}`
         });
+      } else {
+        setStatusMessage({
+          type: 'info',
+          text: 'Đã đóng cửa sổ cấp quyền Google. Bấm lại khi bạn sẵn sàng.'
+        });
       }
     } catch (err: any) {
-      console.error(err);
+      console.warn('Google Drive reauth notice:', err?.code || err?.message);
       setStatusMessage({
         type: 'error',
         text: err?.message || 'Cấp quyền Google Drive & Docs thất bại'

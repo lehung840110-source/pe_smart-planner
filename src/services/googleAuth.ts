@@ -34,10 +34,9 @@ GOOGLE_WORKSPACE_SCOPES.forEach((scope) => {
   googleDriveProvider.addScope(scope);
 });
 
-// Force Google OAuth consent screen so user is prompted to grant Drive, Docs & Gmail permissions
+// Prompt consent with incremental scopes for client-side popup OAuth
 googleDriveProvider.setCustomParameters({
   prompt: 'consent',
-  access_type: 'offline',
   include_granted_scopes: 'true'
 });
 
@@ -69,9 +68,21 @@ export const initAuth = (
 };
 
 /**
- * Sign in with Google Popup and obtain access token for Drive, Docs, and Gmail
+ * Synchronous check for cached in-memory token so callers can invoke googleSignIn()
+ * directly inside the user click gesture without losing popup activation.
+ */
+export const getCachedAccessTokenSync = (): string | null => {
+  return cachedAccessToken;
+};
+
+/**
+ * Sign in with Google Popup and obtain access token for Drive, Docs, and Gmail.
+ * Returns null cleanly when the user closes or cancels the popup.
  */
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (isSigningIn) {
+    return null;
+  }
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, googleDriveProvider);
@@ -83,7 +94,28 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
-    console.error('Lỗi đăng nhập Google Workspace:', error);
+    const code = String(error?.code || '');
+    const msg = String(error?.message || '').toLowerCase();
+
+    // User closed the Google sign-in window or clicked twice — normal cancellation, not a fatal error
+    if (
+      code === 'auth/popup-closed-by-user' ||
+      code === 'auth/cancelled-popup-request' ||
+      msg.includes('popup-closed-by-user') ||
+      msg.includes('cancelled-popup-request')
+    ) {
+      return null;
+    }
+
+    if (code === 'auth/popup-blocked' || msg.includes('popup-blocked')) {
+      throw new Error(
+        'Trình duyệt đang chặn cửa sổ đăng nhập Google (popup). Vui lòng cho phép popup cho trang này rồi bấm thử lại.'
+      );
+    }
+
+    if (code !== 'auth/unauthorized-domain') {
+      console.warn('Thông báo đăng nhập Google Workspace:', code || error?.message || error);
+    }
     throw error;
   } finally {
     isSigningIn = false;
