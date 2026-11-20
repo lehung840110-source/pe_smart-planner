@@ -64,6 +64,21 @@ import {
 } from './utils/planVersionHistory';
 import { getGradePpctInfo } from './utils/academicCalendar';
 import { createBalancedGranularLessonRows } from './utils/planAutoMatcher';
+import { User as FirebaseGoogleUser } from 'firebase/auth';
+import { initAuth, googleSignIn, logoutGoogle, getAccessToken } from './services/googleAuth';
+import {
+  getSgkTreeOverrides,
+  saveSgkTreeLessonOverride,
+  SGK_TREE_OVERRIDES_EVENT
+} from './data/sgkCurriculumTree';
+import {
+  CloudSyncStatusInfo,
+  LocalSyncSnapshot,
+  performTwoWayCloudSync,
+  checkCloudHasNewerUpdate,
+  getCloudAutoSyncPref,
+  setCloudAutoSyncPref
+} from './services/cloudAutoSyncService';
 
 export default function App() {
   const { user: authUser, isLoading: authLoading, pullWorkspace, pushWorkspace } = useAuth();
@@ -589,6 +604,362 @@ export default function App() {
       }
     };
   }, [authUser?.id, planVersionStore, userCustomTemplates, schoolSettings, activeCustomTemplateId]);
+
+  // =========================================================================
+  // 2-WAY GOOGLE DRIVE CLOUD AUTO-SYNC (AI STUDIO <-> VERCEL <-> MOBILE)
+  // =========================================================================
+  const [cloudGoogleUser, setCloudGoogleUser] = useState<FirebaseGoogleUser | null>(null);
+  const [cloudAutoSyncEnabled, setCloudAutoSyncEnabled] = useState<boolean>(() => getCloudAutoSyncPref());
+  const [cloudSessionConsented, setCloudSessionConsented] = useState<boolean>(false);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<CloudSyncStatusInfo>({
+    phase: 'idle',
+    lastSyncedAt: null,
+    syncedImageCount: 0,
+    syncedPlanCount: 0,
+    lastSummary: '',
+    errorMessage: null,
+    unauthorizedDomain: null
+  });
+
+  const scenariosRef = useRef<ScenarioItem[]>(scenarios);
+  useEffect(() => {
+    scenariosRef.current = scenarios;
+  }, [scenarios]);
+
+  const lessonRowsRef = useRef<LessonRow[]>(lessonRows);
+  useEffect(() => {
+    lessonRowsRef.current = lessonRows;
+  }, [lessonRows]);
+
+  const activeMetaRef = useRef({ week, grade, lessonNum, topic, title, activeCustomTemplateId });
+  useEffect(() => {
+    activeMetaRef.current = { week, grade, lessonNum, topic, title, activeCustomTemplateId };
+  }, [week, grade, lessonNum, topic, title, activeCustomTemplateId]);
+
+  const isCloudSyncingRef = useRef<boolean>(false);
+  const lastCloudSyncedAtRef = useRef<number | null>(null);
+  const suppressNextAutoPushRef = useRef<boolean>(false);
+  const lastFocusCheckRef = useRef<number>(0);
+  const [sgkOverridesNonce, setSgkOverridesNonce] = useState<number>(0);
+
+  // Monitor Firebase Google Auth session (in-memory OAuth token only per Workspace guidelines)
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (gUser) => {
+        setCloudGoogleUser(gUser);
+      },
+      () => {
+        setCloudGoogleUser(null);
+        setCloudSessionConsented(false);
+        if (getCloudAutoSyncPref()) {
+          setCloudSyncStatus((prev) => ({
+            ...prev,
+            phase: 'needs_reconnect'
+          }));
+        }
+      }
+    );
+    return () => unsubscribe();
+  }, []);
+
+  // Track SGK curriculum tree custom game/lesson title edits so they auto-sync too
+  useEffect(() => {
+    const onTreeOverride = () => setSgkOverridesNonce((n) => n + 1);
+    window.addEventListener(SGK_TREE_OVERRIDES_EVENT, onTreeOverride);
+    return () => window.removeEventListener(SGK_TREE_OVERRIDES_EVENT, onTreeOverride);
+  }, []);
+
+  const buildLocalCloudSyncSnapshot = (): LocalSyncSnapshot => ({
+    images: imagesRef.current,
+    scenarios: scenariosRef.current,
+    schoolSettings: schoolSettingsRef.current,
+    allMasterPlans: allMasterPlansRef.current,
+    planVersionStore: planVersionStoreRef.current,
+    userCustomTemplates: userCustomTemplatesRef.current,
+    activeCustomTemplateId: activeMetaRef.current.activeCustomTemplateId,
+    sgkTreeOverrides: getSgkTreeOverrides(),
+    activeState: {
+      week: activeMetaRef.current.week,
+      grade: activeMetaRef.current.grade,
+      lessonNum: activeMetaRef.current.lessonNum,
+      topic: activeMetaRef.current.topic,
+      title: activeMetaRef.current.title,
+      lessonRows: lessonRowsRef.current
+    }
+  });
+
+  const applyCloudMergedSnapshot = async (merged: LocalSyncSnapshot) => {
+    suppressNextAutoPushRef.current = true;
+
+    imagesRef.current = merged.images;
+    setImages(merged.images);
+    await saveImagesDB(merged.images);
+
+    scenariosRef.current = merged.scenarios;
+    setScenarios(merged.scenarios);
+    await saveScenariosDB(merged.scenarios);
+
+    schoolSettingsRef.current = merged.schoolSettings;
+    setSchoolSettings(merged.schoolSettings);
+    await setAppStateDB('school_settings', merged.schoolSettings);
+
+    planVersionStoreRef.current = merged.planVersionStore;
+    setPlanVersionStore(merged.planVersionStore);
+    await savePlanVersionStoreDB(merged.planVersionStore);
+
+    userCustomTemplatesRef.current = merged.userCustomTemplates;
+    setUserCustomTemplates(merged.userCustomTemplates);
+    await setAppStateDB('user_custom_templates', merged.userCustomTemplates);
+
+    if (merged.activeCustomTemplateId) {
+      setActiveCustomTemplateId(merged.activeCustomTemplateId);
+      await setAppStateDB('active_custom_template_id', merged.activeCustomTemplateId);
+    }
+
+    allMasterPlansRef.current = merged.allMasterPlans;
+    setAllMasterPlans(merged.allMasterPlans);
+    await setAppStateDB('gdtc_all_master_plans', merged.allMasterPlans);
+
+    if (merged.sgkTreeOverrides && typeof merged.sgkTreeOverrides === 'object') {
+      Object.entries(merged.sgkTreeOverrides).forEach(([lessonId, ov]) => {
+        if (ov) saveSgkTreeLessonOverride(lessonId, ov);
+      });
+    }
+
+    const activeVer = getPreferredVersionForPlan(
+      merged.planVersionStore,
+      activeMetaRef.current.week,
+      activeMetaRef.current.grade,
+      activeMetaRef.current.lessonNum
+    );
+    if (activeVer?.snapshot) {
+      const snap = normalizeMasterPlan(activeVer.snapshot);
+      skipNextAutoDraftRef.current = true;
+      setCurrentMasterPlan(snap);
+      setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+      setTitle(snap.title);
+      setTopic(snap.topic);
+    }
+
+    setVersionRefreshNonce((n) => n + 1);
+  };
+
+  const runTwoWayCloudSync = async (opts?: {
+    silent?: boolean;
+    interactiveSignIn?: boolean;
+    enableAutoSyncAfter?: boolean;
+    forcePushImages?: boolean;
+    forcePushWorkspace?: boolean;
+  }): Promise<boolean> => {
+    if (isCloudSyncingRef.current) return false;
+    isCloudSyncingRef.current = true;
+
+    setCloudSyncStatus((prev) => ({
+      ...prev,
+      phase: 'syncing',
+      errorMessage: null,
+      unauthorizedDomain: null
+    }));
+
+    try {
+      let token = await getAccessToken();
+      if (!token) {
+        if (!opts?.interactiveSignIn) {
+          setCloudSyncStatus((prev) => ({
+            ...prev,
+            phase: 'needs_reconnect',
+            errorMessage: 'Vui lòng kết nối lại Google Drive để đồng bộ.'
+          }));
+          return false;
+        }
+        const signInRes = await googleSignIn();
+        if (!signInRes?.accessToken) {
+          throw new Error('Không lấy được quyền truy cập Google Drive.');
+        }
+        setCloudGoogleUser(signInRes.user);
+        token = signInRes.accessToken;
+      }
+
+      if (opts?.interactiveSignIn) {
+        setCloudSessionConsented(true);
+      }
+
+      if (opts?.enableAutoSyncAfter) {
+        setCloudAutoSyncEnabled(true);
+        setCloudAutoSyncPref(true);
+      }
+
+      const localSnapshot = buildLocalCloudSyncSnapshot();
+      const result = await performTwoWayCloudSync(localSnapshot, {
+        lastSyncedAt: lastCloudSyncedAtRef.current,
+        forcePushImages: opts?.forcePushImages,
+        forcePushWorkspace: opts?.forcePushWorkspace
+      });
+
+      if (result.didPullChanges) {
+        await applyCloudMergedSnapshot(result.merged);
+      }
+
+      lastCloudSyncedAtRef.current = result.syncedAt;
+      const totalPlans = Object.keys(result.merged.allMasterPlans || {}).length;
+      const summaryParts: string[] = [];
+      if (result.addedImagesFromCloud > 0) {
+        summaryParts.push(`+${result.addedImagesFromCloud} ảnh mới từ Drive`);
+      }
+      if (result.didPushImages) {
+        summaryParts.push(`đã đẩy ${result.merged.images.length} ảnh lên Drive`);
+      }
+      if (result.didPullChanges && result.addedImagesFromCloud === 0) {
+        summaryParts.push('đã cập nhật giáo án mới từ Drive');
+      }
+      if (result.didPushWorkspace && !result.didPushImages) {
+        summaryParts.push('đã cập nhật giáo án lên Drive');
+      }
+      const summaryText =
+        summaryParts.length > 0
+          ? summaryParts.join(' · ')
+          : `Đã đồng bộ khít (${result.merged.images.length} ảnh · ${totalPlans} giáo án)`;
+
+      setCloudSyncStatus({
+        phase: 'synced',
+        lastSyncedAt: result.syncedAt,
+        syncedImageCount: result.merged.images.length,
+        syncedPlanCount: totalPlans,
+        lastSummary: summaryText,
+        errorMessage: null,
+        unauthorizedDomain: null
+      });
+
+      if (!opts?.silent) {
+        showToast(`☁️ Đồng bộ 2 nền tảng thành công! ${summaryText} (Tổng ${result.merged.images.length} ảnh).`);
+      }
+      return true;
+    } catch (err: any) {
+      console.error('Cloud Auto-Sync error:', err);
+      const isUnauthorized =
+        err?.code === 'auth/unauthorized-domain' ||
+        (typeof err?.message === 'string' && err.message.toLowerCase().includes('unauthorized-domain'));
+      const currentDomain =
+        typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app';
+
+      const msg = isUnauthorized
+        ? `Tên miền "${currentDomain}" chưa được thêm vào Authorized Domains của Firebase.`
+        : err?.message || 'Đồng bộ Google Drive chưa thành công. Vui lòng thử lại.';
+
+      setCloudSyncStatus((prev) => ({
+        ...prev,
+        phase: 'error',
+        errorMessage: msg,
+        unauthorizedDomain: isUnauthorized ? currentDomain : null
+      }));
+
+      if (!opts?.silent) {
+        showToast(`⚠️ ${msg}`);
+      }
+      return false;
+    } finally {
+      isCloudSyncingRef.current = false;
+    }
+  };
+
+  const handleToggleCloudAutoSync = (nextEnabled: boolean) => {
+    setCloudAutoSyncEnabled(nextEnabled);
+    setCloudAutoSyncPref(nextEnabled);
+    if (!nextEnabled) {
+      showToast('Đã tạm dừng tự động đồng bộ nền Google Drive.');
+    } else {
+      showToast('☁️ Đã bật chế độ Tự động đồng bộ 2 nền tảng mỗi khi sửa ảnh hoặc giáo án!');
+    }
+  };
+
+  const handleDisconnectCloudSync = async () => {
+    try {
+      await logoutGoogle();
+    } catch {
+      // ignore sign-out error
+    }
+    setCloudGoogleUser(null);
+    setCloudSessionConsented(false);
+    setCloudAutoSyncEnabled(false);
+    setCloudAutoSyncPref(false);
+    setCloudSyncStatus({
+      phase: 'idle',
+      lastSyncedAt: null,
+      syncedImageCount: 0,
+      syncedPlanCount: 0,
+      lastSummary: '',
+      errorMessage: null,
+      unauthorizedDomain: null
+    });
+    showToast('Đã ngắt kết nối đồng bộ Google Drive.');
+  };
+
+  // Debounced automatic background push to Google Drive when Auto-Sync is active in this session
+  const cloudAutoPushTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isDbLoadedRef.current) return;
+    if (!cloudAutoSyncEnabled || !cloudSessionConsented || !cloudGoogleUser) return;
+
+    if (suppressNextAutoPushRef.current) {
+      suppressNextAutoPushRef.current = false;
+      return;
+    }
+
+    if (cloudAutoPushTimerRef.current !== null) {
+      window.clearTimeout(cloudAutoPushTimerRef.current);
+    }
+
+    cloudAutoPushTimerRef.current = window.setTimeout(() => {
+      cloudAutoPushTimerRef.current = null;
+      runTwoWayCloudSync({ silent: true, interactiveSignIn: false }).catch(() => {});
+    }, 4500);
+
+    return () => {
+      if (cloudAutoPushTimerRef.current !== null) {
+        window.clearTimeout(cloudAutoPushTimerRef.current);
+      }
+    };
+  }, [
+    cloudAutoSyncEnabled,
+    cloudSessionConsented,
+    cloudGoogleUser?.uid,
+    images,
+    allMasterPlans,
+    planVersionStore,
+    userCustomTemplates,
+    scenarios,
+    schoolSettings,
+    sgkOverridesNonce
+  ]);
+
+  // Automatic background pull when returning to tab (switching AI Studio <-> Vercel <-> Mobile)
+  useEffect(() => {
+    if (!cloudAutoSyncEnabled || !cloudSessionConsented || !cloudGoogleUser) return;
+
+    const handleVisibilityOrFocus = async () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastFocusCheckRef.current < 45000) return;
+      if (isCloudSyncingRef.current) return;
+      lastFocusCheckRef.current = now;
+
+      try {
+        const hasNewer = await checkCloudHasNewerUpdate(lastCloudSyncedAtRef.current);
+        if (hasNewer) {
+          await runTwoWayCloudSync({ silent: true, interactiveSignIn: false });
+        }
+      } catch {
+        // silent background check
+      }
+    };
+
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+    };
+  }, [cloudAutoSyncEnabled, cloudSessionConsented, cloudGoogleUser?.uid]);
 
   // Helper: sync a plan into allMasterPlans safely by both week-specific and generic key
   const upsertMasterPlanInDictionary = (plan: MasterPlanItem) => {
@@ -1667,6 +2038,9 @@ export default function App() {
             onOpenSelectCellModal={handleOpenSelectCellModal}
             onAnalyzeVision={handleAnalyzeVision}
             onOpenSmartClean={handleOpenSmartClean}
+            onOpenCloudSync={() => setIsBackupRestoreOpen(true)}
+            cloudSyncConnected={Boolean(cloudGoogleUser && cloudSessionConsented)}
+            cloudSyncing={cloudSyncStatus.phase === 'syncing'}
             showToast={showToast}
             isGuest={isGuest}
             onRequireAuth={(feature) => requireAuth(feature)}
@@ -2113,6 +2487,11 @@ export default function App() {
             setIsGoogleDriveOpen(false);
             setGoogleDriveBundle(null);
           }}
+          onOpenAutoSyncCenter={() => {
+            setIsGoogleDriveOpen(false);
+            setIsBackupRestoreOpen(true);
+          }}
+          totalLibraryImages={images.length}
           currentPlanData={{
             week: googleDriveBundle?.week ?? week,
             title: googleDriveBundle?.title ?? title,
@@ -2232,6 +2611,13 @@ export default function App() {
           activeLessonNum={lessonNum}
           activeTopic={topic}
           activeTitle={title}
+          cloudGoogleUser={cloudGoogleUser}
+          cloudAutoSyncEnabled={cloudAutoSyncEnabled}
+          cloudSessionConsented={cloudSessionConsented}
+          cloudSyncStatus={cloudSyncStatus}
+          onRunCloudSync={(options) => runTwoWayCloudSync(options)}
+          onToggleCloudAutoSync={handleToggleCloudAutoSync}
+          onDisconnectCloudSync={handleDisconnectCloudSync}
           onRestoreSuccess={(data) => {
             if (data.images) setImages(data.images);
             if (data.scenarios) setScenarios(data.scenarios);

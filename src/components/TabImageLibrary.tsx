@@ -29,7 +29,9 @@ import {
   Compass,
   Lock,
   Check,
-  RotateCcw
+  RotateCcw,
+  Cloud,
+  RefreshCw
 } from 'lucide-react';
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
@@ -61,6 +63,9 @@ interface TabImageLibraryProps {
   onOpenSelectCellModal: (img: SgkImageItem) => void;
   onAnalyzeVision?: (img: SgkImageItem) => void;
   onOpenSmartClean?: (img: SgkImageItem) => void;
+  onOpenCloudSync?: () => void;
+  cloudSyncConnected?: boolean;
+  cloudSyncing?: boolean;
   isGuest?: boolean;
   onRequireAuth?: (feature: string) => void;
   showToast: (msg: string) => void;
@@ -72,6 +77,9 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   onOpenSelectCellModal,
   onAnalyzeVision,
   onOpenSmartClean,
+  onOpenCloudSync,
+  cloudSyncConnected = false,
+  cloudSyncing = false,
   isGuest = false,
   onRequireAuth,
   showToast,
@@ -894,6 +902,32 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
               <Download className="w-4 h-4" /> Tải ZIP
               {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
+
+            {onOpenCloudSync && (
+              <button
+                type="button"
+                onClick={onOpenCloudSync}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs ${
+                  cloudSyncConnected
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    : 'bg-sky-600 hover:bg-sky-700 text-white'
+                }`}
+                title="Đồng bộ tự động toàn bộ thư viện ảnh & giáo án giữa AI Studio và Vercel qua Google Drive"
+              >
+                {cloudSyncing ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Cloud className="w-4 h-4" />
+                )}
+                <span>
+                  {cloudSyncing
+                    ? 'Đang đồng bộ...'
+                    : cloudSyncConnected
+                    ? 'Đồng bộ Drive ✓'
+                    : 'Đồng bộ Drive'}
+                </span>
+              </button>
+            )}
 
             <button
               onClick={handleExportJson}

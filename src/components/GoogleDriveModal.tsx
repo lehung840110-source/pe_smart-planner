@@ -42,6 +42,8 @@ import {
 interface GoogleDriveModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenAutoSyncCenter?: () => void;
+  totalLibraryImages?: number;
   // Optional current plan data payload for quick backup & Google Docs export
   currentPlanData?: {
     week: number;
@@ -56,6 +58,8 @@ interface GoogleDriveModalProps {
 export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
   isOpen,
   onClose,
+  onOpenAutoSyncCenter,
+  totalLibraryImages = 0,
   currentPlanData,
   onImportFileContent
 }) => {
@@ -688,6 +692,27 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
                       <span>{isLoggingIn ? 'Đang kết nối lại...' : 'Cấp lại quyền Google Workspace'}</span>
                     </button>
                   </div>
+                </div>
+              )}
+
+              {/* Shortcut to 2-Platform Auto-Sync (AI Studio <-> Vercel) */}
+              {onOpenAutoSyncCenter && (
+                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-indigo-950">
+                      Đồng Bộ Tự Động 2 Nền Tảng (AI Studio ↔ Vercel ↔ Điện thoại)
+                    </p>
+                    <p className="text-[11px] text-indigo-800 mt-0.5">
+                      Hợp nhất tự động toàn bộ {totalLibraryImages} ảnh thư viện & giáo án 5 khối qua Google Drive.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenAutoSyncCenter}
+                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg shadow-2xs transition shrink-0"
+                  >
+                    Mở Đồng Bộ Tự Động
+                  </button>
                 </div>
               )}
 

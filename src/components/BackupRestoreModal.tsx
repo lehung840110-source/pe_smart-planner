@@ -12,10 +12,23 @@ import {
   Clock,
   ShieldCheck,
   FileJson,
-  Sparkles
+  Sparkles,
+  Cloud,
+  RefreshCw,
+  LogOut,
+  Copy,
+  Check,
+  ExternalLink
 } from 'lucide-react';
+import { User as FirebaseGoogleUser } from 'firebase/auth';
+import firebaseConfig from '../../firebase-applet-config.json';
 import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow } from '../types/gdtc';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
+import {
+  CloudSyncStatusInfo,
+  CLOUD_SYNC_IMAGES_FILENAME,
+  CLOUD_SYNC_WORKSPACE_FILENAME
+} from '../services/cloudAutoSyncService';
 import {
   getAllImagesDB,
   saveImagesDB,
@@ -40,6 +53,19 @@ interface BackupRestoreModalProps {
   activeLessonNum: number;
   activeTopic: string;
   activeTitle: string;
+  cloudGoogleUser?: FirebaseGoogleUser | null;
+  cloudAutoSyncEnabled?: boolean;
+  cloudSessionConsented?: boolean;
+  cloudSyncStatus?: CloudSyncStatusInfo;
+  onRunCloudSync?: (options?: {
+    silent?: boolean;
+    interactiveSignIn?: boolean;
+    enableAutoSyncAfter?: boolean;
+    forcePushImages?: boolean;
+    forcePushWorkspace?: boolean;
+  }) => Promise<boolean>;
+  onToggleCloudAutoSync?: (enabled: boolean) => void;
+  onDisconnectCloudSync?: () => Promise<void>;
   onRestoreSuccess: (restoredData: {
     images?: SgkImageItem[];
     scenarios?: ScenarioItem[];
@@ -90,6 +116,13 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   activeLessonNum,
   activeTopic,
   activeTitle,
+  cloudGoogleUser = null,
+  cloudAutoSyncEnabled = false,
+  cloudSessionConsented = false,
+  cloudSyncStatus,
+  onRunCloudSync,
+  onToggleCloudAutoSync,
+  onDisconnectCloudSync,
   onRestoreSuccess,
   showToast
 }) => {
@@ -102,8 +135,31 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   const [isForceSaving, setIsForceSaving] = useState<boolean>(false);
   const [previewBackup, setPreviewBackup] = useState<BackupDataPackage | null>(null);
   const [lastSyncTime, setLastSyncTime] = useState<string>('Vừa xong');
+  const [showCloudSyncConfirm, setShowCloudSyncConfirm] = useState<boolean>(false);
+  const [copiedDomain, setCopiedDomain] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCopyDomain = () => {
+    const domain =
+      cloudSyncStatus?.unauthorizedDomain ||
+      (typeof window !== 'undefined' ? window.location.hostname : 'pe-smart-planner.vercel.app');
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(domain);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
+    }
+  };
+
+  const handleConfirmCloudSync = async () => {
+    setShowCloudSyncConfirm(false);
+    if (!onRunCloudSync) return;
+    await onRunCloudSync({
+      silent: false,
+      interactiveSignIn: true,
+      enableAutoSyncAfter: true
+    });
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -351,9 +407,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               <Database className="w-5 h-5 text-amber-300" />
             </div>
             <div>
-              <h3 className="font-bold text-base">Trung Tâm Sao Lưu & Khôi Phục Dữ Liệu</h3>
+              <h3 className="font-bold text-base">Đồng Bộ 2 Nền Tảng & Sao Lưu Dữ Liệu</h3>
               <p className="text-xs text-blue-100 mt-0.5">
-                Bảo vệ dữ liệu khi chạy trên Vercel · Xuất & Nhập file JSON độc lập 100%
+                Tự động đồng bộ AI Studio ↔ Vercel ↔ Điện thoại qua Google Drive · Kèm sao lưu JSON offline
               </p>
             </div>
           </div>
@@ -366,23 +422,241 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-4 bg-slate-50 text-xs">
+        <div className="p-5 space-y-4 bg-slate-50 text-xs max-h-[78vh] overflow-y-auto">
           
-          {/* Vercel Cloud Advisory Notice */}
-          <div className="p-3.5 bg-blue-50 rounded-xl border border-blue-200 flex items-start gap-3 text-blue-950">
-            <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-            <div className="space-y-1 text-[11px] leading-relaxed">
-              <p className="font-bold text-blue-900">
-                💡 Hướng dẫn cho Thầy khi ứng dụng triển khai trên Vercel:
-              </p>
-              <p>
-                1. <strong>Tự động lưu vào trình duyệt:</strong> Toàn bộ hình ảnh tải lên, ảnh phục chế, và giáo án Thầy sửa được tự động lưu vào <strong>IndexedDB</strong> của trình duyệt máy tính.
-              </p>
-              <p>
-                2. <strong>Để không bao giờ mất dữ liệu:</strong> Mỗi khi kết thúc buổi làm việc hoặc khi muốn chuyển giáo án sang máy tính trường / máy tính ở nhà, Thầy bấm nút <strong>"📥 Xuất File Sao Lưu (.json)"</strong> bên dưới để tải về một file nhỏ gọn. Khi mở ở máy mới hoặc Vercel, chỉ cần bấm <strong>"Khôi Phục"</strong> là 100% mọi thứ trở lại nguyên vẹn!
-              </p>
+          {/* Featured: 2-Platform Automatic Cloud Sync via Google Drive */}
+          {onRunCloudSync && (
+            <div className="bg-white rounded-xl border-2 border-indigo-200 shadow-xs overflow-hidden">
+              <div className="px-4 py-3 bg-gradient-to-r from-indigo-600 via-blue-600 to-sky-600 text-white flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 bg-white/20 rounded-lg">
+                    <Cloud className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-xs sm:text-sm leading-tight">
+                      Tự Động Đồng Bộ AI Studio ↔ Vercel ↔ Điện Thoại (Google Drive)
+                    </h4>
+                    <p className="text-[11px] text-blue-100 mt-0.5">
+                      Hợp nhất thông minh toàn bộ {images.length} ảnh SGK & giáo án — không bao giờ ghi đè mất ảnh
+                    </p>
+                  </div>
+                </div>
+                {cloudGoogleUser && cloudSessionConsented && (
+                  <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-emerald-400/20 border border-emerald-200/50 text-emerald-50">
+                    {cloudSyncStatus?.phase === 'syncing'
+                      ? 'Đang đồng bộ...'
+                      : cloudAutoSyncEnabled
+                      ? 'Tự động đồng bộ: ĐANG BẬT'
+                      : 'Đã kết nối Drive'}
+                  </span>
+                )}
+              </div>
+
+              <div className="p-4 space-y-3">
+                {!cloudGoogleUser || !cloudSessionConsented ? (
+                  <div className="space-y-3">
+                    <p className="text-[11.5px] text-slate-600 leading-relaxed">
+                      Kết nối <strong>cùng 1 tài khoản Google</strong> trên cả AI Studio và Vercel để tự động đồng bộ 2 chiều toàn bộ kho ảnh ({images.length} ảnh), giáo án 5 khối, kịch bản và tên trò chơi đã chỉnh sửa qua thư mục <strong>SmartPlan GDTC Pro</strong> trên Google Drive của bạn.
+                    </p>
+
+                    {!showCloudSyncConfirm ? (
+                      <button
+                        type="button"
+                        disabled={cloudSyncStatus?.phase === 'syncing'}
+                        onClick={() => setShowCloudSyncConfirm(true)}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs shadow-xs transition active:scale-98 disabled:opacity-50"
+                      >
+                        {cloudSyncStatus?.phase === 'syncing' ? (
+                          <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
+                        ) : (
+                          <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
+                            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                          </svg>
+                        )}
+                        <span>
+                          {cloudAutoSyncEnabled
+                            ? 'Sign in with Google · Kết nối lại để đồng bộ tự động'
+                            : 'Sign in with Google · Bật Tự Động Đồng Bộ 2 Nền Tảng'}
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2.5">
+                        <p className="font-bold text-indigo-950 text-xs flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                          Xác nhận tạo / cập nhật tệp đồng bộ trên Google Drive
+                        </p>
+                        <p className="text-[11px] text-indigo-900 leading-relaxed">
+                          Hệ thống sẽ đăng nhập Google và tạo/cập nhật 2 tệp đồng bộ (
+                          <code className="bg-white/80 px-1 rounded">{CLOUD_SYNC_WORKSPACE_FILENAME}</code> và{' '}
+                          <code className="bg-white/80 px-1 rounded">{CLOUD_SYNC_IMAGES_FILENAME}</code>) trong thư mục{' '}
+                          <strong>SmartPlan GDTC Pro</strong> để hợp nhất {images.length} ảnh và{' '}
+                          {Object.keys(allMasterPlans).length} bài giáo án giữa các thiết bị của bạn.
+                        </p>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setShowCloudSyncConfirm(false)}
+                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold rounded-lg border border-slate-300 transition"
+                          >
+                            Hủy bỏ
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleConfirmCloudSync}
+                            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition"
+                          >
+                            <Cloud className="w-3.5 h-3.5" />
+                            <span>Xác nhận & Đồng bộ ngay</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 flex-wrap p-2.5 bg-emerald-50/70 border border-emerald-200 rounded-xl">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {cloudGoogleUser.photoURL ? (
+                          <img
+                            src={cloudGoogleUser.photoURL}
+                            alt="Google Avatar"
+                            className="w-8 h-8 rounded-full ring-2 ring-emerald-300 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                            {(cloudGoogleUser.email || 'G').slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {cloudGoogleUser.displayName || 'Tài khoản Google Drive'}
+                          </p>
+                          <p className="text-[11px] text-slate-600 truncate">{cloudGoogleUser.email}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          disabled={cloudSyncStatus?.phase === 'syncing'}
+                          onClick={() =>
+                            onRunCloudSync({
+                              silent: false,
+                              interactiveSignIn: true,
+                              enableAutoSyncAfter: cloudAutoSyncEnabled
+                            })
+                          }
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-2xs transition"
+                        >
+                          <RefreshCw
+                            className={`w-3.5 h-3.5 ${
+                              cloudSyncStatus?.phase === 'syncing' ? 'animate-spin' : ''
+                            }`}
+                          />
+                          <span>
+                            {cloudSyncStatus?.phase === 'syncing' ? 'Đang đồng bộ...' : 'Đồng Bộ 2 Chiều Ngay'}
+                          </span>
+                        </button>
+                        {onDisconnectCloudSync && (
+                          <button
+                            type="button"
+                            onClick={onDisconnectCloudSync}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition"
+                            title="Ngắt kết nối đồng bộ Google Drive"
+                          >
+                            <LogOut className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {onToggleCloudAutoSync && (
+                      <label className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+                        <div>
+                          <span className="font-bold text-slate-800 block text-xs">
+                            Tự động đồng bộ nền mỗi khi thêm ảnh hoặc sửa giáo án
+                          </span>
+                          <span className="text-[10.5px] text-slate-500">
+                            Tự đẩy sau 4 giây khi chỉnh sửa và tự kéo bản mới nhất khi chuyển giữa AI Studio ↔ Vercel
+                          </span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={cloudAutoSyncEnabled}
+                          onChange={(e) => onToggleCloudAutoSync(e.target.checked)}
+                          className="w-4 h-4 accent-indigo-600 rounded shrink-0"
+                        />
+                      </label>
+                    )}
+
+                    {cloudSyncStatus?.lastSyncedAt && (
+                      <div className="text-[11px] text-emerald-800 bg-emerald-50/60 border border-emerald-200/80 rounded-lg px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+                        <span className="flex items-center gap-1.5 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          {cloudSyncStatus.lastSummary || 'Đã đồng bộ 2 chiều'}
+                        </span>
+                        <span className="text-[10.5px] text-slate-500">
+                          Lúc {new Date(cloudSyncStatus.lastSyncedAt).toLocaleTimeString('vi-VN')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Error & Unauthorized Domain 1-Click Fix Helper */}
+                {cloudSyncStatus?.errorMessage && (
+                  <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl space-y-2 text-[11px] text-amber-950">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="font-medium leading-relaxed">{cloudSyncStatus.errorMessage}</p>
+                    </div>
+                    {cloudSyncStatus.unauthorizedDomain && (
+                      <div className="space-y-2 pt-1">
+                        <p className="text-[11px] text-amber-900">
+                          Để đăng nhập Google Drive trên Vercel, chỉ cần thêm 1 lần tên miền dưới đây vào mục{' '}
+                          <strong>Authorized domains</strong> trong Firebase Console:
+                        </p>
+                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-amber-200">
+                          <code className="flex-1 text-xs text-slate-800 px-1 truncate">
+                            {cloudSyncStatus.unauthorizedDomain}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={handleCopyDomain}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-950 font-bold rounded-md text-[11px]"
+                          >
+                            {copiedDomain ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Đã chép</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Sao chép</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <a
+                          href={`https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-[11px] transition"
+                        >
+                          <span>Mở Firebase Authentication Settings</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Current Browser Storage Status */}
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 shadow-2xs">
