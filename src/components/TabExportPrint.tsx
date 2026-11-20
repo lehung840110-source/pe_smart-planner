@@ -3070,7 +3070,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       {/* 2. OFFICIAL A4 DOCUMENT CONTAINER */}
       <div
         id="print-document"
-        className="bg-white p-6 sm:p-10 md:p-12 rounded-2xl border border-slate-200 shadow-md max-w-4xl mx-auto text-slate-900 leading-relaxed"
+        className="bg-white p-3.5 sm:p-8 md:p-12 rounded-2xl border border-slate-200 shadow-md max-w-4xl mx-auto text-slate-900 leading-relaxed"
         style={{
           fontFamily: fontFamily,
           fontSize: fontSize
@@ -3178,11 +3178,45 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
             {/* BẢNG KẾ HOẠCH 7 CỘT CHUẨN MẪU BỘ GIÁO ÁN 3 KHỐI CHUNG */}
             <div className="space-y-2 mb-6">
-              <table className="w-full border-collapse border border-slate-600 text-xs mt-2">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-600 text-center">
-                    <th className="border border-slate-600 p-2 w-[11%]">Thứ</th>
-                    <th className="border border-slate-600 p-1 w-[6%]">Tiết</th>
+              {/* Mobile Readable Schedule Cards (< md, never printed) */}
+              {!isEditMode && (
+                <div className="md:hidden print:hidden space-y-2.5 mt-2">
+                  {filteredWeeklyScheduleRows.map((row) => (
+                    <div
+                      key={`m_sched_${row.id}`}
+                      className="p-3 rounded-xl border border-slate-200 bg-slate-50/60 space-y-1.5 text-[12.5px]"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900">
+                          {row.dayOfWeek} · Tiết {row.period} · Lớp {row.className}
+                        </span>
+                        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md tabular-nums">
+                          PPCT {row.ppct}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-slate-900 leading-snug">{row.lessonTitle}</p>
+                      {row.integrationNotes && (
+                        <p className="text-[11.5px] text-slate-700 leading-snug">
+                          <span className="font-semibold text-slate-600">Tích hợp/ĐC:</span> {row.integrationNotes}
+                        </p>
+                      )}
+                      {row.equipment && (
+                        <p className="text-[11.5px] text-slate-600">
+                          <span className="font-semibold">ĐDDH:</span> {row.equipment}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Desktop, Edit Mode, & A4 Print 7-Column Table */}
+              <div className={`${!isEditMode ? 'hidden md:block print:block' : 'block'} overflow-x-auto print:overflow-visible`}>
+                <table className="w-full min-w-[720px] print:min-w-0 border-collapse border border-slate-600 text-xs mt-2">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-600 text-center">
+                      <th className="border border-slate-600 p-2 w-[11%]">Thứ</th>
+                      <th className="border border-slate-600 p-1 w-[6%]">Tiết</th>
                     <th className="border border-slate-600 p-1.5 w-[7%]">Lớp</th>
                     <th className="border border-slate-600 p-2 w-[31%]">Bài học</th>
                     <th className="border border-slate-600 p-1 w-[6%]">PPCT</th>
@@ -3294,6 +3328,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )}
@@ -3854,7 +3889,113 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   </div>
                 </div>
 
-                <table className="w-full border-collapse border border-slate-400 text-xs mt-2">
+                {/* Mobile Readable Lesson Cards (< md when viewing, never printed) */}
+                {!isEditMode && (
+                  <div className="md:hidden print:hidden space-y-3 mt-2">
+                    {plan.rows.map((row, rowIdx) => {
+                      const mContentImgs: DiagramAttachment[] = (
+                        row.contentImages && row.contentImages.length > 0
+                          ? row.contentImages
+                          : row.contentImgUrl
+                          ? [{ id: 'mc_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
+
+                      const mGvImgs: DiagramAttachment[] = (
+                        row.gvImages && row.gvImages.length > 0
+                          ? row.gvImages
+                          : row.gvImgUrl
+                          ? [{ id: 'mgv_init', url: row.gvImgUrl, title: row.gvImgTitle || 'Hình minh họa GV' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
+
+                      const mHsImgs: DiagramAttachment[] = (
+                        row.hsImages && row.hsImages.length > 0
+                          ? row.hsImages
+                          : row.hsImgUrl
+                          ? [{ id: 'mhs_init', url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ đội hình' }]
+                          : []
+                      ).filter((att) => Boolean(att?.url && att.url.trim()));
+
+                      return (
+                        <div
+                          key={`m_exp_${plan.id}_${rowIdx}`}
+                          className="p-3 rounded-xl border border-slate-200 bg-white space-y-2.5 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-100">
+                            <span className="text-xs font-bold text-blue-800">
+                              Hoạt động {rowIdx + 1}
+                            </span>
+                            {row.lvd && (
+                              <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
+                                LVĐ: {row.lvd.replace(/\n/g, ' · ')}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="text-[11px] font-bold text-slate-500">Nội dung / Kỹ thuật</div>
+                            <div className="text-[13px] font-semibold text-slate-900 leading-relaxed">
+                              <RichTextWithImages text={row.content} imageHeight={110} showCaptions={true} isEditMode={false} />
+                            </div>
+                            {mContentImgs.length > 0 && (
+                              <div className={`grid ${mContentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1`}>
+                                {mContentImgs.map((img, iIdx) => (
+                                  <div key={img.id || iIdx} className="p-1.5 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                                    <img src={img.url} alt={img.title} className="max-h-40 w-auto mx-auto object-contain rounded" />
+                                    {img.title && <p className="text-[10.5px] text-slate-600 mt-1">{img.title}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
+                            <div className="text-[11px] font-bold text-emerald-800">Hoạt động của Giáo viên</div>
+                            <div className="text-[13px] text-slate-800 leading-relaxed">
+                              <RichTextWithImages text={row.gv} imageHeight={96} showCaptions={true} isEditMode={false} />
+                            </div>
+                            {mGvImgs.length > 0 && (
+                              <div className="grid grid-cols-1 gap-1.5 pt-1">
+                                {mGvImgs.map((img, iIdx) => (
+                                  <div key={img.id || iIdx} className="p-1.5 bg-white rounded-lg border border-slate-200 text-center">
+                                    <img src={img.url} alt={img.title} className="max-h-36 w-auto mx-auto object-contain rounded" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="p-2.5 rounded-lg bg-blue-50/40 border border-blue-200/70 space-y-1">
+                            <div className="text-[11px] font-bold text-indigo-800">Hoạt động của Học sinh &amp; Sơ đồ</div>
+                            <div className="text-[13px] text-slate-800 leading-relaxed">
+                              <RichTextWithImages text={row.hs} imageHeight={105} showCaptions={true} isEditMode={false} />
+                            </div>
+                            {mHsImgs.length > 0 && (
+                              <div className="grid grid-cols-1 gap-1.5 pt-1">
+                                {mHsImgs.map((img, iIdx) => (
+                                  <div key={img.id || iIdx} className="p-1.5 bg-white rounded-lg border border-slate-200 text-center">
+                                    <img src={img.url} alt={img.title} className="max-h-40 w-auto mx-auto object-contain rounded" />
+                                    {img.title && <p className="text-[10.5px] text-slate-600 mt-1">{img.title}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Desktop, Edit Mode, & A4 Print 4-Column Table */}
+                <div className={`${!isEditMode ? 'hidden md:block print:block' : 'block'} overflow-x-auto print:overflow-visible`}>
+                {isEditMode && (
+                  <p className="md:hidden text-[11px] text-blue-700 bg-blue-50 border border-blue-200 rounded-lg px-2.5 py-1.5 mb-1.5 no-print">
+                    Vuốt ngang sang phải để chỉnh sửa đầy đủ 4 cột giáo án.
+                  </p>
+                )}
+                <table className="w-full min-w-[740px] print:min-w-0 border-collapse border border-slate-400 text-xs mt-2">
                   <thead>
                     <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400">
                       <th className="border border-slate-400 p-2 text-center w-[27%]">Nội Dung / Kỹ Thuật Động Tác</th>
@@ -4562,6 +4703,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {/* IV. ĐIỀU CHỈNH SAU BÀI DẠY */}
@@ -5008,8 +5150,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             </div>
 
             {/* Checklist Table */}
-            <div className="overflow-y-auto flex-1 border border-slate-200 rounded-xl">
-              <table className="w-full text-left text-xs border-collapse">
+            <div className="overflow-auto flex-1 border border-slate-200 rounded-xl">
+              <table className="w-full min-w-[680px] text-left text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b border-slate-200 font-bold">
                   <tr>
                     <th className="p-2.5 w-24">Khối / PPCT</th>

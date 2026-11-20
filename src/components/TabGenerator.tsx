@@ -650,25 +650,25 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Master Template Source Banner */}
-      <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-5 rounded-2xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+      <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white p-4 sm:p-5 rounded-2xl shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="bg-emerald-500 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs shrink-0">
               <ShieldCheck className="w-3.5 h-3.5" />
               Mẫu Mặc Định Đang Kích Hoạt
             </span>
             <span className="text-blue-200 text-xs">
-              Trường TH & THCS Nghĩa Hiệp (GV: Lê Quốc Hưng)
+              Trường TH &amp; THCS Nghĩa Hiệp (GV: Lê Quốc Hưng)
             </span>
           </div>
-          <h2 className="text-base font-bold mt-1 text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-amber-300" />
-            Sinh Giáo Án Tuần Kế Tiếp Từ Giáo Án Mẫu Nghĩa Hiệp
+          <h2 className="text-sm sm:text-base font-bold mt-1.5 text-white flex items-start sm:items-center gap-2 leading-snug">
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 shrink-0 mt-0.5 sm:mt-0" />
+            <span>Sinh Giáo Án Tuần Kế Tiếp Từ Giáo Án Mẫu Nghĩa Hiệp</span>
           </h2>
-          <p className="text-blue-100 text-xs mt-0.5 max-w-2xl">
-            Giữ nguyên 100% khung sườn quy chuẩn, mục tiêu năng lực số (3.1TC1a/1.1TC1a), ATGT, cấu trúc 4 cột và chữ ký BGH. Chỉ cập nhật tên bài và tự động điền ảnh động tác & sơ đồ đội hình.
+          <p className="text-blue-100 text-xs mt-1 max-w-2xl leading-relaxed">
+            Giữ nguyên 100% khung sườn quy chuẩn, mục tiêu năng lực số (3.1TC1a/1.1TC1a), ATGT, cấu trúc 4 cột và chữ ký BGH. Chỉ cập nhật tên bài và tự động điền ảnh động tác &amp; sơ đồ đội hình.
           </p>
         </div>
 
@@ -751,14 +751,14 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       )}
 
       {/* Week & Lesson Setup Card */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+      <div className="bg-white p-3.5 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
         <h3 className="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-blue-600" />
+          <Calendar className="w-4 h-4 text-blue-600 shrink-0" />
           Thông Tin Tiết Dạy Mới (Tuần Tiếp Theo)
         </h3>
 
         {/* Inputs */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {/* Tuần */}
           <div>
             <label className="block text-[11px] font-semibold text-slate-600 mb-1">
@@ -1251,8 +1251,345 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        {/* Mobile Stacked Activity Cards (< md) — Full-width & Easy to Read/Edit */}
+        <div className="md:hidden divide-y divide-slate-200 bg-slate-50/40">
+          {lessonRows.map((row, idx) => {
+            const contentImgs: DiagramAttachment[] = (
+              row.contentImages && row.contentImages.length > 0
+                ? row.contentImages
+                : row.contentImgUrl
+                ? [{ id: `mc_init_${idx}`, url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
+                : []
+            ).filter((im) => Boolean(im?.url && im.url.trim()));
+
+            const gvImgs: DiagramAttachment[] = (
+              row.gvImages && row.gvImages.length > 0
+                ? row.gvImages
+                : row.gvImgUrl
+                ? [{ id: `mgv_init_${idx}`, url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
+                : []
+            ).filter((im) => Boolean(im?.url && im.url.trim()));
+
+            const hsImgs: DiagramAttachment[] = (
+              row.hsImages && row.hsImages.length > 0
+                ? row.hsImages
+                : row.hsImgUrl
+                ? [{ id: `mhs_init_${idx}`, url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ đội hình' }]
+                : []
+            ).filter((im) => Boolean(im?.url && im.url.trim()));
+
+            return (
+              <article key={`m_row_${idx}`} className="p-3.5 bg-white space-y-3">
+                {/* Card Header: STT + LVĐ + Mobile Row Actions */}
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-blue-600 text-white text-xs font-bold shrink-0 tabular-nums">
+                      {idx + 1}
+                    </span>
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      Hoạt động {idx + 1}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!effectiveEditMode && row.lvd && (
+                      <span className="text-[11px] font-bold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md whitespace-nowrap tabular-nums">
+                        LVĐ: {row.lvd.replace(/\n/g, ' · ')}
+                      </span>
+                    )}
+                    {effectiveEditMode && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleAddRowBelow(idx)}
+                          className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          title="Thêm dòng bên dưới"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                        </button>
+                        {idx > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleMoveRow(idx, 'up')}
+                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-slate-100 text-slate-600"
+                            title="Chuyển lên"
+                          >
+                            <MoveUp className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {idx < lessonRows.length - 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleMoveRow(idx, 'down')}
+                            className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-slate-100 text-slate-600"
+                            title="Chuyển xuống"
+                          >
+                            <MoveDown className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRow(idx)}
+                          className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                          title="Xóa dòng"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Cột 1: Nội dung / Kỹ thuật / Ảnh */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-blue-700">
+                      1. Nội dung / Kỹ thuật &amp; Ảnh minh họa
+                    </span>
+                    {effectiveEditMode && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'image' })
+                          }
+                          className="px-2 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-3 h-3" /> Ảnh
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'formation' })
+                          }
+                          className="px-2 py-1 rounded-lg bg-indigo-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <Compass className="w-3 h-3" /> Sơ đồ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {effectiveEditMode ? (
+                    <div className="space-y-2">
+                      <textarea
+                        rows={4}
+                        value={sanitizeInlineImageTagsInText(row.content)}
+                        onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
+                        className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 font-semibold text-slate-900 focus:border-blue-500 focus:outline-none"
+                        placeholder="Nhập nội dung hoạt động..."
+                      />
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-600 mb-1">
+                          Lượng vận động (LVĐ):
+                        </label>
+                        <input
+                          type="text"
+                          value={row.lvd}
+                          onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
+                          className="w-full p-2 text-xs font-bold rounded-xl border border-slate-300 text-slate-800 focus:border-blue-500 focus:outline-none"
+                          placeholder="Ví dụ: 5 - 7'"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-[13px] font-semibold text-slate-900 leading-relaxed">
+                      <RichTextWithImages
+                        text={row.content}
+                        imageHeight={120}
+                        showCaptions={true}
+                        isEditMode={false}
+                      />
+                    </div>
+                  )}
+
+                  {contentImgs.length > 0 && (
+                    <div className={`grid ${contentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
+                      {contentImgs.map((cImg, cIdx) => (
+                        <div key={cImg.id || cIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
+                          <img
+                            src={cImg.url}
+                            alt={cImg.title}
+                            className="max-h-44 w-auto mx-auto object-contain rounded bg-white"
+                          />
+                          <p className="text-[11px] text-slate-600 font-medium mt-1.5 leading-snug">
+                            {cImg.title}
+                          </p>
+                          {effectiveEditMode && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLessonRows((prev) => {
+                                  const updated = [...prev];
+                                  const cur = updated[idx]?.contentImages || [];
+                                  const next = cur.filter((_, i) => i !== cIdx);
+                                  updated[idx] = {
+                                    ...updated[idx],
+                                    contentImages: next,
+                                    contentImgUrl: next[0]?.url,
+                                    contentImgTitle: next[0]?.title
+                                  };
+                                  return updated;
+                                });
+                              }}
+                              className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                              title="Xóa ảnh"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cột 3: Hoạt động Giáo viên */}
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-bold text-emerald-800">
+                      2. Hoạt động của Giáo viên
+                    </span>
+                    {effectiveEditMode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTargetColAttachment({ rowIndex: idx, col: 'gv', type: 'image' })
+                        }
+                        className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                      >
+                        <ImageIcon className="w-3 h-3" /> Chèn ảnh
+                      </button>
+                    )}
+                  </div>
+                  {effectiveEditMode ? (
+                    <textarea
+                      rows={5}
+                      value={sanitizeInlineImageTagsInText(row.gv)}
+                      onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
+                      className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-blue-500 focus:outline-none"
+                      placeholder="Nhập hoạt động của giáo viên..."
+                    />
+                  ) : (
+                    <div className="text-[13px] leading-relaxed text-slate-800">
+                      <RichTextWithImages
+                        text={row.gv}
+                        imageHeight={100}
+                        showCaptions={true}
+                        isEditMode={false}
+                      />
+                    </div>
+                  )}
+                  {gvImgs.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2">
+                      {gvImgs.map((gImg, gIdx) => (
+                        <div key={gImg.id || gIdx} className="p-2 bg-white rounded-xl border border-slate-200 relative text-center">
+                          <img src={gImg.url} alt={gImg.title} className="max-h-36 w-auto mx-auto object-contain rounded" />
+                          <p className="text-[11px] text-slate-600 mt-1">{gImg.title}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Cột 4: Hoạt động Học sinh & Sơ đồ */}
+                <div className="p-3 rounded-xl bg-blue-50/40 border border-blue-200/70 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-[11px] font-bold text-indigo-800">
+                      3. Hoạt động của Học sinh &amp; Sơ đồ đội hình
+                    </span>
+                    {effectiveEditMode && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetColAttachment({ rowIndex: idx, col: 'hs', type: 'formation' })
+                          }
+                          className="px-2 py-1 rounded-lg bg-blue-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <Users className="w-3 h-3" /> Kho sơ đồ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStudioInitialDiagram(
+                              hsImgs[0]
+                                ? {
+                                    id: `dh_row_${idx}`,
+                                    name: hsImgs[0].title || `Sơ đồ dòng ${idx + 1}`,
+                                    code: 'DH_CUSTOM',
+                                    phase: 'dong_loat',
+                                    description: row.hs,
+                                    svgDataUrl: hsImgs[0].url
+                                  }
+                                : null
+                            );
+                            setTargetRowForStudio(idx);
+                          }}
+                          className="px-2 py-1 rounded-lg bg-purple-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <Palette className="w-3 h-3" /> Studio
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {effectiveEditMode ? (
+                    <textarea
+                      rows={4}
+                      value={sanitizeInlineImageTagsInText(row.hs)}
+                      onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
+                      className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-blue-500 focus:outline-none"
+                      placeholder="Nhập hoạt động của học sinh..."
+                    />
+                  ) : (
+                    <div className="text-[13px] leading-relaxed text-slate-800">
+                      <RichTextWithImages
+                        text={row.hs}
+                        imageHeight={110}
+                        showCaptions={true}
+                        isEditMode={false}
+                      />
+                    </div>
+                  )}
+
+                  {hsImgs.length > 0 && (
+                    <div className="grid grid-cols-1 gap-2">
+                      {hsImgs.map((diag, diagIdx) => (
+                        <div key={diag.id || diagIdx} className="p-2 bg-white rounded-xl border border-slate-200 relative text-center">
+                          <img
+                            src={diag.url}
+                            alt={diag.title || 'Sơ đồ đội hình'}
+                            className="max-h-44 w-auto mx-auto object-contain rounded"
+                          />
+                          {diag.title && (
+                            <p className="text-[11px] text-slate-700 font-medium mt-1.5 leading-snug">
+                              {diag.title}
+                            </p>
+                          )}
+                          {effectiveEditMode && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFormationDiagram(idx, diagIdx)}
+                              className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                              title="Xóa sơ đồ"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        {/* Desktop & Tablet 4-Column Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-xs border-collapse">
             <thead className="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
               <tr>
                 <th className="p-3 w-8 text-center text-slate-400">STT</th>

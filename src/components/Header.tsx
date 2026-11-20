@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Activity,
   ScanLine,
@@ -9,7 +9,6 @@ import {
   Printer,
   RotateCcw,
   Settings,
-  Sparkles,
   School,
   FileUp,
   Palette,
@@ -20,7 +19,11 @@ import {
   LogIn,
   UserCheck,
   Info,
-  Lock
+  Lock,
+  Menu,
+  X,
+  LayoutGrid,
+  ChevronRight
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 import type { AuthUser } from '../contexts/AuthContext';
@@ -64,200 +67,515 @@ export const Header: React.FC<HeaderProps> = ({
   isGuest = false,
   onOpenAuth,
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   const navTabs = [
-    { id: 'tab-scan', label: '1. Quét & Bóc Tách SGK', icon: ScanLine, memberOnly: true },
-    { id: 'tab-img-library', label: `2. Thư Viện Ảnh (${imageCount})`, icon: Images, memberOnly: false },
-    { id: 'tab-extract', label: '3. Giáo Án Mẫu & Sửa Trực Tiếp', icon: FileSpreadsheet, memberOnly: true },
-    { id: 'tab-library', label: '4. Thư Viện Kịch Bản', icon: BookOpen, memberOnly: false },
-    { id: 'tab-generator', label: '5. Sinh Giáo Án Tuần Mới', icon: Wand2, memberOnly: false },
-    { id: 'tab-export', label: '6. Xem Trước & In', icon: Printer, memberOnly: false },
-    { id: 'tab-intro', label: '7. Giới Thiệu & Hướng Dẫn', icon: Info, memberOnly: false },
+    { id: 'tab-scan', label: '1. Quét & Bóc Tách SGK', shortLabel: 'Quét SGK', icon: ScanLine, memberOnly: true },
+    { id: 'tab-img-library', label: `2. Thư Viện Ảnh (${imageCount})`, shortLabel: 'Thư viện', icon: Images, memberOnly: false },
+    { id: 'tab-extract', label: '3. Giáo Án Mẫu & Sửa Trực Tiếp', shortLabel: 'GA Mẫu', icon: FileSpreadsheet, memberOnly: true },
+    { id: 'tab-library', label: '4. Thư Viện Kịch Bản', shortLabel: 'Kịch bản', icon: BookOpen, memberOnly: false },
+    { id: 'tab-generator', label: '5. Sinh Giáo Án Tuần Mới', shortLabel: 'Sinh GA', icon: Wand2, memberOnly: false },
+    { id: 'tab-export', label: '6. Xem Trước & In', shortLabel: 'Xem & In', icon: Printer, memberOnly: false },
+    { id: 'tab-intro', label: '7. Giới Thiệu & Hướng Dẫn', shortLabel: 'Hướng dẫn', icon: Info, memberOnly: false },
   ];
 
+  const mobileBottomTabs = [
+    { id: 'tab-generator', label: 'Sinh GA', icon: Wand2 },
+    { id: 'tab-export', label: 'Xem & In', icon: Printer },
+    { id: 'tab-img-library', label: 'Ảnh SGK', icon: Images },
+    { id: 'tab-library', label: 'Kịch bản', icon: BookOpen },
+  ];
+
+  const handleMobileSelectTab = (tabId: string) => {
+    setActiveTab(tabId);
+    setIsMobileMenuOpen(false);
+  };
+
+  const runToolAndClose = (fn?: () => void) => {
+    setIsMobileMenuOpen(false);
+    if (fn) fn();
+  };
+
+  const isDrawerTabActive =
+    activeTab === 'tab-scan' || activeTab === 'tab-extract' || activeTab === 'tab-intro';
+
   return (
-    <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs no-print">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center space-x-3.5">
-            <div className="bg-blue-600 text-white p-2.5 rounded-xl shadow-xs flex items-center justify-center">
-              <Activity className="w-5 h-5 text-white stroke-[2.5]" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-bold text-base text-slate-900 tracking-tight leading-tight">
-                  SmartPlan GDTC Pro
-                </h1>
-                <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                  GDPT 2018
-                </span>
+    <>
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs no-print">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+          {/* Compact Mobile Top Bar (< md) */}
+          <div className="flex md:hidden justify-between items-center h-14 gap-2">
+            {/* Brand Zone */}
+            <button
+              type="button"
+              onClick={() => setActiveTab('tab-generator')}
+              className="flex items-center gap-2 min-w-0 text-left"
+            >
+              <div className="bg-blue-600 text-white p-2 rounded-xl shadow-xs flex items-center justify-center shrink-0">
+                <Activity className="w-4 h-4 text-white stroke-[2.5]" />
               </div>
-              <p className="text-xs text-slate-500 hidden sm:block">
-                Bóc tách ảnh SGK · Thư viện kịch bản · Sinh kế hoạch bài dạy chuẩn
-              </p>
+              <div className="min-w-0">
+                <h1 className="font-bold text-sm text-slate-900 tracking-tight leading-tight whitespace-nowrap truncate">
+                  SmartPlan GDTC
+                </h1>
+                <p className="text-[10.5px] text-slate-500 whitespace-nowrap truncate">
+                  GDPT 2018 · Tuần {currentWeek}
+                </p>
+              </div>
+            </button>
+
+            {/* Right 3 Thumb-Friendly Controls */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {onSelectCurrentWeek && (
+                <button
+                  type="button"
+                  onClick={onSelectCurrentWeek}
+                  className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-emerald-600 active:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 whitespace-nowrap shrink-0 transition"
+                  title={`Xem Kế hoạch bài dạy Tuần ${currentWeek}`}
+                >
+                  <Calendar className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                  <span className="tabular-nums">T.{currentWeek}</span>
+                </button>
+              )}
+
+              {onOpenAuth && (
+                <button
+                  type="button"
+                  onClick={onOpenAuth}
+                  className={`min-h-[40px] min-w-[40px] px-2.5 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1 whitespace-nowrap shrink-0 transition ${
+                    authUser
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                      : 'bg-slate-900 text-white'
+                  }`}
+                  title={authUser ? `Tài khoản: ${authUser.email}` : 'Đăng nhập / Đăng ký'}
+                  aria-label={authUser ? 'Tài khoản' : 'Đăng nhập'}
+                >
+                  {authUser ? (
+                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <LogIn className="w-4 h-4 text-sky-300" />
+                  )}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="min-h-[40px] min-w-[40px] p-2 rounded-xl border border-slate-200 bg-slate-50 active:bg-slate-200 text-slate-700 flex items-center justify-center shrink-0 transition"
+                aria-label="Mở menu chức năng và công cụ"
+                title="Mở tất cả tab & công cụ"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
             </div>
           </div>
 
-          {/* Teacher and School badge + Quick tools */}
-          <div className="flex items-center space-x-2">
-            {onSelectCurrentWeek && (
+          {/* Desktop & Tablet Header (>= md) */}
+          <div className="hidden md:flex justify-between h-16 items-center gap-3">
+            {/* Brand Logo & Name */}
+            <div className="flex items-center space-x-3 shrink-0">
+              <div className="bg-blue-600 text-white p-2.5 rounded-xl shadow-xs flex items-center justify-center">
+                <Activity className="w-5 h-5 text-white stroke-[2.5]" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="font-bold text-base text-slate-900 tracking-tight leading-tight whitespace-nowrap">
+                    SmartPlan GDTC Pro
+                  </h1>
+                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                    GDPT 2018
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 hidden xl:block whitespace-nowrap">
+                  Bóc tách ảnh SGK · Thư viện kịch bản · Sinh kế hoạch bài dạy chuẩn
+                </p>
+              </div>
+            </div>
+
+            {/* Teacher and School badge + Quick tools */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+              {onSelectCurrentWeek && (
+                <button
+                  onClick={onSelectCurrentWeek}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-sm transition whitespace-nowrap shrink-0 tabular-nums"
+                  title={`Nhấn để mở Kế hoạch bài dạy Tuần ${currentWeek} hiện hành`}
+                >
+                  <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <span>TUẦN HIỆN HÀNH ({currentWeek})</span>
+                </button>
+              )}
+
+              {onOpenFormationLibrary && (
+                <button
+                  onClick={onOpenFormationLibrary}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title={isGuest ? 'Đăng nhập để mở & chèn từ Kho Sơ Đồ' : 'Mở Kho 32+ sơ đồ đội hình thể dục chuẩn và chèn vào giáo án'}
+                >
+                  <Users className="w-3.5 h-3.5 text-sky-200 shrink-0" />
+                  <span className="hidden lg:inline">Kho Sơ Đồ</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                </button>
+              )}
+
+              {onOpenFormationStudio && (
+                <button
+                  onClick={onOpenFormationStudio}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title={isGuest ? 'Đăng nhập để mở Studio Đội Hình' : 'Mở Studio thiết kế & sinh sơ đồ đội hình thể dục'}
+                >
+                  <Palette className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <span className="hidden lg:inline">Studio Đội Hình</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                </button>
+              )}
+
+              {onOpenPpctManager && (
+                <button
+                  onClick={onOpenPpctManager}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title="Mở bảng Phân phối chương trình (PPCT) cả 5 khối và rà soát tiến độ tuần"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                  <span className="hidden lg:inline">PPCT 5 Khối</span>
+                </button>
+              )}
+
+              {onOpenImport && (
+                <button
+                  onClick={onOpenImport}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title={isGuest ? 'Đăng nhập để Nạp & phân tích file giáo án mới' : 'Nạp & phân tích đa nhiệm giáo án mới từ file Word (.docx), PDF, HTML hoặc JSON'}
+                >
+                  <FileUp className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden xl:inline">Nạp File Giáo Án</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                </button>
+              )}
+
+              {onOpenGoogleDrive && (
+                <button
+                  onClick={onOpenGoogleDrive}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title={isGuest ? 'Đăng nhập để kết nối Google Drive & Google Docs' : 'Lưu & xem kế hoạch bài dạy trên Google Docs / Google Drive'}
+                >
+                  <HardDrive className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden xl:inline">Google Docs / Drive</span>
+                  {isGuest && <Lock className="w-3 h-3 text-amber-100 shrink-0" />}
+                </button>
+              )}
+
+              {onOpenBackupRestore && (
+                <button
+                  onClick={onOpenBackupRestore}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                  title="Sao lưu & Khôi phục toàn bộ ảnh và giáo án (Chuyển dữ liệu sang Vercel / Máy khác)"
+                >
+                  <Database className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                  <span className="hidden xl:inline">Sao Lưu / Khôi Phục</span>
+                </button>
+              )}
+
+              {onOpenAuth && (
+                <button
+                  onClick={onOpenAuth}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0 ${
+                    authUser
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white'
+                  }`}
+                  title={authUser ? `Đang đăng nhập: ${authUser.email}` : 'Đăng nhập hoặc Đăng ký tài khoản giáo viên'}
+                >
+                  {authUser ? (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="max-w-[110px] truncate">{authUser.fullName}</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                      <span>Đăng nhập / ĐK</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               <button
-                onClick={onSelectCurrentWeek}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-sm transition animate-pulse hover:animate-none"
-                title={`Nhấn để mở Kế hoạch bài dạy Tuần ${currentWeek} hiện hành`}
+                onClick={onOpenSettings}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-xs text-slate-700 font-medium whitespace-nowrap shrink-0"
+                title={isGuest ? 'Đăng nhập để chỉnh sửa thông tin trường & giáo viên' : 'Cài đặt thông tin trường và giáo viên'}
               >
-                <Calendar className="w-3.5 h-3.5 text-amber-300" />
-                <span>TUẦN HIỆN HÀNH ({currentWeek})</span>
+                <School className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="hidden lg:inline font-semibold text-slate-900">
+                  {schoolSettings.teacherName}
+                </span>
+                <span className="hidden xl:inline text-slate-400">·</span>
+                <span className="hidden xl:inline text-slate-500 truncate max-w-[140px]">
+                  {schoolSettings.schoolName}
+                </span>
+                {isGuest ? <Lock className="w-3 h-3 text-amber-500 ml-0.5 shrink-0" /> : <Settings className="w-3.5 h-3.5 text-slate-400 ml-0.5 shrink-0" />}
               </button>
-            )}
 
-            {onOpenFormationLibrary && (
               <button
-                onClick={onOpenFormationLibrary}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs shadow-2xs transition"
-                title={isGuest ? 'Đăng nhập để mở & chèn từ Kho Sơ Đồ' : 'Mở Kho 32+ sơ đồ đội hình thể dục chuẩn và chèn vào giáo án'}
+                onClick={onResetData}
+                className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition shrink-0"
+                title={isGuest ? 'Đăng nhập để khôi phục dữ liệu ban đầu' : 'Khôi phục dữ liệu ban đầu'}
               >
-                <Users className="w-3.5 h-3.5 text-sky-200" />
-                <span className="hidden sm:inline">Kho Sơ Đồ</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
+                <RotateCcw className="w-4 h-4" />
               </button>
-            )}
-
-            {onOpenFormationStudio && (
-              <button
-                onClick={onOpenFormationStudio}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-2xs transition"
-                title={isGuest ? 'Đăng nhập để mở Studio Đội Hình' : 'Mở Studio thiết kế & sinh sơ đồ đội hình thể dục'}
-              >
-                <Palette className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Studio Đội Hình</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
-              </button>
-            )}
-
-            {onOpenPpctManager && (
-              <button
-                onClick={onOpenPpctManager}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition"
-                title="Mở bảng Phân phối chương trình (PPCT) cả 5 khối và rà soát tiến độ tuần"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-emerald-200" />
-                <span className="hidden sm:inline">PPCT 5 Khối</span>
-              </button>
-            )}
-
-            {onOpenImport && (
-              <button
-                onClick={onOpenImport}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs transition"
-                title={isGuest ? 'Đăng nhập để Nạp & phân tích file giáo án mới' : 'Nạp & phân tích đa nhiệm giáo án mới từ file Word (.docx), PDF, HTML hoặc JSON'}
-              >
-                <FileUp className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Nạp File Giáo Án</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
-              </button>
-            )}
-
-            {onOpenGoogleDrive && (
-              <button
-                onClick={onOpenGoogleDrive}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-2xs transition"
-                title={isGuest ? 'Đăng nhập để kết nối Google Drive & Google Docs' : 'Lưu & xem kế hoạch bài dạy trên Google Docs / Google Drive'}
-              >
-                <HardDrive className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Google Docs / Drive</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-100" />}
-              </button>
-            )}
-
-            {onOpenBackupRestore && (
-              <button
-                onClick={onOpenBackupRestore}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs shadow-2xs transition"
-                title={isGuest ? 'Đăng nhập để Sao lưu & Khôi phục dữ liệu' : 'Sao lưu & Khôi phục dữ liệu (Bảo vệ dữ liệu khi chạy trên Vercel / Chuyển máy)'}
-              >
-                <Database className="w-3.5 h-3.5 text-amber-300" />
-                <span className="hidden sm:inline">Sao Lưu / Khôi Phục</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
-              </button>
-            )}
-
-            {onOpenAuth && (
-              <button
-                onClick={onOpenAuth}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition ${
-                  authUser
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                    : 'bg-slate-900 hover:bg-slate-800 text-white'
-                }`}
-                title={authUser ? `Đang đăng nhập: ${authUser.email}` : 'Đăng nhập hoặc Đăng ký tài khoản giáo viên'}
-              >
-                {authUser ? (
-                  <>
-                    <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="hidden md:inline max-w-[110px] truncate">{authUser.fullName}</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-3.5 h-3.5 text-sky-300" />
-                    <span className="hidden sm:inline">Đăng nhập / ĐK</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            <button
-              onClick={onOpenSettings}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-xs text-slate-700 font-medium"
-              title={isGuest ? 'Đăng nhập để chỉnh sửa thông tin trường & giáo viên' : 'Cài đặt thông tin trường và giáo viên'}
-            >
-              <School className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden md:inline font-semibold text-slate-900">
-                {schoolSettings.teacherName}
-              </span>
-              <span className="hidden lg:inline text-slate-400">·</span>
-              <span className="hidden lg:inline text-slate-500 truncate max-w-[150px]">
-                {schoolSettings.schoolName}
-              </span>
-              {isGuest ? <Lock className="w-3 h-3 text-amber-500 ml-0.5" /> : <Settings className="w-3.5 h-3.5 text-slate-400 ml-0.5" />}
-            </button>
-
-            <button
-              onClick={onResetData}
-              className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition"
-              title={isGuest ? 'Đăng nhập để khôi phục dữ liệu ban đầu' : 'Khôi phục dữ liệu ban đầu'}
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
+            </div>
           </div>
-        </div>
 
-        {/* Tab Navigation */}
-        <nav className="flex space-x-2 -mb-px overflow-x-auto scrollbar-none py-1">
-          {navTabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            const showLock = isGuest && tab.memberOnly;
+          {/* Desktop & Tablet Tab Navigation (>= md) */}
+          <nav className="hidden md:flex space-x-2 -mb-px overflow-x-auto scrollbar-none py-1">
+            {navTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const showLock = isGuest && tab.memberOnly;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`py-2.5 px-3.5 text-xs font-semibold rounded-lg flex items-center gap-2 whitespace-nowrap shrink-0 transition-colors ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-700 shadow-xs border border-blue-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                  {showLock && (
+                    <Lock className="w-3 h-3 text-amber-500 shrink-0" />
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+      </header>
+
+      {/* Mobile Fixed Bottom Navigation Bar (< md) */}
+      <nav
+        aria-label="Điều hướng chính trên điện thoại"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_20px_rgba(15,23,42,0.06)] pb-safe no-print"
+      >
+        <div className="grid grid-cols-5 items-center h-16 px-1">
+          {mobileBottomTabs.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
             return (
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`py-2.5 px-3.5 text-xs font-semibold rounded-lg flex items-center gap-2 whitespace-nowrap transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700 shadow-xs border border-blue-200'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                key={item.id}
+                type="button"
+                onClick={() => handleMobileSelectTab(item.id)}
+                className={`min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+                  isActive ? 'text-blue-600 font-bold' : 'text-slate-500 font-medium'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-                {showLock && (
-                  <Lock className="w-3 h-3 text-amber-500 shrink-0" />
-                )}
+                <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600 stroke-[2.4]' : 'text-slate-400'}`} />
+                <span className="text-[10.5px] leading-none whitespace-nowrap">{item.label}</span>
               </button>
             );
           })}
-        </nav>
-      </div>
-    </header>
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(true)}
+            className={`min-h-[48px] flex flex-col items-center justify-center gap-1 rounded-xl transition-colors ${
+              isMobileMenuOpen || isDrawerTabActive
+                ? 'text-blue-600 font-bold'
+                : 'text-slate-500 font-medium'
+            }`}
+          >
+            <LayoutGrid className={`w-5 h-5 ${isMobileMenuOpen || isDrawerTabActive ? 'text-blue-600 stroke-[2.4]' : 'text-slate-400'}`} />
+            <span className="text-[10.5px] leading-none whitespace-nowrap">Tất cả</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* Mobile Bottom Sheet Drawer: All 7 Tabs + All Quick Tools */}
+      {isMobileMenuOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-end no-print"
+          onClick={() => setIsMobileMenuOpen(false)}
+        >
+          <div
+            className="w-full max-h-[86vh] bg-white rounded-t-3xl shadow-2xl flex flex-col overflow-hidden pb-safe"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Grab handle */}
+            <div className="pt-3 pb-1 flex justify-center shrink-0">
+              <div className="w-10 h-1.5 rounded-full bg-slate-300" />
+            </div>
+
+            {/* Sheet Header */}
+            <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <div className="min-w-0">
+                <h2 className="text-sm font-bold text-slate-900">Danh Mục &amp; Công Cụ</h2>
+                <p className="text-[11px] text-slate-500 truncate">
+                  {authUser ? `${authUser.fullName} · ${schoolSettings.schoolName}` : schoolSettings.schoolName}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="min-h-[40px] min-w-[40px] flex items-center justify-center rounded-xl bg-slate-100 text-slate-600 active:bg-slate-200"
+                aria-label="Đóng menu"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="overflow-y-auto px-4 py-3 space-y-5">
+              {/* All 7 Tabs */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 mb-2">Các màn hình chính (7 tab)</p>
+                <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                  {navTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = activeTab === tab.id;
+                    const showLock = isGuest && tab.memberOnly;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => handleMobileSelectTab(tab.id)}
+                        className={`w-full min-h-[48px] px-3.5 py-2.5 flex items-center justify-between gap-3 text-left transition ${
+                          isActive ? 'bg-blue-50 text-blue-700 font-bold' : 'bg-white text-slate-800 active:bg-slate-50 font-medium'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                            isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <span className="text-xs truncate">{tab.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {showLock && <Lock className="w-3.5 h-3.5 text-amber-500" />}
+                          <ChevronRight className={`w-4 h-4 ${isActive ? 'text-blue-600' : 'text-slate-300'}`} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Quick Tools Grid */}
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 mb-2">Công cụ giảng dạy &amp; Tài khoản</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {onOpenPpctManager && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenPpctManager)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-emerald-100"
+                    >
+                      <BookOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span className="leading-tight">PPCT 5 Khối</span>
+                    </button>
+                  )}
+
+                  {onOpenFormationLibrary && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenFormationLibrary)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-blue-100"
+                    >
+                      <Users className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="leading-tight flex-1">Kho Sơ Đồ</span>
+                      {isGuest && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                    </button>
+                  )}
+
+                  {onOpenFormationStudio && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenFormationStudio)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-indigo-100"
+                    >
+                      <Palette className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span className="leading-tight flex-1">Studio Đội Hình</span>
+                      {isGuest && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                    </button>
+                  )}
+
+                  {onOpenImport && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenImport)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-sky-50 border border-sky-200 text-sky-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-sky-100"
+                    >
+                      <FileUp className="w-4 h-4 text-sky-600 shrink-0" />
+                      <span className="leading-tight flex-1">Nạp File Giáo Án</span>
+                      {isGuest && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                    </button>
+                  )}
+
+                  {onOpenGoogleDrive && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenGoogleDrive)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-amber-100"
+                    >
+                      <HardDrive className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="leading-tight flex-1">Google Docs / Drive</span>
+                      {isGuest && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                    </button>
+                  )}
+
+                  {onOpenBackupRestore && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenBackupRestore)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-teal-50 border border-teal-200 text-teal-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-teal-100"
+                    >
+                      <Database className="w-4 h-4 text-teal-600 shrink-0" />
+                      <span className="leading-tight flex-1">Sao Lưu / Khôi Phục</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => runToolAndClose(onOpenSettings)}
+                    className="min-h-[48px] px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-semibold text-xs flex items-center gap-2 text-left active:bg-slate-100"
+                  >
+                    <Settings className="w-4 h-4 text-slate-600 shrink-0" />
+                    <span className="leading-tight flex-1">Cài đặt Trường &amp; GV</span>
+                    {isGuest && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
+                  </button>
+
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenAuth)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-slate-900 text-white font-semibold text-xs flex items-center gap-2 text-left active:bg-slate-800"
+                    >
+                      {authUser ? (
+                        <UserCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      ) : (
+                        <LogIn className="w-4 h-4 text-sky-300 shrink-0" />
+                      )}
+                      <span className="leading-tight truncate">
+                        {authUser ? authUser.fullName : 'Đăng nhập / ĐK'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => runToolAndClose(onResetData)}
+                  className="mt-2.5 w-full min-h-[44px] px-3 py-2 rounded-xl border border-red-200 bg-red-50/70 text-red-700 font-semibold text-xs flex items-center justify-center gap-2 active:bg-red-100"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>Khôi phục dữ liệu ban đầu</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };

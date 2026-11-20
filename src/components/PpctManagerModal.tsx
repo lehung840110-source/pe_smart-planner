@@ -284,8 +284,8 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
               </div>
 
               {/* Detailed Audit Table */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left border-collapse">
+              <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full min-w-[680px] text-left border-collapse">
                   <thead className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase border-b border-slate-200">
                     <tr>
                       <th className="p-2.5 w-14 text-center">Khối</th>
@@ -492,8 +492,8 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
               </div>
 
               {/* Items Table */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left border-collapse">
+              <div className="border border-slate-200 rounded-xl overflow-x-auto shadow-2xs">
+                <table className="w-full min-w-[640px] text-left border-collapse">
                   <thead className="bg-slate-100 text-slate-700 font-bold text-[11px] uppercase border-b border-slate-200">
                     <tr>
                       <th className="p-2 w-16 text-center">Tuần</th>

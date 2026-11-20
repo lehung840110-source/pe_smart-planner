@@ -180,14 +180,39 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     reader.onload = (loadEvt) => {
       try {
         const text = loadEvt.target?.result as string;
-        const parsed: BackupDataPackage = JSON.parse(text);
+        const rawParsed: any = JSON.parse(text);
+
+        let parsed: BackupDataPackage;
+        if (Array.isArray(rawParsed)) {
+          parsed = {
+            version: 2,
+            generator: 'SmartPlan GDTC Pro - Gói Kho Ảnh JSON',
+            timestamp: Date.now(),
+            exportDate: new Date().toLocaleString('vi-VN'),
+            schoolSettings,
+            images: rawParsed,
+            scenarios,
+            allMasterPlans,
+            currentMasterPlan,
+            lessonRows,
+            activeState: {
+              week: activeWeek,
+              grade: activeGrade,
+              lessonNum: activeLessonNum,
+              topic: activeTopic,
+              title: activeTitle
+            }
+          };
+        } else {
+          parsed = rawParsed as BackupDataPackage;
+        }
 
         if (!parsed.images && !parsed.allMasterPlans && !parsed.schoolSettings) {
           throw new Error('Định dạng file sao lưu không hợp lệ.');
         }
 
         setPreviewBackup(parsed);
-        showToast('📄 Đã đọc tệp sao lưu. Vui lòng bấm "Xác Nhận Khôi Phục" để áp dụng.');
+        showToast(`📄 Đã đọc tệp sao lưu (${parsed.images?.length || 0} ảnh). Bấm "Xác Nhận Khôi Phục" để nạp ngay.`);
       } catch (err: any) {
         showToast('Lỗi đọc tệp sao lưu: ' + err?.message);
         setPreviewBackup(null);
@@ -204,8 +229,20 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     showToast('🔄 Đang nạp dữ liệu vào cơ sở dữ liệu IndexedDB của trình duyệt...');
 
     try {
+      let restoredImages: SgkImageItem[] | undefined = undefined;
       if (previewBackup.images && Array.isArray(previewBackup.images)) {
-        await saveImagesDB(previewBackup.images);
+        const mergedMap = new Map<string, SgkImageItem>();
+        // Keep current built-in defaults first, then overlay all backed-up images (e.g., all 193 images)
+        images.forEach((img) => {
+          if (img?.id) mergedMap.set(img.id, img);
+        });
+        previewBackup.images.forEach((img, i) => {
+          if (!img?.imgUrl) return;
+          const safeId = img.id || `restored_img_${Date.now()}_${i}`;
+          mergedMap.set(safeId, { ...img, id: safeId, selected: false });
+        });
+        restoredImages = Array.from(mergedMap.values());
+        await saveImagesDB(restoredImages);
       }
 
       if (previewBackup.scenarios && Array.isArray(previewBackup.scenarios)) {
@@ -242,7 +279,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           'gdtc_backup_metadata',
           JSON.stringify({
             timestamp: Date.now(),
-            imageCount: previewBackup.images?.length || 0,
+            imageCount: restoredImages?.length || previewBackup.images?.length || 0,
             plansCount: Object.keys(previewBackup.allMasterPlans || {}).length,
             teacher: previewBackup.schoolSettings?.teacherName
           })
@@ -252,7 +289,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       }
 
       onRestoreSuccess({
-        images: previewBackup.images,
+        images: restoredImages || previewBackup.images,
         scenarios: previewBackup.scenarios,
         schoolSettings: previewBackup.schoolSettings,
         allMasterPlans: previewBackup.allMasterPlans,
@@ -265,7 +302,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         activeTitle: previewBackup.activeState?.title
       });
 
-      showToast('🎉 Đã khôi phục hoàn tất 100% dữ liệu từ file sao lưu!');
+      showToast(`🎉 Đã khôi phục hoàn tất! Thư viện hiện có ${restoredImages?.length || images.length} ảnh.`);
       setPreviewBackup(null);
       onClose();
     } catch (err: any) {

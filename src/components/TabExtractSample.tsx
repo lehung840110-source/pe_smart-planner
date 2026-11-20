@@ -655,8 +655,174 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
+        {/* Mobile Stacked Activity Cards (< md) */}
+        <div className="md:hidden divide-y divide-slate-200 bg-slate-50/40">
+          {plan.rows.map((row, idx) => (
+            <article key={`ext_m_${idx}`} className="p-3.5 bg-white space-y-3">
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs font-bold tabular-nums">
+                    {idx + 1}
+                  </span>
+                  <span className="text-xs font-bold text-slate-900">Hoạt động {idx + 1}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {!isEditMode && row.lvd && (
+                    <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md tabular-nums">
+                      LVĐ: {row.lvd}
+                    </span>
+                  )}
+                  {isEditMode && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveRow(idx, 'up')}
+                        disabled={idx === 0}
+                        className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-slate-100 text-slate-600 disabled:opacity-30"
+                      >
+                        <MoveUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveRow(idx, 'down')}
+                        disabled={idx === currentMasterPlan.rows.length - 1}
+                        className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-slate-100 text-slate-600 disabled:opacity-30"
+                      >
+                        <MoveDown className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteRow(idx)}
+                        className="min-h-[34px] min-w-[34px] flex items-center justify-center rounded-lg bg-red-50 text-red-600 border border-red-200"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Nội dung */}
+              <div className="space-y-2">
+                <span className="text-[11px] font-bold text-blue-700 block">1. Nội dung / Kỹ thuật động tác</span>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <textarea
+                      rows={4}
+                      value={row.content}
+                      onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
+                      className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 font-medium focus:border-blue-500 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      value={row.lvd}
+                      onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
+                      placeholder="Lượng vận động (LVĐ)"
+                      className="w-full p-2 text-xs font-bold rounded-xl border border-slate-300 focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTargetRowForImage(idx)}
+                      className="w-full min-h-[38px] bg-emerald-50 text-emerald-800 border border-emerald-300 py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                      {row.contentImgUrl ? 'Đổi ảnh kỹ thuật Cột 1' : '+ Gắn ảnh kỹ thuật Cột 1'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-line text-[13px] leading-relaxed font-semibold text-slate-900">
+                    {row.content}
+                  </div>
+                )}
+
+                {row.contentImgUrl && (
+                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
+                    <img
+                      src={row.contentImgUrl}
+                      alt={row.contentImgTitle || 'Ảnh kỹ thuật động tác'}
+                      className="max-h-44 w-auto mx-auto object-contain rounded"
+                    />
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(idx, 'content')}
+                        className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Hoạt động GV */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                <span className="text-[11px] font-bold text-emerald-800 block">2. Hoạt động của Giáo viên</span>
+                {isEditMode ? (
+                  <textarea
+                    rows={5}
+                    value={row.gv}
+                    onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
+                    className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 bg-white focus:border-blue-500 focus:outline-none"
+                  />
+                ) : (
+                  <div className="whitespace-pre-line text-[13px] leading-relaxed text-slate-800">{row.gv}</div>
+                )}
+              </div>
+
+              {/* Hoạt động HS & Sơ đồ */}
+              <div className="p-3 rounded-xl bg-blue-50/40 border border-blue-200/70 space-y-2">
+                <span className="text-[11px] font-bold text-indigo-800 block">3. Hoạt động của Học sinh &amp; Sơ đồ đội hình</span>
+                {isEditMode ? (
+                  <div className="space-y-2">
+                    <textarea
+                      rows={4}
+                      value={row.hs}
+                      onChange={(e) => handleUpdateRow(idx, 'hs', e.target.value)}
+                      className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 bg-white focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setTargetRowForFormation(idx)}
+                      className="w-full min-h-[38px] bg-blue-50 text-blue-800 border border-blue-300 py-1.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5"
+                    >
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                      {row.hsImgUrl ? 'Đổi sơ đồ đội hình Cột 4' : '+ Gắn sơ đồ đội hình Cột 4'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="whitespace-pre-line text-[13px] leading-relaxed text-slate-800">{row.hs}</div>
+                )}
+
+                {row.hsImgUrl && (
+                  <div className="p-2 bg-white rounded-xl border border-slate-200 relative text-center">
+                    <img
+                      src={row.hsImgUrl}
+                      alt={row.hsImgTitle || 'Sơ đồ đội hình'}
+                      className="max-h-44 w-auto mx-auto object-contain rounded"
+                    />
+                    {row.hsImgTitle && (
+                      <p className="text-[11px] text-slate-600 font-medium mt-1">{row.hsImgTitle}</p>
+                    )}
+                    {isEditMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveImage(idx, 'hs')}
+                        className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {/* Desktop & Tablet 4-Column Table (>= md) */}
+        <div className="hidden md:block overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-xs border-collapse">
             <thead className="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
               <tr>
                 <th className="p-3 w-6 text-center text-slate-400">STT</th>

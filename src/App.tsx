@@ -421,10 +421,16 @@ export default function App() {
     schoolSettingsRef.current = schoolSettings;
   }, [schoolSettings]);
 
+  const imagesRef = useRef<SgkImageItem[]>(images);
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
   const buildWorkspaceSnapshot = () => ({
-    version: 1,
+    version: 2,
     updatedAt: Date.now(),
     schoolSettings: schoolSettingsRef.current,
+    images: imagesRef.current,
     planVersionStore: planVersionStoreRef.current,
     allMasterPlans: allMasterPlansRef.current,
     userCustomTemplates: userCustomTemplatesRef.current,
@@ -437,6 +443,25 @@ export default function App() {
   const mergeAndApplyServerWorkspace = async (serverWs: any) => {
     if (!serverWs || typeof serverWs !== 'object') return false;
     let changed = false;
+
+    if (Array.isArray(serverWs.images) && serverWs.images.length > 0) {
+      const mergedImgMap = new Map<string, SgkImageItem>();
+      imagesRef.current.forEach((img) => {
+        if (img?.id) mergedImgMap.set(img.id, img);
+      });
+      serverWs.images.forEach((img: SgkImageItem) => {
+        if (img?.id && img?.imgUrl) {
+          mergedImgMap.set(img.id, { ...img, selected: false });
+        }
+      });
+      const mergedImages = Array.from(mergedImgMap.values());
+      if (mergedImages.length !== imagesRef.current.length) {
+        imagesRef.current = mergedImages;
+        setImages(mergedImages);
+        await saveImagesDB(mergedImages);
+        changed = true;
+      }
+    }
 
     if (serverWs.schoolSettings && typeof serverWs.schoolSettings === 'object') {
       const mergedSettings = { ...schoolSettingsRef.current, ...serverWs.schoolSettings };
@@ -1504,9 +1529,9 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 antialiased font-sans">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 z-50 border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200">
+        <div className="fixed bottom-20 md:bottom-5 left-3 right-3 md:left-auto md:right-5 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 z-50 border border-slate-700 animate-in fade-in slide-in-from-bottom-3 duration-200 max-w-md md:max-w-sm">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs font-medium">{toastMessage}</span>
+          <span className="text-xs font-medium leading-snug">{toastMessage}</span>
         </div>
       )}
 
@@ -1544,9 +1569,7 @@ export default function App() {
           setGoogleDriveBundle(null);
           setIsGoogleDriveOpen(true);
         }}
-        onOpenBackupRestore={() =>
-          isGuest ? requireAuth('Sao lưu & Khôi phục toàn bộ dữ liệu') : setIsBackupRestoreOpen(true)
-        }
+        onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
         onOpenFormationStudio={() =>
           isGuest ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
         }
@@ -1570,31 +1593,31 @@ export default function App() {
       {/* Guest Basic Access Banner */}
       {isGuest && (
         <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-blue-50 border-b border-amber-200 no-print">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2.5 text-slate-700">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500 text-white font-bold text-[11px] shrink-0">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-start sm:items-center gap-2 text-slate-700">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 text-white font-bold text-[10.5px] shrink-0 mt-0.5 sm:mt-0">
                 <Lock className="w-3 h-3" />
-                Chế Độ Khách (Cơ Bản)
+                Chế Độ Khách
               </span>
-              <span className="leading-snug">
-                Bạn đang dùng thử các tính năng xem &amp; sinh mẫu cơ bản. <strong>Đăng ký / Đăng nhập</strong> tài khoản miễn phí để mở khóa 100% tính năng (Quét SGK, Sửa trực tiếp, Lưu phiên bản, Nạp file, Studio Sơ đồ &amp; Xuất Word/PDF).
+              <span className="leading-snug text-[11.5px] sm:text-xs">
+                Đăng nhập miễn phí để mở khóa 100% tính năng (Quét SGK, Sửa trực tiếp, Lưu phiên bản, Studio Sơ đồ &amp; Xuất Word/PDF).
               </span>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => openAuthModal('register', null)}
-                className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-2xs transition"
+                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
               >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Đăng Ký Miễn Phí</span>
+                <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                <span>Đăng Ký</span>
               </button>
               <button
                 type="button"
                 onClick={() => openAuthModal('login', null)}
-                className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center gap-1.5 transition"
+                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition whitespace-nowrap"
               >
-                <LogIn className="w-3.5 h-3.5 text-blue-600" />
+                <LogIn className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span>Đăng Nhập</span>
               </button>
             </div>
@@ -1603,7 +1626,7 @@ export default function App() {
       )}
 
       {/* Main Body View */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 md:pb-10 flex flex-col">
         {activeTab === 'tab-scan' && (
           isGuest ? (
             <LockedFeatureGate

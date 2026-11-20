@@ -393,13 +393,47 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   };
 
   const handleExportJson = () => {
-    if (isGuest && onRequireAuth) {
-      onRequireAuth('Xuất JSON dữ liệu Thư viện ảnh');
-      return;
-    }
     if (images.length === 0) return showToast('Thư viện chưa có dữ liệu để xuất JSON!');
     downloadJsonFile(images);
-    showToast('Đã xuất thành công file JSON thư viện!');
+    showToast(`Đã xuất file JSON chứa toàn bộ ${images.length} ảnh! Bạn có thể nạp file này sang Vercel hoặc máy khác.`);
+  };
+
+  const handleImportJsonLibrary = async (file: File) => {
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const incomingList: SgkImageItem[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.images)
+        ? parsed.images
+        : [];
+
+      const validIncoming = incomingList.filter(
+        (item) => item && typeof item === 'object' && typeof item.imgUrl === 'string' && item.imgUrl.trim().length > 0
+      );
+      if (validIncoming.length === 0) {
+        showToast('File JSON không chứa danh sách hình ảnh hợp lệ.');
+        return;
+      }
+
+      const byId = new Map<string, SgkImageItem>();
+      images.forEach((img) => {
+        if (img?.id) byId.set(img.id, img);
+      });
+      let addedCount = 0;
+      validIncoming.forEach((img, i) => {
+        const safeId = img.id || `imp_json_${Date.now()}_${i}`;
+        if (!byId.has(safeId)) addedCount += 1;
+        byId.set(safeId, { ...img, id: safeId, selected: false });
+      });
+
+      const merged = Array.from(byId.values());
+      setImages(merged);
+      await saveImagesDB(merged);
+      showToast(`✅ Đã nạp & gộp thành công! Thêm ${addedCount} ảnh mới (Tổng thư viện: ${merged.length} ảnh).`);
+    } catch (err: any) {
+      showToast('Không thể đọc file JSON thư viện ảnh: ' + (err?.message || 'Lỗi định dạng'));
+    }
   };
 
   // Tự động quét và phân loại toàn bộ thư viện thành 6 thư mục chuẩn SGK:
@@ -864,10 +898,30 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
             <button
               onClick={handleExportJson}
               className="bg-slate-800 hover:bg-slate-900 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs"
+              title="Xuất toàn bộ thư viện ảnh ra file JSON để chuyển sang Vercel hoặc máy khác"
             >
-              <FileJson className="w-4 h-4" /> Xuất JSON
-              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+              <FileJson className="w-4 h-4" /> Xuất JSON ({images.length})
             </button>
+
+            <label
+              className="bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 shadow-2xs"
+              title="Nạp file JSON kho ảnh hoặc file Sao lưu toàn bộ để đồng bộ đầy đủ ảnh sang Vercel"
+            >
+              <Upload className="w-4 h-4" />
+              <span>Nhập JSON Ảnh</span>
+              <input
+                type="file"
+                accept=".json,application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleImportJsonLibrary(file);
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </label>
           </div>
         </div>
 
