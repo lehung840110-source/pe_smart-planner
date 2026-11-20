@@ -37,6 +37,11 @@ import {
 } from './data/defaultData';
 import { MasterPlanItem, masterPlansTuan8, normalizeMasterPlan } from './data/masterTemplateTuan8';
 import { masterPlansTuan9 } from './data/masterTemplateTuan9';
+import {
+  buildMasterPlanIntegrationsFromAddress,
+  applyOfficialIntegrationsToLessonRows,
+  hasActivityIntegrationMarkers
+} from './data/integrationAddressesData';
 import { GradeLevel, SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate } from './types/gdtc';
 import {
   getAllImagesDB,
@@ -120,7 +125,15 @@ export default function App() {
   const [title, setTitle] = useState<string>(
     'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC BỤNG (Tiết 1)'
   );
-  const [lessonRows, setLessonRows] = useState<LessonRow[]>(initialLessonsData.k1_t15.rows);
+  const [lessonRows, setLessonRows] = useState<LessonRow[]>(() =>
+    applyOfficialIntegrationsToLessonRows(
+      initialLessonsData.k1_t15.rows,
+      1,
+      9,
+      17,
+      'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC BỤNG (Tiết 1)'
+    )
+  );
 
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -1214,10 +1227,18 @@ export default function App() {
     );
     if (existingVer?.snapshot) {
       const snap = normalizeMasterPlan(existingVer.snapshot);
+      if (!snap.integrations?.addressLabel || !snap.integrations?.addressContent) {
+        const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, snap.title);
+        snap.integrations = { ...officialInteg, ...(snap.integrations || {}), ...officialInteg };
+      }
+      const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
+        ? snap.rows
+        : applyOfficialIntegrationsToLessonRows(snap.rows, nextGrade, nextWeek, nextLessonNum, snap.title);
+      snap.rows = hydratedRows;
       setCurrentMasterPlan(snap);
       setTopic(snap.topic);
       setTitle(snap.title);
-      setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+      setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
       showToast(
         `📂 Đã mở phiên bản chỉnh sửa gần nhất (#${existingVer.versionNumber}) cho Tuần ${nextWeek} · Khối ${nextGrade} · Tiết ${nextLessonNum}!`
       );
@@ -1227,17 +1248,39 @@ export default function App() {
     const weekSpecific = allMasterPlans[`k${nextGrade}_t${nextLessonNum}_w${nextWeek}`];
     if (weekSpecific) {
       const snap = normalizeMasterPlan(weekSpecific);
+      if (!snap.integrations?.addressLabel || !snap.integrations?.addressContent) {
+        const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, snap.title);
+        snap.integrations = { ...officialInteg, ...(snap.integrations || {}), ...officialInteg };
+      }
+      const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
+        ? snap.rows
+        : applyOfficialIntegrationsToLessonRows(snap.rows, nextGrade, nextWeek, nextLessonNum, snap.title);
+      snap.rows = hydratedRows;
       setCurrentMasterPlan(snap);
       setTopic(snap.topic);
       setTitle(snap.title);
-      setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+      setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
       return;
     }
 
     const ppct = getGradePpctInfo(nextGrade as GradeLevel, nextWeek);
     const isSecondPeriod = ppct.periods[1] === nextLessonNum;
     const nextTitle = `${ppct.defaultTitle} (${isSecondPeriod ? 'Tiết 2' : 'Tiết 1'})`;
-    const freshRows = createBalancedGranularLessonRows(nextGrade, nextTitle, images);
+    const freshRows = createBalancedGranularLessonRows(nextGrade, nextTitle, images, undefined, undefined, nextWeek, nextLessonNum);
+    const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, nextTitle);
+    setCurrentMasterPlan((prev) =>
+      normalizeMasterPlan({
+        ...prev,
+        id: `plan_k${nextGrade}_t${nextLessonNum}_w${nextWeek}`,
+        grade: nextGrade as GradeLevel,
+        week: nextWeek,
+        lessonNum: nextLessonNum,
+        topic: ppct.defaultTopic,
+        title: nextTitle,
+        integrations: officialInteg,
+        rows: freshRows
+      })
+    );
     setTopic(ppct.defaultTopic);
     setTitle(nextTitle);
     setLessonRows(freshRows);
@@ -1270,6 +1313,13 @@ export default function App() {
     }
 
     const timer = setTimeout(() => {
+      const sameContext =
+        Number(currentMasterPlan.grade) === Number(grade) &&
+        Number(currentMasterPlan.week) === Number(week);
+      const resolvedIntegrations =
+        sameContext && currentMasterPlan.integrations?.addressLabel && currentMasterPlan.integrations?.addressContent
+          ? currentMasterPlan.integrations
+          : buildMasterPlanIntegrationsFromAddress(grade, week, lessonNum, title);
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_k${grade}_t${lessonNum}_w${week}`,
@@ -1278,6 +1328,7 @@ export default function App() {
         lessonNum,
         topic,
         title,
+        integrations: resolvedIntegrations,
         rows: JSON.parse(JSON.stringify(lessonRows))
       });
       setCurrentMasterPlan(syncedPlan);
@@ -1342,11 +1393,17 @@ export default function App() {
       const latestVer = getPreferredVersionForPlan(planVersionStoreRef.current, week, grade, lessonNum);
       if (latestVer?.snapshot) {
         const snap = normalizeMasterPlan(latestVer.snapshot);
+        const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
+          ? snap.rows
+          : applyOfficialIntegrationsToLessonRows(snap.rows, grade, week, lessonNum, snap.title);
+        snap.rows = hydratedRows;
         skipNextAutoDraftRef.current = true;
         setCurrentMasterPlan(snap);
-        setLessonRows(JSON.parse(JSON.stringify(snap.rows)));
+        setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
         setTitle(snap.title);
         setTopic(snap.topic);
+      } else if (!hasActivityIntegrationMarkers(lessonRows)) {
+        setLessonRows((prev) => applyOfficialIntegrationsToLessonRows(prev, grade, week, lessonNum, title));
       }
     }
 
@@ -1359,6 +1416,13 @@ export default function App() {
 
   const handleSwitchToExportFromGenerator = () => {
     const key = `k${grade}_t${lessonNum}`;
+    const sameContext =
+      Number(currentMasterPlan.grade) === Number(grade) &&
+      Number(currentMasterPlan.week) === Number(week);
+    const resolvedIntegrations =
+      sameContext && currentMasterPlan.integrations?.addressLabel && currentMasterPlan.integrations?.addressContent
+        ? currentMasterPlan.integrations
+        : buildMasterPlanIntegrationsFromAddress(grade, week, lessonNum, title);
     const syncedPlan: MasterPlanItem = normalizeMasterPlan({
       ...currentMasterPlan,
       id: `plan_${key}_w${week}`,
@@ -1367,6 +1431,7 @@ export default function App() {
       lessonNum,
       topic,
       title,
+      integrations: resolvedIntegrations,
       rows: JSON.parse(JSON.stringify(lessonRows))
     });
     setCurrentMasterPlan(syncedPlan);

@@ -5,6 +5,10 @@
  */
 
 import { GradeLevel, WeeklyMasterScheduleRow } from '../types/gdtc';
+import {
+  formatIntegrationForScheduleCell,
+  getIntegrationAddressForLesson
+} from '../data/integrationAddressesData';
 
 export interface WeekDateInfo {
   week: number;
@@ -132,51 +136,38 @@ export interface WeeklyIntegrationThemes {
   hsScriptAddon: string;  // Hành động tương ứng của HS
 }
 
-export function getWeeklyIntegrationThemes(week: number): WeeklyIntegrationThemes {
-  const themesMap: Record<number, Partial<WeeklyIntegrationThemes>> = {
-    8: {
-      qpanTheme: 'Rèn luyện tính kỷ luật, tư thế đứng nghiêm thẳng hàng, tác phong nhanh nhẹn của người lính.',
-      envTheme: 'Bảo vệ môi trường học đường: nhặt sạch lá cây, rác bẩn trên sân tập trước và sau giờ học.',
-      trafficTheme: 'Ý thức đi đúng phần đường, giữ khoảng cách an toàn khi di chuyển tập thể.',
-      lifeSkillsTheme: 'Kỹ năng lắng nghe hiệu lệnh, hỗ trợ giúp đỡ bạn trong hàng, xử lý khi mệt mỏi.',
-      digitalTheme: 'Mã 3.1TC1a: Nhận biết tư thế chính xác qua tranh ảnh động tác số hóa và video minh họa.',
-      inclusionTheme: 'Khích lệ học sinh hòa nhập tập các động tác tay nhẹ nhàng, được bạn trong tổ hỗ trợ.',
-      gvScriptAddon: 'Lồng ghép giáo dục QPAN và bảo vệ môi trường: Nhắc nhở HS đứng đúng cự ly hàng dọc, giữ gìn vệ sinh sân bãi sạch sẽ; quan sát hỗ trợ HS hòa nhập.',
-      hsScriptAddon: 'HS chú ý lắng nghe hiệu lệnh, chỉnh trang ngay ngắn, tự giác thu dọn dụng cụ/marker và nhặt rác sân tập sau buổi học.'
-    },
-    9: {
-      qpanTheme: 'Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống; giữ đội hình và tinh thần đoàn kết.',
-      envTheme: 'Tích hợp bảo vệ môi trường: Học sinh giữ vệ sinh sân tập, không xả rác; sử dụng dụng cụ tiết kiệm, đúng mục đích và thu dọn gọn gàng sau luyện tập.',
-      trafficTheme: 'Quan sát chướng ngại vật phía trước khi di chuyển, không xô đẩy bạn.',
-      lifeSkillsTheme: 'Kỹ năng trao đổi cảm nhận sau giờ học, tự tin biểu đạt cảm xúc và hỗ trợ đồng đội.',
-      digitalTheme: 'Mã 4.1TC1a / 6.1TC2a: HS sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người; nhận thức sự hỗ trợ của trí tuệ nhân tạo (AI) phân tích tư thế đúng/sai.',
-      inclusionTheme: 'Học sinh hòa nhập tham gia theo khả năng, được bạn và giáo viên khích lệ.',
-      gvScriptAddon: 'GV lồng ghép tích hợp năng lực số (4.1TC1a / 6.1TC2a), giáo dục QPAN và bảo vệ môi trường: Kiểm tra vệ sinh sân tập, hướng dẫn sử dụng và thu dọn dụng cụ đúng nơi quy định.',
-      hsScriptAddon: 'HS chấp hành khẩu lệnh nghiêm túc, tự giác kiểm tra vệ sinh sân tập, nhặt vật nguy hiểm và thu dọn dụng cụ gọn gàng sau giờ học.'
-    }
-  };
+export function getWeeklyIntegrationThemes(week: number, grade?: number): WeeklyIntegrationThemes {
+  const safeGrade = grade ? Math.min(5, Math.max(1, Math.round(grade))) : 1;
+  const addr = getIntegrationAddressForLesson(safeGrade, week);
+  const allGradeAddrs = [1, 2, 3, 4, 5].map((g) => getIntegrationAddressForLesson(g, week));
 
-  const current = themesMap[week] || {
-    qpanTheme: `Tuần ${week}: Rèn luyện tác phong nhanh nhẹn, giữ vững cự ly cự chuẩn và tinh thần kỷ luật QPAN.`,
-    envTheme: `Tuần ${week}: Giữ gìn sân tập xanh - sạch - đẹp, không xả rác bừa bãi, bảo quản dụng cụ.`,
-    trafficTheme: `Tuần ${week}: Chấp hành quy tắc giao thông khi đi học, đội mũ bảo hiểm đạt chuẩn.`,
-    lifeSkillsTheme: `Tuần ${week}: Tự giác luyện tập hàng ngày để nâng cao thể lực và sức đề kháng.`,
-    digitalTheme: 'Mã 4.1TC1a / 6.1TC2a: Ứng dụng học liệu số và AI quan sát phân tích tư thế vận động.',
-    inclusionTheme: 'Tạo môi trường thân thiện, khích lệ học sinh hòa nhập tham gia theo khả năng.',
-    gvScriptAddon: `Giáo viên tích hợp giáo dục phẩm chất trách nhiệm (Tuần ${week}), nhắc nhở an toàn tập luyện và vệ sinh môi trường.`,
-    hsScriptAddon: 'Học sinh tích cực phối hợp cùng tổ, tự giác bảo quản đồ dùng thể thao và thực hiện đúng nền nếp.'
-  };
+  const qpanMatch = allGradeAddrs.find((a) => a.domains.includes('GDQPAN'));
+  const envMatch = allGradeAddrs.find((a) => a.domains.includes('BVMT'));
+  const atgtMatch = allGradeAddrs.find((a) => a.domains.includes('ATGT'));
+  const nlsMatch = allGradeAddrs.find((a) => a.domains.includes('NLS'));
+  const knsMatch = allGradeAddrs.find((a) => a.domains.includes('KNS') || a.domains.includes('QuyenTreEm'));
 
   return {
     week,
-    qpanTheme: current.qpanTheme!,
-    envTheme: current.envTheme!,
-    trafficTheme: current.trafficTheme!,
-    lifeSkillsTheme: current.lifeSkillsTheme!,
-    digitalTheme: current.digitalTheme!,
-    inclusionTheme: current.inclusionTheme!,
-    gvScriptAddon: current.gvScriptAddon!,
-    hsScriptAddon: current.hsScriptAddon!
+    qpanTheme:
+      qpanMatch?.content ||
+      `Rèn tác phong nhanh nhẹn, ý thức tổ chức kỷ luật, chấp hành hiệu lệnh và phối hợp đồng đội (Tuần ${week}).`,
+    envTheme:
+      envMatch?.content ||
+      `Giữ gìn vệ sinh cá nhân và sân tập sạch sẽ, không xả rác, thu dọn dụng cụ ngăn nắp sau tiết học.`,
+    trafficTheme:
+      atgtMatch?.content ||
+      `Quan sát hướng di chuyển an toàn, giữ khoảng cách và chấp hành quy tắc an toàn giao thông.`,
+    lifeSkillsTheme:
+      knsMatch?.content ||
+      `Hợp tác theo tổ/nhóm, tôn trọng thể lực từng bạn, tuân thủ luật chơi và rèn luyện hằng ngày.`,
+    digitalTheme: nlsMatch
+      ? `${nlsMatch.headerLabel}: ${nlsMatch.content}`
+      : `${addr.headerLabel}: ${addr.content}`,
+    inclusionTheme:
+      'Tôn trọng năng lực cá nhân, khích lệ học sinh hòa nhập tham gia tập luyện phù hợp thể lực và cùng bạn chơi trò chơi.',
+    gvScriptAddon: `GV lồng ghép tích hợp ${addr.headerLabel}: ${addr.content}`,
+    hsScriptAddon: `HS thực hiện tốt nội dung tích hợp (${addr.headerLabel}), đảm bảo an toàn tập luyện và giữ gìn vệ sinh sân bãi.`
   };
 }
 
@@ -411,10 +402,6 @@ export const defaultWeek9Schedule: WeeklyMasterScheduleRow[] = [
  * Returns default schedule for any week (auto-generates based on week and PPCT rules if not week 9)
  */
 export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[] {
-  if (week === 9) {
-    return defaultWeek9Schedule;
-  }
-
   const p1 = (week - 1) * 2 + 1;
   const p2 = (week - 1) * 2 + 2;
   const g1Info = getGradePpctInfo(1, week);
@@ -422,7 +409,17 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
   const g3Info = getGradePpctInfo(3, week);
   const g4Info = getGradePpctInfo(4, week);
   const g5Info = getGradePpctInfo(5, week);
-  const themes = getWeeklyIntegrationThemes(week);
+
+  const g1Note1 = formatIntegrationForScheduleCell(1, week, p1, g1Info.defaultTitle);
+  const g1Note2 = formatIntegrationForScheduleCell(1, week, p2, g1Info.defaultTitle);
+  const g2Note1 = formatIntegrationForScheduleCell(2, week, p1, g2Info.defaultTitle);
+  const g2Note2 = formatIntegrationForScheduleCell(2, week, p2, g2Info.defaultTitle);
+  const g3Note1 = formatIntegrationForScheduleCell(3, week, p1, g3Info.defaultTitle);
+  const g3Note2 = formatIntegrationForScheduleCell(3, week, p2, g3Info.defaultTitle);
+  const g4Note1 = formatIntegrationForScheduleCell(4, week, p1, g4Info.defaultTitle);
+  const g4Note2 = formatIntegrationForScheduleCell(4, week, p2, g4Info.defaultTitle);
+  const g5Note1 = formatIntegrationForScheduleCell(5, week, p1, g5Info.defaultTitle);
+  const g5Note2 = formatIntegrationForScheduleCell(5, week, p2, g5Info.defaultTitle);
 
   return [
     {
@@ -433,7 +430,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g1Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -444,7 +441,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g1Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -455,7 +452,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g1Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -466,7 +463,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g1Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -477,7 +474,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g1Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -488,7 +485,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 5,
       lessonTitle: `${g5Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g5Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -499,7 +496,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 3,
       lessonTitle: `${g3Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.envTheme}`,
+      integrationNotes: g3Note1,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -510,7 +507,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 5,
       lessonTitle: `${g5Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g5Note1,
       equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
     },
     {
@@ -521,7 +518,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g1Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -532,7 +529,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 3,
       lessonTitle: `${g3Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g3Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -543,7 +540,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g1Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -554,7 +551,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g1Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -565,7 +562,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g1Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -576,7 +573,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 5,
       lessonTitle: `${g5Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.envTheme}`,
+      integrationNotes: g5Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -587,7 +584,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 5,
       lessonTitle: `${g5Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.envTheme}`,
+      integrationNotes: g5Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -598,7 +595,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 1,
       lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g1Note2,
       equipment: 'SGK, Tranh ảnh, dụng cụ TL'
     },
     {
@@ -609,7 +606,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 2,
       lessonTitle: `${g2Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g2Note1,
       equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
     },
     {
@@ -620,7 +617,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 2,
       lessonTitle: `${g2Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.qpanTheme}`,
+      integrationNotes: g2Note2,
       equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
     },
     {
@@ -631,7 +628,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 4,
       lessonTitle: `${g4Info.defaultTitle} (tiết 1)`,
       ppct: p1,
-      integrationNotes: `- ${themes.digitalTheme}`,
+      integrationNotes: g4Note1,
       equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
     },
     {
@@ -642,7 +639,7 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       grade: 4,
       lessonTitle: `${g4Info.defaultTitle} (tiết 2)`,
       ppct: p2,
-      integrationNotes: `- ${themes.envTheme}`,
+      integrationNotes: g4Note2,
       equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
     }
   ];

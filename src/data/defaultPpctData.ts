@@ -1,4 +1,5 @@
 import { GradeLevel, PpctItem } from '../types/gdtc';
+import { formatIntegrationForScheduleCell } from './integrationAddressesData';
 
 /**
  * Official Curriculum Distribution (Phân Phối Chương Trình - PPCT) GDPT 2018
@@ -6,14 +7,14 @@ import { GradeLevel, PpctItem } from '../types/gdtc';
  * 35 weeks x 2 periods/week = 70 periods per grade.
  */
 
-// Helper to generate periods for a range of weeks
+// Helper to generate periods for a range of weeks with official per-grade/week/lesson integration addresses
 function createPpctRange(
   grade: GradeLevel,
   startWeek: number,
   endWeek: number,
   topic: string,
   lessonTitleGen: (period: number, week: number, subPeriod: 1 | 2) => string,
-  integrationGen?: (week: number) => string,
+  _legacyIntegrationGen?: (week: number) => string,
   equipment: string = 'SGK, Tranh ảnh, còi, dụng cụ TL'
 ): PpctItem[] {
   const items: PpctItem[] = [];
@@ -21,9 +22,10 @@ function createPpctRange(
     const p1 = (w - 1) * 2 + 1;
     const p2 = (w - 1) * 2 + 2;
 
-    const integ = integrationGen
-      ? integrationGen(w)
-      : `- Năng lực số: Quan sát học liệu tranh ảnh động tác số hóa.\n- QPAN: Rèn tính kỷ luật, tư thế nghiêm túc, tác phong nhanh nhẹn.\n- Bảo vệ môi trường: Giữ vệ sinh sân tập sạch đẹp.`;
+    const title1 = lessonTitleGen(p1, w, 1);
+    const title2 = lessonTitleGen(p2, w, 2);
+    const integ1 = formatIntegrationForScheduleCell(grade, w, p1, title1);
+    const integ2 = formatIntegrationForScheduleCell(grade, w, p2, title2);
 
     items.push({
       id: `ppct_k${grade}_p${p1}`,
@@ -31,8 +33,8 @@ function createPpctRange(
       week: w,
       period: p1,
       topic,
-      lessonTitle: lessonTitleGen(p1, w, 1),
-      integrationNotes: integ,
+      lessonTitle: title1,
+      integrationNotes: integ1,
       equipment
     });
 
@@ -42,8 +44,8 @@ function createPpctRange(
       week: w,
       period: p2,
       topic,
-      lessonTitle: lessonTitleGen(p2, w, 2),
-      integrationNotes: integ,
+      lessonTitle: title2,
+      integrationNotes: integ2,
       equipment
     });
   }
@@ -345,19 +347,41 @@ export function getStoredPpctData(): PpctItem[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Sanitize any outdated items (e.g. remove erroneous "thăng bằng" from Grade 5 Bài 3)
+        // Sanitize outdated items and upgrade legacy generic integration notes to official PDF integration addresses
         let needsSave = false;
+        const legacyGenericMarkers = [
+          'Quan sát học liệu tranh ảnh động tác số hóa',
+          'Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn',
+          'Tích hợp bảo vệ môi trường: Giữ gìn vệ sinh sân bãi, sắp xếp dụng cụ thể thao ngăn nắp.',
+          'Tích hợp năng lực số (3.1TC1a): Quan sát hình ảnh/video trình tự nhịp động tác chân'
+        ];
         let sanitized: PpctItem[] = parsed.map((item: PpctItem) => {
+          let nextItem = item;
           if (item.grade === 5 && item.lessonTitle.toLowerCase().includes('thăng bằng')) {
             needsSave = true;
-            return {
-              ...item,
-              lessonTitle: item.lessonTitle
+            nextItem = {
+              ...nextItem,
+              lessonTitle: nextItem.lessonTitle
                 .replace(/động tác thăng bằng,\s*/gi, '')
                 .replace(/thăng bằng,\s*/gi, '')
             };
           }
-          return item;
+          const note = nextItem.integrationNotes || '';
+          const isLegacyGeneric =
+            !note.trim() || legacyGenericMarkers.some((m) => note.includes(m));
+          if (isLegacyGeneric) {
+            const officialNote = formatIntegrationForScheduleCell(
+              nextItem.grade,
+              nextItem.week,
+              nextItem.period,
+              nextItem.lessonTitle
+            );
+            if (officialNote !== note) {
+              needsSave = true;
+              nextItem = { ...nextItem, integrationNotes: officialNote };
+            }
+          }
+          return nextItem;
         });
 
         // Auto-backfill Grade 2 and Grade 4 PPCT for users upgrading from the 3-grade version

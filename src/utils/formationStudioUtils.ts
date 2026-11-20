@@ -108,7 +108,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <polygon points="0,-18 -16,14 16,14" fill="${el.color || '#dc2626'}" />
-              <text x="0" y="28" font-family="sans-serif" font-size="13" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle"> ${el.label || 'GV'}</text>
+              <text x="0" y="28" font-family="sans-serif" font-size="13" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle"> ${escXml(el.label || 'GV')}</text>
             </g>
           `;
         case 'hs': {
@@ -116,7 +116,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <circle cx="0" cy="0" r="${r}" fill="${el.color || '#2563eb'}" stroke="#ffffff" stroke-width="2"/>
-              ${el.label ? `<text x="0" y="4" font-family="sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="4" font-family="sans-serif" font-size="10" font-weight="bold" fill="#ffffff" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -125,7 +125,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <circle cx="0" cy="0" r="${r}" fill="${el.color || '#0284c7'}" stroke="#ffffff" stroke-width="2"/>
-              <text x="0" y="4.5" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">${el.label || 'CS'}</text>
+              <text x="0" y="4.5" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">${escXml(el.label || 'CS')}</text>
             </g>
           `;
         }
@@ -134,7 +134,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <circle cx="0" cy="0" r="${r}" fill="${el.color || '#ea580c'}" stroke="#ffffff" stroke-width="2"/>
-              <text x="0" y="4.5" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">${el.label || 'TT'}</text>
+              <text x="0" y="4.5" font-family="sans-serif" font-size="11" font-weight="bold" fill="#ffffff" text-anchor="middle">${escXml(el.label || 'TT')}</text>
             </g>
           `;
         }
@@ -144,7 +144,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})">
               <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="8" fill="${el.color || '#eff6ff'}" fill-opacity="0.4" stroke="${el.color || '#3b82f6'}" stroke-width="2" stroke-dasharray="5,4"/>
-              ${el.label ? `<text x="0" y="${-h / 2 + 18}" font-family="sans-serif" font-size="12" font-weight="bold" fill="${el.color || '#1d4ed8'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="${-h / 2 + 18}" font-family="sans-serif" font-size="12" font-weight="bold" fill="${el.color || '#1d4ed8'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -153,7 +153,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})">
               <circle cx="0" cy="0" r="${r}" fill="${el.color || '#eff6ff'}" fill-opacity="0.35" stroke="${el.color || '#3b82f6'}" stroke-width="2" stroke-dasharray="5,4"/>
-              ${el.label ? `<text x="0" y="5" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#1d4ed8'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="5" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#1d4ed8'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -163,7 +163,7 @@ export function renderFormationSvgString(
           return `
             <g>
               <line x1="${el.x}" y1="${el.y}" x2="${x2}" y2="${y2}" stroke="${el.color || '#dc2626'}" stroke-width="3" stroke-linecap="round"/>
-              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -173,7 +173,7 @@ export function renderFormationSvgString(
           return `
             <g>
               <line x1="${el.x}" y1="${el.y}" x2="${x2}" y2="${y2}" stroke="${el.color || '#0284c7'}" stroke-width="2.5" stroke-dasharray="6,4" stroke-linecap="round"/>
-              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#0284c7'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#0284c7'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -183,7 +183,7 @@ export function renderFormationSvgString(
           return `
             <g>
               <line x1="${el.x}" y1="${el.y}" x2="${x2}" y2="${y2}" stroke="${el.color || '#16a34a'}" stroke-width="2.8" marker-end="url(#arrowMarker)"/>
-              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#16a34a'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="${(el.x + x2) / 2}" y="${(el.y + y2) / 2 - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#16a34a'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -195,7 +195,7 @@ export function renderFormationSvgString(
           return `
             <g>
               <path d="M ${el.x} ${el.y} Q ${midX} ${midY} ${x2} ${y2}" fill="none" stroke="${el.color || '#ea580c'}" stroke-width="2.8" marker-end="url(#arrowMarkerOrange)"/>
-              ${el.label ? `<text x="${midX}" y="${midY - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="${midX}" y="${midY - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -207,7 +207,7 @@ export function renderFormationSvgString(
               <path d="M ${-r} 0 Q 0 ${-r / 2} ${r} 0" stroke="#ffffff" stroke-width="1.8" fill="none"/>
               <path d="M ${-r} 0 Q 0 ${r / 2} ${r} 0" stroke="#ffffff" stroke-width="1.8" fill="none"/>
               <line x1="0" y1="${-r}" x2="0" y2="${r}" stroke="#ffffff" stroke-width="1.8"/>
-              ${el.label ? `<text x="0" y="${r + 14}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#c2410c" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="${r + 14}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#c2410c" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -217,7 +217,7 @@ export function renderFormationSvgString(
               <polygon points="0,-16 -12,12 12,12" fill="${el.color || '#ea580c'}"/>
               <rect x="-14" y="10" width="28" height="4" rx="2" fill="${el.color || '#c2410c'}"/>
               <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6"/>
-              ${el.label ? `<text x="0" y="24" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="24" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -226,7 +226,7 @@ export function renderFormationSvgString(
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <ellipse cx="0" cy="0" rx="14" ry="7" fill="${el.color || '#eab308'}" stroke="#ca8a04" stroke-width="1.5"/>
               <circle cx="0" cy="-1" r="3" fill="#ca8a04"/>
-              ${el.label ? `<text x="0" y="17" font-family="sans-serif" font-size="10" font-weight="bold" fill="#a16207" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="17" font-family="sans-serif" font-size="10" font-weight="bold" fill="#a16207" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -235,7 +235,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <circle cx="0" cy="0" r="${r}" fill="none" stroke="${el.color || '#06b6d4'}" stroke-width="4.5"/>
-              ${el.label ? `<text x="0" y="${r + 14}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${el.color || '#0891b2'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="${r + 14}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${el.color || '#0891b2'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -244,7 +244,7 @@ export function renderFormationSvgString(
           return `
             <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
               <rect x="${-len / 2}" y="-4" width="${len}" height="8" rx="4" fill="${el.color || '#f59e0b'}" stroke="#b45309" stroke-width="1.5"/>
-              ${el.label ? `<text x="0" y="18" font-family="sans-serif" font-size="10" font-weight="bold" fill="#b45309" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="18" font-family="sans-serif" font-size="10" font-weight="bold" fill="#b45309" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -254,14 +254,14 @@ export function renderFormationSvgString(
               <line x1="0" y1="16" x2="0" y2="-18" stroke="#475569" stroke-width="2.5" stroke-linecap="round"/>
               <polygon points="0,-18 18,-11 0,-4" fill="${el.color || '#dc2626'}"/>
               <circle cx="0" cy="16" r="4" fill="#334155"/>
-              ${el.label ? `<text x="0" y="29" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${el.label}</text>` : ''}
+              ${el.label ? `<text x="0" y="29" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
         case 'text': {
           return `
             <text x="${el.x}" y="${el.y}" font-family="sans-serif" font-size="${el.fontSize || 13}" font-weight="bold" fill="${el.color || '#1e293b'}" text-anchor="middle">
-              ${el.label || 'Ghi chú'}
+              ${escXml(el.label || 'Ghi chú')}
             </text>
           `;
         }
@@ -272,7 +272,7 @@ export function renderFormationSvgString(
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
               <text x="0" y="${-h / 2 + 20}" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="#b45309" text-anchor="middle">📖 TRANH KỸ THUẬT</text>
-              <text x="0" y="${-h / 2 + 40}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#92400e" text-anchor="middle">${el.label || 'Động Tác Mẫu SGK'}</text>
+              <text x="0" y="${-h / 2 + 40}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#92400e" text-anchor="middle">${escXml(el.label || 'Động Tác Mẫu SGK')}</text>
             </g>
           `;
         }

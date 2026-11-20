@@ -78,7 +78,7 @@ export function createFormationSvg(
         <circle cx="65" cy="150" r="5.5"/><circle cx="100" cy="150" r="5.5"/><circle cx="135" cy="150" r="5.5"/><circle cx="170" cy="150" r="5.5"/><circle cx="205" cy="150" r="5.5"/><circle cx="240" cy="150" r="5.5"/>
         <circle cx="82" cy="175" r="5.5"/><circle cx="117" cy="175" r="5.5"/><circle cx="152" cy="175" r="5.5"/><circle cx="187" cy="175" r="5.5"/><circle cx="222" cy="175" r="5.5"/>
       </g>
-      <text x="160" y="202" font-family="sans-serif" font-size="10" font-weight="600" fill="#475569" text-anchor="middle">Đội hình HS quan sát tranh ảnh & GV làm mẫu</text>
+      <text x="160" y="202" font-family="sans-serif" font-size="10" font-weight="600" fill="#475569" text-anchor="middle">Đội hình HS quan sát tranh ảnh &amp; GV làm mẫu</text>
     `;
   } else if (type === 'dong_loat') {
     // Tập đồng loạt
@@ -129,7 +129,7 @@ export function createFormationSvg(
   } else if (type === 'cap_doi') {
     content = `
       <polygon points="160,32 150,48 170,48" fill="#dc2626" />
-      <text x="160" y="60" font-family="sans-serif" font-size="10" font-weight="bold" fill="#dc2626" text-anchor="middle"> GV Quan sát & Sửa sai</text>
+      <text x="160" y="60" font-family="sans-serif" font-size="10" font-weight="bold" fill="#dc2626" text-anchor="middle"> GV Quan sát &amp; Sửa sai</text>
       
       <g>
         <circle cx="60" cy="90" r="5.5" fill="#2563eb"/><text x="75" y="93" font-size="9" fill="#e11d48">↔</text><circle cx="90" cy="90" r="5.5" fill="#16a34a"/>
@@ -541,7 +541,7 @@ export function createFormationSvg(
     // SƠ ĐỒ TRÒ CHƠI NÉM BÓNG TRÚNG ĐÍCH
     content = `
       <polygon points="160,25 152,40 168,40" fill="#dc2626" />
-      <text x="160" y="50" font-family="sans-serif" font-size="9.5" font-weight="bold" fill="#dc2626" text-anchor="middle"> GV Hướng Dẫn & Đếm Điểm</text>
+      <text x="160" y="50" font-family="sans-serif" font-size="9.5" font-weight="bold" fill="#dc2626" text-anchor="middle"> GV Hướng Dẫn &amp; Đếm Điểm</text>
 
       <!-- Vạch giới hạn ném bóng -->
       <line x1="75" y1="65" x2="75" y2="175" stroke="#dc2626" stroke-width="2.5"/>

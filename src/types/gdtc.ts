@@ -145,8 +145,13 @@ export interface UserCustomTemplate {
     disabledStudents: string;
   };
   integrations: {
+    addressLabel?: string;
+    addressContent?: string;
+    domains?: string[];
     digitalSkill: string;
     digitalDescription: string;
+    qpan?: string;
+    childRights?: string;
     lifeSkills: string;
     trafficSafety?: string;
     environmentalEducation?: string;

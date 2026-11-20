@@ -3,6 +3,11 @@ import { SgkImageItem, WeeklyMasterScheduleRow, SchoolSettings } from '../types/
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { cleanTopicForDisplay, cleanLessonTitleForHeader } from './curriculumAuditSync';
 import { parseInlineTextSegments, extractAllInlineImages } from './inlineImageHelper';
+import {
+  buildMasterPlanIntegrationsFromAddress,
+  GENERAL_KNOWLEDGE_THREAD_NOTE
+} from '../data/integrationAddressesData';
+import { compactOverlongKnowledgeRow, sanitizeRowColumn1Media } from './planAutoMatcher';
 
 export function downloadZipOfImages(images: SgkImageItem[], filename = 'Thu_Vien_Hinh_Anh_SGK_GDTC.zip') {
   const zip = new JSZip();
@@ -227,7 +232,8 @@ export async function buildWordExportPackage(
   const processedPlans = await Promise.all(
     plans.map(async (plan) => {
       const processedRows = await Promise.all(
-        plan.rows.map(async (row) => {
+        plan.rows.map(async (rawRow) => {
+          const row = compactOverlongKnowledgeRow(sanitizeRowColumn1Media(rawRow, plan.grade, plan.title));
           let contentImgInfo: ProcessedWordImage = { pngBase64: '', widthPt: 0, heightPt: 0 };
           if (row.contentImgUrl) {
             contentImgInfo = await convertSvgOrImageToPngBase64(row.contentImgUrl, 98, Math.min(68, imageMaxHeightPt));
@@ -463,15 +469,58 @@ export async function buildWordExportPackage(
         </p>
 
         <p style="font-size: 11.5pt; font-weight: bold; margin: 6pt 0 2pt 0;">4. Tích hợp liên môn</p>
-        <p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">
-          - <i>Năng lực số (${escapeHtml(plan.integrations?.digitalSkill)}):</i> ${escapeHtml(plan.integrations?.digitalDescription)}
-        </p>
-        <p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">
-          - <i>Giáo dục Quốc phòng và An ninh (QPAN):</i> Rèn luyện tác phong nhanh nhẹn, giữ vững cự ly chuẩn và tinh thần kỷ luật QPAN.
-        </p>
-        <p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">
-          - <i>Kỹ năng sống & An toàn:</i> ${escapeHtml(plan.integrations?.lifeSkills || 'GV hướng dẫn HS kiên trì, chờ đến lượt, phối hợp, nhận xét bạn bằng lời tích cực và chủ động báo khi cơ thể mệt hoặc khó chịu.')}
-        </p>
+        ${(() => {
+          const officialInteg = buildMasterPlanIntegrationsFromAddress(
+            plan.grade,
+            plan.week,
+            plan.lessonNum,
+            plan.title
+          );
+          const primaryLabel = plan.integrations?.addressLabel || officialInteg.addressLabel;
+          const primaryContent = plan.integrations?.addressContent || officialInteg.addressContent;
+          const normPrimary = primaryContent.trim().toLowerCase();
+          const digitalSkill = (plan.integrations?.digitalSkill || officialInteg.digitalSkill || '').trim();
+          const digitalDesc = (plan.integrations?.digitalDescription || officialInteg.digitalDescription || '').trim();
+          const lifeSkills = (plan.integrations?.lifeSkills || officialInteg.lifeSkills || '').trim();
+          const envText = (plan.integrations?.environmentalEducation || officialInteg.environmentalEducation || '').trim();
+
+          const paragraphs: string[] = [
+            `<p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">- <i>${escapeHtml(primaryLabel)}:</i> ${escapeHtml(primaryContent)}</p>`
+          ];
+
+          if (digitalDesc && digitalDesc.toLowerCase() !== normPrimary) {
+            paragraphs.push(
+              `<p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">- <i>Năng lực số${digitalSkill ? ` (${escapeHtml(digitalSkill)})` : ''}:</i> ${escapeHtml(digitalDesc)}</p>`
+            );
+          }
+
+          if (
+            lifeSkills &&
+            lifeSkills.toLowerCase() !== normPrimary &&
+            lifeSkills.toLowerCase() !== digitalDesc.toLowerCase()
+          ) {
+            paragraphs.push(
+              `<p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">- <i>Kỹ năng sống &amp; An toàn:</i> ${escapeHtml(lifeSkills)}</p>`
+            );
+          }
+
+          const showEnvExtra =
+            Boolean(envText) &&
+            envText.toLowerCase() !== normPrimary &&
+            envText.toLowerCase() !== lifeSkills.toLowerCase();
+
+          paragraphs.push(
+            `<p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">- <i>${
+              showEnvExtra ? 'Bảo vệ môi trường &amp; An toàn sân bãi' : 'Mạch Kiến thức chung'
+            }:</i> ${escapeHtml(
+              showEnvExtra
+                ? envText
+                : GENERAL_KNOWLEDGE_THREAD_NOTE.replace(/^Mạch Kiến thức chung:\s*/i, '')
+            )}</p>`
+          );
+
+          return paragraphs.join('\n        ');
+        })()}
       </div>
 
       <!-- II. ĐỊA ĐIỂM – PHƯƠNG TIỆN -->

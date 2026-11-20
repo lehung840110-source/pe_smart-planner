@@ -61,6 +61,15 @@ import {
 import { standardMovementsLibrary } from '../data/movementLibrary';
 import { exportWordDocument, exportCleanWordDocxFromData } from '../utils/exportUtils';
 import {
+  buildMasterPlanIntegrationsFromAddress,
+  applyOfficialIntegrationsToLessonRows,
+  hasActivityIntegrationMarkers,
+  getLessonActivityIntegrationPlacements,
+  GENERAL_KNOWLEDGE_THREAD_NOTE,
+  INTEGRATION_DOMAIN_META,
+  IntegrationDomainTag
+} from '../data/integrationAddressesData';
+import {
   getWeekDateInfo,
   getGradePpctInfo,
   getWeeklyIntegrationThemes,
@@ -87,6 +96,7 @@ import {
   sanitizeVanDungRow,
   sanitizePlanRowsVanDung,
   sanitizeRowColumn1Media,
+  compactOverlongKnowledgeRow,
   isInvalidColumn1AttachmentForRow,
   applyGradeDistinctFormationsToRows,
   extractGameNameFromRowText,
@@ -644,51 +654,71 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setAppStateDB(`gdtc_themes_w${targetWeek}`, mergedTheme);
     safeLocalStorageSet(`gdtc_themes_w${targetWeek}`, JSON.stringify(mergedTheme));
 
-    // 3. Propagate specific integration themes and titles into plansByGrade for all 3 grades
+    // 3. Propagate specific integration themes and titles into plansByGrade for all grades
     if (targetWeek === selectedWeek && plansByGrade.length > 0) {
       const updated = plansByGrade.map((plan) => {
-        const existingInteg = plan.integrations || {
-          digitalSkill: 'Mã 4.1TC1a',
-          digitalDescription: 'Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu.',
-          lifeSkills: 'Rèn luyện tính kỷ luật và tinh thần đoàn kết.',
-          environmentalEducation: 'Giữ vệ sinh sân bãi sạch sẽ.'
+        const matchingRow = rows.find((r) => r.grade === plan.grade && r.ppct === plan.lessonNum);
+        const nextTitle = matchingRow?.lessonTitle || plan.title;
+        const officialInteg = buildMasterPlanIntegrationsFromAddress(plan.grade, targetWeek, plan.lessonNum, nextTitle);
+        const existingInteg = {
+          ...officialInteg,
+          ...(plan.integrations || {})
         };
 
-        const matchingRow = rows.find((r) => r.grade === plan.grade && r.ppct === plan.lessonNum);
         const rowIntegText = matchingRow?.integrationNotes || '';
         const cleanRowInteg = rowIntegText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
-        const codeMatch = cleanRowInteg.match(/(?:mã\s*)?([1-6]\.1TC\w+(?:\s*\/\s*[1-6]\.1TC\w+)?)/i) || mergedTheme.digitalTheme?.match(/[1-6]\.1TC\w+/i);
-        const code = codeMatch ? (codeMatch[1].toUpperCase().startsWith('MÃ') ? codeMatch[1] : `Mã ${codeMatch[1]}`) : existingInteg.digitalSkill;
+        let nextAddressLabel = officialInteg.addressLabel;
+        let nextAddressContent = officialInteg.addressContent;
 
-        let digitalDesc = existingInteg.digitalDescription;
-        if (/học liệu|ai|thiết bị số|phần mềm|quan sát phân tích/i.test(cleanRowInteg)) {
-          digitalDesc = cleanRowInteg;
-        } else if (mergedTheme.digitalTheme) {
-          digitalDesc = mergedTheme.digitalTheme;
+        if (cleanRowInteg) {
+          const splitMatch = cleanRowInteg.replace(/^[-•+]\s*/, '').match(/^([^:]{2,70}):\s*(.+)$/);
+          if (splitMatch) {
+            nextAddressLabel = splitMatch[1].trim();
+            nextAddressContent = splitMatch[2].trim();
+          } else {
+            nextAddressContent = cleanRowInteg;
+          }
         }
 
-        let envDesc = existingInteg.environmentalEducation;
-        if (/môi trường|sân tập|xanh|sạch|đẹp|rác/i.test(cleanRowInteg)) {
-          envDesc = cleanRowInteg;
-        } else if (mergedTheme.envTheme) {
-          envDesc = mergedTheme.envTheme;
+        const codeMatch =
+          cleanRowInteg.match(/(?:mã\s*)?([1-6]\.\d+(?:TC\w+)?(?:\s*\/\s*[1-6]\.\d+(?:TC\w+)?)?)/i) ||
+          mergedTheme.digitalTheme?.match(/[1-6]\.\d+(?:TC\w+)?/i);
+        const code = codeMatch
+          ? (codeMatch[1] || codeMatch[0]).toUpperCase().startsWith('MÃ')
+            ? codeMatch[1] || codeMatch[0]
+            : `Mã ${codeMatch[1] || codeMatch[0]}`
+          : officialInteg.digitalSkill;
+
+        let digitalDesc = officialInteg.digitalDescription;
+        if (/học liệu|ai|thiết bị số|phần mềm|quan sát|video|nls|năng lực số/i.test(cleanRowInteg)) {
+          digitalDesc = nextAddressContent;
         }
 
-        let lifeSkillsDesc = existingInteg.lifeSkills;
-        if (/qpan|quốc phòng|kỷ luật|tác phong/i.test(cleanRowInteg)) {
-          lifeSkillsDesc = cleanRowInteg;
-        } else if (mergedTheme.qpanTheme || mergedTheme.lifeSkillsTheme) {
-          lifeSkillsDesc = `${mergedTheme.qpanTheme || ''} ${mergedTheme.lifeSkillsTheme || ''}`.trim();
+        let envDesc = officialInteg.environmentalEducation;
+        if (/môi trường|sân tập|xanh|sạch|đẹp|rác|bvmt/i.test(cleanRowInteg)) {
+          envDesc = nextAddressContent;
+        }
+
+        let lifeSkillsDesc = officialInteg.lifeSkills;
+        if (/qpan|quốc phòng|kỷ luật|tác phong|kns|kỹ năng sống|quyền trẻ em|an toàn giao thông|atgt/i.test(cleanRowInteg)) {
+          lifeSkillsDesc = nextAddressContent;
         }
 
         const updatedPlan: MasterPlanItem = {
           ...plan,
-          title: matchingRow?.lessonTitle || plan.title,
+          title: nextTitle,
+          rows: applyOfficialIntegrationsToLessonRows(plan.rows, plan.grade, targetWeek, plan.lessonNum, nextTitle),
           integrations: {
             ...existingInteg,
+            addressLabel: nextAddressLabel,
+            addressContent: nextAddressContent,
+            domains: officialInteg.domains,
             digitalSkill: code,
             digitalDescription: digitalDesc,
+            qpan: officialInteg.qpan,
+            childRights: officialInteg.childRights,
+            trafficSafety: officialInteg.trafficSafety,
             lifeSkills: lifeSkillsDesc,
             environmentalEducation: envDesc
           }
@@ -766,9 +796,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     topicName: string,
     titleName: string,
     warmupGame?: string,
-    practiceGame?: string
+    practiceGame?: string,
+    weekVal?: number
   ): LessonRow[] => {
-    return createBalancedGranularLessonRows(gradeVal, titleName, images, warmupGame, practiceGame);
+    return createBalancedGranularLessonRows(gradeVal, titleName, images, warmupGame, practiceGame, weekVal, pNum);
   };
 
   // Build factory/SGK baseline plan for a specific (grade, lessonNum, week) slot (used when no user edits exist or for diff comparison)
@@ -832,7 +863,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         generalComp = auth9.generalCompetencies;
         qualitiesComp = auth9.qualities;
       } else {
-        rawRows = buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame);
+        rawRows = buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame, targetWeek);
         specialComp = {
           healthCare: `Biết chuẩn bị trang phục, giày tập, vệ sinh sân tập; thực hiện các yêu cầu an toàn trước, trong và sau khi tập luyện nội dung ${rule.movementName || resolvedTitle}.`,
           basicMovement: `Thực hiện được ${rule.movementName || resolvedTitle} theo hướng dẫn của GV; biết xử lí một số tình huống đơn giản trong tập luyện và trò chơi vận động.`,
@@ -844,7 +875,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       rawRows =
         normalized.rows && normalized.rows.length >= 5
           ? normalized.rows
-          : buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame);
+          : buildOfficialLessonRows(g, pNum, resolvedTopic, resolvedTitle, rule.warmupGame, rule.practiceGame, targetWeek);
     }
 
     rawRows = splitAndAlignRows1to1(rawRows, g, resolvedTitle, images, rule.warmupGame, rule.practiceGame);
@@ -920,22 +951,24 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       }
 
       if (isMovement && !isAssessmentResolved) {
+        const compactedMovRow = compactOverlongKnowledgeRow(r);
         const acc = slotAssets.movementDetails;
-        const currentUrl = r.contentImgUrl || '';
+        const currentUrl = compactedMovRow.contentImgUrl || '';
         const mediaCorpus = [
           currentUrl,
-          r.contentImgTitle || '',
-          ...(r.contentImages || []).map((i) => `${i.url || ''} ${i.title || ''}`)
+          compactedMovRow.contentImgTitle || '',
+          ...(compactedMovRow.contentImages || []).map((i) => `${i.url || ''} ${i.title || ''}`)
         ]
           .join(' ')
           .toLowerCase();
-        const cLower = rLower;
+        const cLower = (compactedMovRow.content || '').toLowerCase();
         const tLower = resolvedTitle.toLowerCase();
 
-        // Inspect BOTH URL and Title so authentic cropped PNGs (data:image/png...) are NOT falsely discarded!
+        // Inspect BOTH URL and Title so authentic cropped PNGs (data:image/png...) are NOT falsely discarded,
+        // while fake .svg placeholders and cross-grade leaks are strictly rejected!
         const isWrongImage =
           !currentUrl ||
-          isInvalidColumn1AttachmentForRow(r.content, currentUrl, r.contentImgTitle, g, resolvedTitle) ||
+          isInvalidColumn1AttachmentForRow(compactedMovRow.content, currentUrl, compactedMovRow.contentImgTitle, g, resolvedTitle) ||
           isMismatched ||
           (g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
           (g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !mediaCorpus.includes('vặn mình') && !mediaCorpus.includes('van_minh')) ||
@@ -948,7 +981,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         if (isWrongImage) {
           if (acc.imgUrl) {
             return {
-              ...r,
+              ...compactedMovRow,
               contentImgUrl: acc.imgUrl,
               contentImgTitle: acc.imgTitle,
               contentImages:
@@ -958,12 +991,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             };
           }
           return {
-            ...r,
+            ...compactedMovRow,
             contentImgUrl: undefined,
             contentImgTitle: acc.imgTitle || undefined,
             contentImages: []
           };
         }
+        return sanitizeRowColumn1Media(compactedMovRow, g, resolvedTitle);
       }
 
       if (isPracticeGroup) {
@@ -1047,48 +1081,53 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       return sanitizeRowColumn1Media(r, g, resolvedTitle);
     });
 
-    let resolvedIntegrations = normalized.integrations || {
-      digitalSkill: 'Mã 4.1TC1a',
-      digitalDescription: 'Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu.',
-      lifeSkills: 'Rèn luyện tính kỷ luật và tinh thần đoàn kết.',
-      environmentalEducation: 'Giữ vệ sinh sân bãi sạch sẽ.'
+    const officialInteg = buildMasterPlanIntegrationsFromAddress(g, targetWeek, pNum, resolvedTitle);
+    let resolvedIntegrations: MasterPlanItem['integrations'] = {
+      addressLabel: officialInteg.addressLabel,
+      addressContent: officialInteg.addressContent,
+      domains: officialInteg.domains,
+      digitalSkill: officialInteg.digitalSkill,
+      digitalDescription: officialInteg.digitalDescription,
+      qpan: officialInteg.qpan,
+      childRights: officialInteg.childRights,
+      trafficSafety: officialInteg.trafficSafety,
+      lifeSkills: officialInteg.lifeSkills,
+      environmentalEducation: officialInteg.environmentalEducation
     };
 
     if (timetableMatch && timetableMatch.integrationNotes) {
       const cleanInteg = timetableMatch.integrationNotes.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      if (cleanInteg) {
-        const codeMatch = cleanInteg.match(/(?:mã\s*)?([1-6]\.1TC\w+(?:\s*\/\s*[1-6]\.1TC\w+)?)/i);
-        const code = codeMatch ? (codeMatch[1].toUpperCase().startsWith('MÃ') ? codeMatch[1] : `Mã ${codeMatch[1]}`) : resolvedIntegrations.digitalSkill;
+      const isGenericLegacyNote =
+        /^tích hợp năng lực số|tích hợp an toàn tập luyện|giữ vệ sinh sân tập/i.test(cleanInteg);
 
-        let dDesc = resolvedIntegrations.digitalDescription;
-        let lSkills = resolvedIntegrations.lifeSkills;
-        let envDesc = resolvedIntegrations.environmentalEducation;
+      if (cleanInteg && !isGenericLegacyNote) {
+        const splitMatch = cleanInteg.replace(/^[-•+]\s*/, '').match(/^([^:]{2,70}):\s*(.+)$/);
+        if (splitMatch) {
+          resolvedIntegrations = {
+            ...resolvedIntegrations,
+            addressLabel: splitMatch[1].trim(),
+            addressContent: splitMatch[2].trim()
+          };
+        } else {
+          resolvedIntegrations = {
+            ...resolvedIntegrations,
+            addressContent: cleanInteg
+          };
+        }
 
-        if (/học liệu|ai|thiết bị số|phần mềm|quan sát phân tích/i.test(cleanInteg)) {
-          dDesc = cleanInteg;
+        const codeMatch = cleanInteg.match(/(?:mã\s*)?([1-6]\.\d+(?:TC\w+)?(?:\s*\/\s*[1-6]\.\d+(?:TC\w+)?)?)/i);
+        if (codeMatch) {
+          resolvedIntegrations.digitalSkill = codeMatch[1].toUpperCase().startsWith('MÃ')
+            ? codeMatch[1]
+            : `Mã ${codeMatch[1]}`;
         }
-        if (/qpan|quốc phòng|kỷ luật|tác phong/i.test(cleanInteg)) {
-          lSkills = cleanInteg;
+        if (/học liệu|ai|thiết bị số|phần mềm|quan sát|video|nls|năng lực số/i.test(cleanInteg)) {
+          resolvedIntegrations.digitalDescription = resolvedIntegrations.addressContent || cleanInteg;
         }
-        if (/môi trường|sân tập|xanh|sạch|đẹp|rác/i.test(cleanInteg)) {
-          envDesc = cleanInteg;
+        if (/môi trường|sân tập|xanh|sạch|đẹp|rác|bvmt/i.test(cleanInteg)) {
+          resolvedIntegrations.environmentalEducation = resolvedIntegrations.addressContent || cleanInteg;
         }
-
-        resolvedIntegrations = {
-          digitalSkill: code,
-          digitalDescription: dDesc,
-          lifeSkills: lSkills,
-          environmentalEducation: envDesc
-        };
       }
-    } else if (targetThemes) {
-      const codeMatch = targetThemes.digitalTheme?.match(/[1-6]\.1TC\w+/i);
-      resolvedIntegrations = {
-        digitalSkill: codeMatch ? `Mã ${codeMatch[0]}` : resolvedIntegrations.digitalSkill,
-        digitalDescription: targetThemes.digitalTheme || resolvedIntegrations.digitalDescription,
-        lifeSkills: `${targetThemes.qpanTheme || ''} ${targetThemes.lifeSkillsTheme || ''}`.trim() || resolvedIntegrations.lifeSkills,
-        environmentalEducation: targetThemes.envTheme || resolvedIntegrations.environmentalEducation
-      };
     }
 
     return {
@@ -1100,7 +1139,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       topic: resolvedTopic,
       title: resolvedTitle,
       dateRange: targetDateRange,
-      rows: sanitizePlanRowsVanDung(rows, g),
+      rows: applyOfficialIntegrationsToLessonRows(
+        sanitizePlanRowsVanDung(rows, g),
+        g,
+        targetWeek,
+        pNum,
+        resolvedTitle
+      ),
       specialCompetencies: specialComp,
       generalCompetencies: generalComp,
       qualities: qualitiesComp,
@@ -1156,21 +1201,54 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       if (
         !(preferredVer.status === 'draft' && !preferredVer.isStarredBest && hasStaleExerciseLeakInAssessment(snap))
       ) {
-        // For auto-saved draft snapshots (not explicitly starred/saved), clean any legacy misplaced game photos in 1.2, SVGs in Col 1, legacy 4.2 text, and upgrade legacy shared Col 4 formations to grade-specific ones
+        // Always strip fake .svg placeholders & cross-grade movement leaks, compact verbose 8-beat 2.1 walls, and upgrade legacy shared Col 4 formations
+        const cleanedSnapRows = snap.rows.map((r) =>
+          compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))
+        );
         const sanitizedRows =
           preferredVer.status === 'draft' && !preferredVer.isStarredBest
             ? applyGradeDistinctFormationsToRows(
-                sanitizePlanRowsVanDung(
-                  snap.rows.map((r) => sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle)),
-                  g
-                ),
+                sanitizePlanRowsVanDung(cleanedSnapRows, g),
                 g,
                 false
               )
-            : sanitizePlanRowsVanDung(snap.rows, g);
+            : sanitizePlanRowsVanDung(cleanedSnapRows, g);
+        const officialSnapInteg = buildMasterPlanIntegrationsFromAddress(
+          g,
+          targetWeek,
+          pNum,
+          snap.title || expectedRule.cleanTitle
+        );
+        const hydratedIntegrations =
+          snap.integrations?.addressLabel && snap.integrations?.addressContent
+            ? snap.integrations
+            : {
+                ...officialSnapInteg,
+                ...(snap.integrations || {}),
+                addressLabel: officialSnapInteg.addressLabel,
+                addressContent: officialSnapInteg.addressContent,
+                domains: officialSnapInteg.domains,
+                digitalSkill: officialSnapInteg.digitalSkill,
+                digitalDescription: officialSnapInteg.digitalDescription,
+                qpan: officialSnapInteg.qpan,
+                childRights: officialSnapInteg.childRights,
+                trafficSafety: officialSnapInteg.trafficSafety,
+                lifeSkills: officialSnapInteg.lifeSkills,
+                environmentalEducation: officialSnapInteg.environmentalEducation
+              };
+        const rowsWithIntegrations = hasActivityIntegrationMarkers(sanitizedRows)
+          ? sanitizedRows
+          : applyOfficialIntegrationsToLessonRows(
+              sanitizedRows,
+              g,
+              targetWeek,
+              pNum,
+              snap.title || expectedRule.cleanTitle
+            );
         return {
           ...snap,
-          rows: sanitizedRows,
+          integrations: hydratedIntegrations,
+          rows: rowsWithIntegrations,
           id: `plan_k${g}_t${pNum}_w${targetWeek}`,
           grade: g,
           week: targetWeek,
@@ -1198,16 +1276,52 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     if (savedDictPlan && savedDictPlan.rows && savedDictPlan.rows.length >= 5) {
       const snap = normalizeMasterPlan(savedDictPlan);
       if (!hasStaleExerciseLeakInAssessment(snap)) {
+        const officialDictInteg = buildMasterPlanIntegrationsFromAddress(
+          g,
+          targetWeek,
+          pNum,
+          snap.title || expectedRule.cleanTitle
+        );
+        const hydratedDictIntegrations =
+          snap.integrations?.addressLabel && snap.integrations?.addressContent
+            ? snap.integrations
+            : {
+                ...officialDictInteg,
+                ...(snap.integrations || {}),
+                addressLabel: officialDictInteg.addressLabel,
+                addressContent: officialDictInteg.addressContent,
+                domains: officialDictInteg.domains,
+                digitalSkill: officialDictInteg.digitalSkill,
+                digitalDescription: officialDictInteg.digitalDescription,
+                qpan: officialDictInteg.qpan,
+                childRights: officialDictInteg.childRights,
+                trafficSafety: officialDictInteg.trafficSafety,
+                lifeSkills: officialDictInteg.lifeSkills,
+                environmentalEducation: officialDictInteg.environmentalEducation
+              };
+        const cleanedDictRows = applyGradeDistinctFormationsToRows(
+          sanitizePlanRowsVanDung(
+            snap.rows.map((r) =>
+              compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))
+            ),
+            g
+          ),
+          g,
+          false
+        );
+        const dictRowsWithIntegrations = hasActivityIntegrationMarkers(cleanedDictRows)
+          ? cleanedDictRows
+          : applyOfficialIntegrationsToLessonRows(
+              cleanedDictRows,
+              g,
+              targetWeek,
+              pNum,
+              snap.title || expectedRule.cleanTitle
+            );
         return {
           ...snap,
-          rows: applyGradeDistinctFormationsToRows(
-            sanitizePlanRowsVanDung(
-              snap.rows.map((r) => sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle)),
-              g
-            ),
-            g,
-            false
-          ),
+          integrations: hydratedDictIntegrations,
+          rows: dictRowsWithIntegrations,
           id: `plan_k${g}_t${pNum}_w${targetWeek}`,
           grade: g,
           week: targetWeek,
@@ -1344,6 +1458,41 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       };
     });
     recordHistory(newPlans);
+  };
+
+  // 1-Click reset plan integration section & auto-place into Table III activity rows from the official Grade/Week/Lesson table
+  const handleResetPlanIntegrationToOfficial = (planId: string, alsoInjectIntoTable = true) => {
+    let placedSlotsLabel = '';
+    const newPlans = getEditablePlansList().map((p) => {
+      if (p.id !== planId) return p;
+      const official = buildMasterPlanIntegrationsFromAddress(p.grade, p.week, p.lessonNum, p.title);
+      const placements = getLessonActivityIntegrationPlacements(p.grade, p.week, p.lessonNum, p.title);
+      placedSlotsLabel = Array.from(new Set(placements.map((item) => item.slotShortLabel))).join(', ');
+      return {
+        ...p,
+        rows: alsoInjectIntoTable
+          ? applyOfficialIntegrationsToLessonRows(p.rows, p.grade, p.week, p.lessonNum, p.title)
+          : p.rows,
+        integrations: {
+          addressLabel: official.addressLabel,
+          addressContent: official.addressContent,
+          domains: official.domains,
+          digitalSkill: official.digitalSkill,
+          digitalDescription: official.digitalDescription,
+          qpan: official.qpan,
+          childRights: official.childRights,
+          trafficSafety: official.trafficSafety,
+          lifeSkills: official.lifeSkills,
+          environmentalEducation: official.environmentalEducation
+        }
+      };
+    });
+    recordHistory(newPlans);
+    showToast(
+      alsoInjectIntoTable
+        ? `✅ Đã nạp địa chỉ tích hợp chuẩn và tự động chèn vào đúng các hoạt động (${placedSlotsLabel}) của bảng III!`
+        : '✅ Đã nạp lại địa chỉ tích hợp chuẩn theo đúng Khối / Tuần / Bài học!'
+    );
   };
 
   // Editable metadata handler
@@ -3672,23 +3821,68 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       </div>
                     </div>
 
-                    <div>
-                      <label className="font-bold text-slate-800 block mb-0.5">4. Tích hợp liên môn:</label>
-                      <div className="grid grid-cols-4 gap-2">
-                        <input
-                          type="text"
-                          value={plan.integrations.digitalSkill}
-                          onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'digitalSkill', e.target.value)}
-                          placeholder="Mã số"
-                          className="p-1 border border-blue-300 rounded text-xs font-bold"
-                        />
-                        <input
-                          type="text"
-                          value={plan.integrations.digitalDescription}
-                          onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'digitalDescription', e.target.value)}
-                          placeholder="Mô tả tích hợp"
-                          className="col-span-3 p-1 border border-blue-300 rounded text-xs"
-                        />
+                    <div className="pt-1 border-t border-slate-200/80">
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                        <label className="font-bold text-slate-800">4. Tích hợp liên môn (Địa chỉ tích hợp chuẩn theo Bài/Tuần):</label>
+                        <button
+                          type="button"
+                          onClick={() => handleResetPlanIntegrationToOfficial(plan.id, true)}
+                          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-[11px] font-semibold transition"
+                          title="Tự động nạp lại địa chỉ tích hợp chuẩn theo Khối/Tuần/Bài và chèn đúng vị trí vào bảng Hoạt động dạy học (III)"
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          Nạp chuẩn &amp; Chèn vào bảng (III)
+                        </button>
+                      </div>
+                      <div className="space-y-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                          <input
+                            type="text"
+                            value={plan.integrations.addressLabel || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'addressLabel', e.target.value)}
+                            placeholder="Mạch tích hợp (VD: NLS & GDQPAN)"
+                            className="p-1.5 border border-blue-300 rounded text-xs font-bold bg-blue-50/40"
+                          />
+                          <textarea
+                            value={plan.integrations.addressContent || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'addressContent', e.target.value)}
+                            rows={2}
+                            placeholder="Nội dung địa chỉ tích hợp trọng tâm theo bài/tuần"
+                            className="sm:col-span-3 p-1.5 border border-blue-300 rounded text-xs bg-white"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                          <input
+                            type="text"
+                            value={plan.integrations.digitalSkill || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'digitalSkill', e.target.value)}
+                            placeholder="Mã NLS (VD: mức L1–L2 – Mã 1.1)"
+                            className="p-1 border border-slate-300 rounded text-xs font-semibold"
+                          />
+                          <input
+                            type="text"
+                            value={plan.integrations.digitalDescription || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'digitalDescription', e.target.value)}
+                            placeholder="Mô tả tích hợp Năng lực số (nếu bổ sung thêm)"
+                            className="sm:col-span-3 p-1 border border-slate-300 rounded text-xs"
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={plan.integrations.lifeSkills || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'lifeSkills', e.target.value)}
+                            placeholder="Kỹ năng sống & An toàn tập luyện"
+                            className="p-1 border border-slate-300 rounded text-xs"
+                          />
+                          <input
+                            type="text"
+                            value={plan.integrations.environmentalEducation || ''}
+                            onChange={(e) => handlePlanSectionChange(plan.id, 'integrations', 'environmentalEducation', e.target.value)}
+                            placeholder="Bảo vệ môi trường / Vệ sinh sân bãi"
+                            className="p-1 border border-slate-300 rounded text-xs"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3760,23 +3954,85 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       </ul>
                     </div>
 
-                    <div>
-                      <p className="font-bold text-slate-900">4. Tích hợp liên môn:</p>
-                      <ul className="pl-4 space-y-0.5 mt-0.5 list-none">
-                        <li>
-                          <span className="font-semibold text-slate-800">- Năng lực số (Mã {plan.integrations.digitalSkill}):</span>{' '}
-                          {plan.integrations.digitalDescription}
-                        </li>
-                        <li>
-                          <span className="font-semibold text-slate-800">- Quốc phòng và An ninh (QPAN):</span>{' '}
-                          {weeklyThemes.qpanTheme}
-                        </li>
-                        <li>
-                          <span className="font-semibold text-slate-800">- Kỹ năng sống & An toàn:</span>{' '}
-                          {plan.integrations.lifeSkills || 'GV hướng dẫn HS kiên trì, chờ đến lượt, phối hợp, nhận xét bạn bằng lời tích cực và chủ động báo khi cơ thể mệt hoặc khó chịu.'}
-                        </li>
-                      </ul>
-                    </div>
+                    {(() => {
+                      const officialInteg = buildMasterPlanIntegrationsFromAddress(
+                        plan.grade,
+                        plan.week,
+                        plan.lessonNum,
+                        plan.title
+                      );
+                      const primaryLabel = plan.integrations?.addressLabel || officialInteg.addressLabel;
+                      const primaryContent = plan.integrations?.addressContent || officialInteg.addressContent;
+                      const domainTags = (
+                        (plan.integrations?.domains && plan.integrations.domains.length > 0
+                          ? plan.integrations.domains
+                          : officialInteg.domains) || []
+                      ) as IntegrationDomainTag[];
+                      const normPrimary = primaryContent.trim().toLowerCase();
+                      const digitalDesc = (plan.integrations?.digitalDescription || officialInteg.digitalDescription || '').trim();
+                      const digitalSkill = (plan.integrations?.digitalSkill || officialInteg.digitalSkill || '').trim();
+                      const lifeSkills = (plan.integrations?.lifeSkills || officialInteg.lifeSkills || '').trim();
+                      const envText = (plan.integrations?.environmentalEducation || officialInteg.environmentalEducation || '').trim();
+
+                      const showDigitalExtra =
+                        Boolean(digitalDesc) && digitalDesc.toLowerCase() !== normPrimary;
+                      const showLifeSkillsExtra =
+                        Boolean(lifeSkills) &&
+                        lifeSkills.toLowerCase() !== normPrimary &&
+                        lifeSkills.toLowerCase() !== digitalDesc.toLowerCase();
+                      const showEnvExtra =
+                        Boolean(envText) &&
+                        envText.toLowerCase() !== normPrimary &&
+                        envText.toLowerCase() !== lifeSkills.toLowerCase();
+
+                      return (
+                        <div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <p className="font-bold text-slate-900">4. Tích hợp liên môn:</p>
+                            {domainTags.map((tag) => {
+                              const meta = INTEGRATION_DOMAIN_META[tag];
+                              if (!meta) return null;
+                              return (
+                                <span
+                                  key={tag}
+                                  className={`print:hidden inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold ${meta.badgeClass}`}
+                                >
+                                  {meta.shortLabel}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          <ul className="pl-4 space-y-0.5 mt-0.5 list-none">
+                            <li>
+                              <span className="font-semibold text-slate-800">- {primaryLabel}:</span>{' '}
+                              {primaryContent}
+                            </li>
+                            {showDigitalExtra && (
+                              <li>
+                                <span className="font-semibold text-slate-800">
+                                  - Năng lực số{digitalSkill ? ` (${digitalSkill})` : ''}:
+                                </span>{' '}
+                                {digitalDesc}
+                              </li>
+                            )}
+                            {showLifeSkillsExtra && (
+                              <li>
+                                <span className="font-semibold text-slate-800">- Kỹ năng sống &amp; An toàn:</span>{' '}
+                                {lifeSkills}
+                              </li>
+                            )}
+                            <li>
+                              <span className="font-semibold text-slate-800">
+                                - {showEnvExtra ? 'Bảo vệ môi trường & An toàn sân bãi' : 'Mạch Kiến thức chung'}:
+                              </span>{' '}
+                              {showEnvExtra
+                                ? envText
+                                : GENERAL_KNOWLEDGE_THREAD_NOTE.replace(/^Mạch Kiến thức chung:\s*/i, '')}
+                            </li>
+                          </ul>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -3893,13 +4149,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 {!isEditMode && (
                   <div className="md:hidden print:hidden space-y-3 mt-2">
                     {plan.rows.map((row, rowIdx) => {
+                      const mMovementName = extractRowMovementName(row);
                       const mContentImgs: DiagramAttachment[] = (
                         row.contentImages && row.contentImages.length > 0
                           ? row.contentImages
                           : row.contentImgUrl
                           ? [{ id: 'mc_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
                           : []
-                      ).filter((att) => Boolean(att?.url && att.url.trim()));
+                      ).filter(
+                        (att) =>
+                          Boolean(att?.url && att.url.trim()) &&
+                          !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title)
+                      );
 
                       const mGvImgs: DiagramAttachment[] = (
                         row.gvImages && row.gvImages.length > 0
@@ -3938,7 +4199,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                             <div className="text-[13px] font-semibold text-slate-900 leading-relaxed">
                               <RichTextWithImages text={row.content} imageHeight={110} showCaptions={true} isEditMode={false} />
                             </div>
-                            {mContentImgs.length > 0 && (
+                            {mContentImgs.length > 0 ? (
                               <div className={`grid ${mContentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1`}>
                                 {mContentImgs.map((img, iIdx) => (
                                   <div key={img.id || iIdx} className="p-1.5 bg-slate-50 rounded-lg border border-slate-200 text-center">
@@ -3947,7 +4208,36 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                   </div>
                                 ))}
                               </div>
-                            )}
+                            ) : (() => {
+                              if (hasInlineMedia(row.content)) return null;
+                              const mMissing = resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic);
+                              if (!mMissing) return null;
+                              return (
+                                <div className="mt-1.5 p-2 bg-amber-50 border border-dashed border-amber-300 rounded-lg text-[11px] leading-snug text-amber-950 flex items-start gap-1.5">
+                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
+                                    <p className="text-amber-800 mt-0.5">{mMissing.message}</p>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (isGuest && onRequireAuth) {
+                                          onRequireAuth('Chọn & gắn ảnh từ Thư viện vào giáo án');
+                                          return;
+                                        }
+                                        const slot = detectRowSlotMeta(row.content, rowIdx, 'content', mMovementName);
+                                        handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
+                                      }}
+                                      className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[11px] transition"
+                                    >
+                                      <FolderOpen className="w-3.5 h-3.5" />
+                                      <span>Tìm ảnh trong Thư viện</span>
+                                      {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
@@ -4008,14 +4298,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     {plan.rows.map((row, rowIdx) => {
                       const movementName = extractRowMovementName(row);
 
-                      // Gather all diagrams/images for Column 1
+                      // Gather all valid raster images for Column 1 (strictly rejecting fake .svg placeholders & cross-grade movement leaks)
                       const displayedContentImages: DiagramAttachment[] = (
                         (row.contentImages && row.contentImages.length > 0)
                           ? row.contentImages
                           : row.contentImgUrl
                           ? [{ id: 'c_init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh động tác' }]
                           : []
-                      ).filter((att) => Boolean(att?.url && att.url.trim()));
+                      ).filter(
+                        (att) =>
+                          Boolean(att?.url && att.url.trim()) &&
+                          !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title)
+                      );
 
                       // Gather all diagrams/images for Column 3 (Hoạt động GV)
                       const displayedGvDiagrams: DiagramAttachment[] = (
@@ -4251,7 +4545,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                         <div className="p-2 bg-amber-50/90 border border-amber-300/90 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
                                           <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                                           <div>
-                                            <p className="font-bold text-amber-900">Chưa tìm được hình phù hợp cho mục này</p>
+                                            <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
                                             <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
                                           </div>
                                         </div>
@@ -4342,7 +4636,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     <div className="no-print mt-1.5 p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
                                       <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                                       <div className="flex-1">
-                                        <p className="font-bold text-amber-900">Chưa có hình ảnh SGK phù hợp</p>
+                                        <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
                                         <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
                                         <button
                                           type="button"
@@ -4357,7 +4651,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                           className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[10px] transition"
                                         >
                                           <FolderOpen className="w-3 h-3" />
-                                          <span>Chọn ảnh trong Thư viện</span>
+                                          <span>Tìm ảnh trong Thư viện</span>
                                           {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                                         </button>
                                       </div>

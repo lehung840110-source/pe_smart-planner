@@ -57,6 +57,13 @@ import {
 } from '../utils/planAutoMatcher';
 import { auditPlanAgainstCurriculum, ComplianceAuditReport } from '../utils/curriculumAuditSync';
 import {
+  getIntegrationAddressForLesson,
+  getLessonActivityIntegrationPlacements,
+  applyOfficialIntegrationsToLessonRows,
+  INTEGRATION_DOMAIN_META,
+  GENERAL_KNOWLEDGE_THREAD_NOTE
+} from '../data/integrationAddressesData';
+import {
   RichTextWithImages,
   hasInlineMedia,
   sanitizeInlineImageTagsInText,
@@ -292,10 +299,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       onRequireAuth('Tách 3.1, 3.2, 3.3 & cân bằng cấu trúc 11 hoạt động');
       return;
     }
-    const balanced = createBalancedGranularLessonRows(grade, title, images);
+    const balanced = createBalancedGranularLessonRows(grade, title, images, undefined, undefined, week, lessonNum);
     setLessonRows(balanced);
     showToast(
-      `✨ Đã chuẩn hóa bảng thành ${balanced.length} hoạt động tương xứng 1:1 theo chiều ngang (Trò chơi, Luyện tập, Động tác mới có dòng riêng biệt)!`
+      `✨ Đã chuẩn hóa bảng thành ${balanced.length} hoạt động tương xứng 1:1 và tự động chèn nội dung tích hợp Tuần ${week} vào đúng vị trí!`
     );
   };
 
@@ -309,6 +316,35 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     setLessonRows(result.updatedRows);
     showToast(
       `🛡️ Đã rà soát & chuẩn hóa sư phạm: Loại bỏ các ảnh chèn sai ở Cột 1 và khớp đúng tranh kỹ thuật động tác mới!`
+    );
+  };
+
+  // Official integration address & exact table placements matched automatically for (grade, week, lessonNum, title)
+  const officialIntegration = useMemo(
+    () => getIntegrationAddressForLesson(grade, week, lessonNum, title),
+    [grade, week, lessonNum, title]
+  );
+
+  const officialActivityPlacements = useMemo(
+    () => getLessonActivityIntegrationPlacements(grade, week, lessonNum, title),
+    [grade, week, lessonNum, title]
+  );
+
+  // 1-Click: Automatically inject all weekly/lesson/grade integration placements into their exact matching rows & columns (Nội dung / GV / HS)
+  const handleInsertOfficialIntegrationToLesson = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Tự động chèn địa chỉ tích hợp chuẩn vào bảng hoạt động dạy học');
+      return;
+    }
+    if (!lessonRows || lessonRows.length === 0) return;
+
+    setLessonRows((prev) =>
+      applyOfficialIntegrationsToLessonRows(prev, grade, week, lessonNum, title)
+    );
+
+    const uniqueSlots = Array.from(new Set(officialActivityPlacements.map((p) => p.slotShortLabel))).join(', ');
+    showToast(
+      `✅ Đã tự động chèn nội dung tích hợp (${officialIntegration.headerLabel} & Kiến thức chung) vào đúng các hoạt động: ${uniqueSlots}!`
     );
   };
 
@@ -922,6 +958,78 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               </span>
             )}
           </div>
+
+          {/* Official Integration Address Auto-Matched Card (SGK Kết nối tri thức L1–L5) */}
+          <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/90 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-indigo-900 uppercase tracking-tight">
+                  <Compass className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  Địa chỉ tích hợp tự động (Khối {grade} · Tuần {officialIntegration.weekStart}
+                  {officialIntegration.weekEnd > officialIntegration.weekStart ? `–${officialIntegration.weekEnd}` : ''} · Tiết{' '}
+                  {officialIntegration.periodStart}–{officialIntegration.periodEnd})
+                </span>
+                {officialIntegration.domains.map((dom) => {
+                  const meta = INTEGRATION_DOMAIN_META[dom];
+                  return (
+                    <span
+                      key={dom}
+                      className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold ${meta.badgeClass}`}
+                    >
+                      {meta.shortLabel}
+                    </span>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={handleInsertOfficialIntegrationToLesson}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold shadow-xs transition shrink-0"
+                title="Tự động phân bổ và chèn nội dung tích hợp chuẩn + Mạch Kiến thức chung vào đúng vị trí các dòng & cột (Nội dung, GV, HS) trong bảng hoạt động dạy học"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>Tự động chèn đúng vị trí vào bảng (III)</span>
+              </button>
+            </div>
+            <p className="text-xs text-slate-800 leading-relaxed">
+              <strong className="text-indigo-950">{officialIntegration.headerLabel}:</strong>{' '}
+              {officialIntegration.content}
+            </p>
+            <div className="bg-white/80 rounded-lg border border-indigo-100 p-2 space-y-1">
+              <p className="text-[10.5px] font-bold text-indigo-900 uppercase tracking-wide">
+                Vị trí tự động chèn vào bảng Hoạt động dạy học (theo hướng dẫn Phụ lục 1):
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                {officialActivityPlacements.map((pl) => (
+                  <div
+                    key={pl.id}
+                    className={`flex items-start gap-1.5 text-[11px] rounded-md px-2 py-1 border ${
+                      pl.isGeneralKnowledgeThread
+                        ? 'bg-slate-50/90 border-slate-200 text-slate-700'
+                        : 'bg-indigo-50/70 border-indigo-200/80 text-slate-800'
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        pl.isGeneralKnowledgeThread
+                          ? 'bg-slate-200 text-slate-700'
+                          : 'bg-indigo-600 text-white'
+                      }`}
+                    >
+                      {pl.slotShortLabel}
+                    </span>
+                    <span className="leading-snug">
+                      <strong className="text-slate-900">{pl.domainLabel}:</strong> {pl.rawText}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-snug">
+              <span className="font-semibold text-slate-600">Đối chiếu chương trình:</span> {officialIntegration.lessonRef} ·{' '}
+              <span className="italic">{GENERAL_KNOWLEDGE_THREAD_NOTE}</span>
+            </p>
+          </div>
         </div>
 
         {/* Quick Syllabus Presets for current grade */}
@@ -1141,7 +1249,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                   false,
                   {
                     ...currentPlanSnapshot,
-                    rows: createBalancedGranularLessonRows(grade, title, images)
+                    rows: createBalancedGranularLessonRows(grade, title, images, undefined, undefined, week, lessonNum)
                   },
                   true
                 );
@@ -1403,7 +1511,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     </div>
                   )}
 
-                  {contentImgs.length > 0 && (
+                  {contentImgs.length > 0 ? (
                     <div className={`grid ${contentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                       {contentImgs.map((cImg, cIdx) => (
                         <div key={cImg.id || cIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
@@ -1441,7 +1549,34 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                         </div>
                       ))}
                     </div>
-                  )}
+                  ) : !hasInlineMedia(row.content) && (() => {
+                    const mMissing = resolveSlotMissingImageNotice(grade, row.content, title, topic);
+                    if (!mMissing) return null;
+                    return (
+                      <div className="p-2.5 bg-amber-50 border border-dashed border-amber-300 rounded-xl text-[11px] leading-snug text-amber-950 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
+                          <p className="text-amber-800 mt-0.5">{mMissing.message}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isGuest && onRequireAuth) {
+                                onRequireAuth('Tìm & chọn ảnh trong Thư viện');
+                                return;
+                              }
+                              setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'image' });
+                            }}
+                            className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-lg font-bold text-[11px] transition"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            <span>Tìm ảnh trong Thư viện</span>
+                            {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Cột 3: Hoạt động Giáo viên */}
@@ -1845,9 +1980,9 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                         <div className="p-2 bg-red-50 border border-red-300 rounded-lg text-[10.5px] leading-snug text-red-900 flex items-start gap-1.5">
                           <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
                           <div className="flex-1">
-                            <p className="font-bold">Cảnh báo: Hình đang gắn chưa khớp mục này</p>
+                            <p className="font-bold">Cảnh báo: Hình đang gắn chưa khớp khối lớp hoặc mục này</p>
                             <p className="mt-0.5">
-                              Ảnh trò chơi không được đặt vào 1.2 Khởi động chung, và Sơ đồ đội hình thuộc Cột 4 (không thay cho ảnh SGK ở Cột 1).
+                              Ảnh động tác phải đúng Khối {grade} (không dùng ảnh khối khác hoặc hình vẽ SVG thay thế). Chỉ trò chơi cùng tên giữa các khối lớp mới được dùng chung.
                             </p>
                           </div>
                         </div>
@@ -1860,25 +1995,42 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                           <div className="p-2 bg-amber-50 border border-amber-300 rounded-lg text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
                             <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                             <div className="flex-1">
-                              <p className="font-bold text-amber-900">Chưa tìm được hình phù hợp cho mục này</p>
+                              <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
                               <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
-                              {onNavigateToScan && missingNotice.suggestedPage && (
+                              <div className="mt-1 flex flex-wrap gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     if (isGuest && onRequireAuth) {
-                                      onRequireAuth('Mở Tab 1 quét & bóc tách ảnh từ SGK');
+                                      onRequireAuth('Tìm & chọn ảnh trong Thư viện');
                                       return;
                                     }
-                                    onNavigateToScan(grade as GradeLevel, missingNotice.suggestedPage);
+                                    setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'image' });
                                   }}
-                                  className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
                                 >
-                                  <BookOpen className="w-3 h-3" />
-                                  <span>Mở Tab 1 trích xuất SGK Lớp {grade} (Trang {missingNotice.suggestedPage})</span>
+                                  <ImageIcon className="w-3 h-3" />
+                                  <span>Tìm ảnh trong Thư viện</span>
                                   {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                                 </button>
-                              )}
+                                {onNavigateToScan && missingNotice.suggestedPage && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (isGuest && onRequireAuth) {
+                                        onRequireAuth('Mở Tab 1 quét & bóc tách ảnh từ SGK');
+                                        return;
+                                      }
+                                      onNavigateToScan(grade as GradeLevel, missingNotice.suggestedPage);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
+                                  >
+                                    <BookOpen className="w-3 h-3" />
+                                    <span>Trích xuất SGK Lớp {grade} (Tr.{missingNotice.suggestedPage})</span>
+                                    {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -2365,7 +2517,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               currentPlan: currentPlanSnapshot,
               defaultBaselinePlan: {
                 ...currentPlanSnapshot,
-                rows: createBalancedGranularLessonRows(grade, title, images)
+                rows: createBalancedGranularLessonRows(grade, title, images, undefined, undefined, week, lessonNum)
               }
             }
           ]}

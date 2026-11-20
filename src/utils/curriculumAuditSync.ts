@@ -9,6 +9,7 @@ import {
   sanitizeVanDungRow,
   sanitizePlanRowsVanDung,
   sanitizeRowColumn1Media,
+  compactOverlongKnowledgeRow,
   isInvalidColumn1AttachmentForRow
 } from './planAutoMatcher';
 import { findSgkLessonByTopicOrTitle, getSgkTreeOverrides } from '../data/sgkCurriculumTree';
@@ -1045,12 +1046,13 @@ export function autoSyncCurriculumAndPlans(
           ? '2. HOẠT ĐỘNG ÔN TẬP & HƯỚNG DẪN ĐÁNH GIÁ\n2.1. Phổ biến nội dung, tiêu chuẩn đánh giá & kiểm tra:'
           : '2. HOẠT ĐỘNG HÌNH THÀNH KIẾN THỨC MỚI\n2.1. Khám phá & Làm quen động tác mới:';
 
+        const compactedRow = compactOverlongKnowledgeRow(row);
         const content = isStale
           ? `${sectionHeader}\n${acc.movementSteps}`
-          : row.content;
+          : compactedRow.content;
 
         return {
-          ...row,
+          ...compactedRow,
           content,
           contentImgUrl: resolvedImgUrl || undefined,
           contentImgTitle: resolvedImgTitle || undefined,

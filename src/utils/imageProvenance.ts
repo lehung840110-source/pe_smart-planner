@@ -480,9 +480,20 @@ export function resolveSlotMissingImageNotice(
     : '';
 
   const sgkRef = [cleanLessonName, pageLabel].filter(Boolean).join(' · ');
-  const message =
-    `Chưa tìm được hình phù hợp cho ${entityLabel} — ` +
-    `Cần trích xuất từ hình ảnh SGK GDTC Lớp ${grade} (${sgkRef}) và phân loại vào "${slotMeta.subFolderLabel}".`;
+  let message = '';
+  if (subFolder === 'kyThuat') {
+    message =
+      `Chưa xác định được hình ảnh động tác phù hợp cho "${entityLabel}" (đúng SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
+      `Hệ thống không tự chèn ảnh khối lớp khác để tránh nhầm lẫn — vui lòng tìm hình ảnh đúng trong Thư viện hoặc trích xuất từ SGK Lớp ${grade}.`;
+  } else if (subFolder === 'troChoiKhoiDong' || subFolder === 'troChoi') {
+    message =
+      `Chưa tìm được ảnh cho ${entityLabel} (SGK Lớp ${grade} · ${sgkRef}). ` +
+      `Vui lòng tìm hình ảnh trong Thư viện (trò chơi cùng tên giữa các khối lớp có thể dùng chung).`;
+  } else {
+    message =
+      `Chưa tìm được hình ảnh phù hợp cho ${entityLabel} (SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
+      `Vui lòng tìm hình ảnh đúng Khối ${grade} trong Thư viện (mục "${slotMeta.subFolderLabel}").`;
+  }
 
   return {
     subFolder,

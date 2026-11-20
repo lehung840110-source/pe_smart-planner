@@ -29,8 +29,13 @@ export interface MasterPlanItem {
     disabledStudents: string;
   };
   integrations: {
-    digitalSkill: string; // e.g. "3.1TC1a" or "1.1TC1a"
+    addressLabel?: string; // e.g. "GDQPAN & KNS", "NLS (mức L1–L2 – Mã 5.3)"
+    addressContent?: string; // Nội dung địa chỉ tích hợp trọng tâm theo bài/tuần
+    domains?: string[]; // ['NLS', 'GDQPAN', 'QuyenTreEm', 'ATGT', 'KNS', 'BVMT']
+    digitalSkill: string; // e.g. "mức L1–L2 – Mã 5.3"
     digitalDescription: string;
+    qpan?: string;
+    childRights?: string;
     lifeSkills: string;
     trafficSafety?: string;
     environmentalEducation?: string;
@@ -1500,8 +1505,13 @@ export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): Maste
       disabledStudents: raw.qualities?.disabledStudents ?? base.qualities.disabledStudents,
     },
     integrations: {
+      addressLabel: raw.integrations?.addressLabel ?? base.integrations.addressLabel,
+      addressContent: raw.integrations?.addressContent ?? base.integrations.addressContent,
+      domains: raw.integrations?.domains ?? base.integrations.domains,
       digitalSkill: raw.integrations?.digitalSkill ?? base.integrations.digitalSkill,
       digitalDescription: raw.integrations?.digitalDescription ?? base.integrations.digitalDescription,
+      qpan: raw.integrations?.qpan ?? base.integrations.qpan,
+      childRights: raw.integrations?.childRights ?? base.integrations.childRights,
       lifeSkills: raw.integrations?.lifeSkills ?? base.integrations.lifeSkills,
       trafficSafety: raw.integrations?.trafficSafety ?? base.integrations.trafficSafety,
       environmentalEducation: raw.integrations?.environmentalEducation ?? base.integrations.environmentalEducation,
