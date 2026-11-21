@@ -28,6 +28,7 @@ import {
   isNonCalisthenicsCoordinationText,
   matchTechnicalImagesByContext
 } from './keywordImageMatcher';
+import { normalizeAllCapsForSentenceBody } from './textCaseHelper';
 
 export interface AutoMatchResult {
   newRows: LessonRow[];
@@ -1410,7 +1411,7 @@ export function resolveAccurateMovement(
       `- Lắng nghe GV công bố nhận xét từng lượt; các bạn chưa đạt chủ động tập bổ trợ chuẩn bị kiểm tra lại.`;
 
     return {
-      movementName: cleanTitle,
+      movementName: normalizeAllCapsForSentenceBody(cleanTitle),
       imgUrl,
       imgTitle,
       movementSteps: steps,
@@ -1603,7 +1604,9 @@ export function resolveAccurateMovement(
 
   // 3. Authentic SGK Domain Profile (ĐHĐN / Tư thế VĐ cơ bản / Thể thao tự chọn / Ôn tập BTD)
   //    Strictly grounded in SGK textbook tree + contextual compound-keyword matching (NEVER hijacked by Bài thể dục!)
-  const cleanSkillTitle = title.replace(/\s*\([^)]*\)/g, '').replace(/^bài\s*\d+\s*[:\-]?\s*/i, '').trim() || 'Kỹ năng vận động bài học';
+  const rawCleanSkillTitle =
+    title.replace(/\s*\([^)]*\)/g, '').replace(/^bài\s*\d+\s*[:\-]?\s*/i, '').trim() || 'Kỹ năng vận động bài học';
+  const cleanSkillTitle = normalizeAllCapsForSentenceBody(rawCleanSkillTitle);
   const sgkTechItems = targetLesson?.subFolders?.kyThuat?.items || [];
   const selectedLibraryImgs = matchTechnicalImagesByContext(
     grade,
@@ -2582,7 +2585,7 @@ export function createBalanced7LessonRows(
 ): LessonRow[] {
   const resolved = resolveLessonSlotAssets(grade, title, '', userImages, customWarmupGame, customPracticeGame);
   const accurate = resolved.movementDetails;
-  const mName = accurate.movementName;
+  const mName = normalizeAllCapsForSentenceBody(accurate.movementName);
   const resolvedWarmup = resolved.warmupGameName;
   const resolvedPractice = resolved.practiceGameName;
   const warmupImg = resolved.warmupGameImg;
@@ -3033,7 +3036,7 @@ export function createBalancedGranularLessonRows(
 ): LessonRow[] {
   const resolved = resolveLessonSlotAssets(grade, title, '', userImages, customWarmupGame, customPracticeGame);
   const accurate = resolved.movementDetails;
-  const mName = accurate.movementName;
+  const mName = normalizeAllCapsForSentenceBody(accurate.movementName);
   const resolvedWarmup = resolved.warmupGameName;
   const resolvedPractice = resolved.practiceGameName;
   const warmupImg = resolved.warmupGameImg;

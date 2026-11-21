@@ -642,36 +642,47 @@ export function cleanTopicForDisplay(topic: string, grade?: number): string {
     .replace(/\s*khối\s*(lớp)?\s*\d+/gi, '')
     .trim();
 
+  // Preserve custom mixed/lowercase capitalization set by the teacher
+  const hasLowercaseLetters = /\p{Ll}/u.test(clean);
+
   // Keep Assessment / Evaluation topics intact (never collapse into Bài thể dục)
   if (/đánh giá|tổng kết|kiểm tra/i.test(clean)) {
-    return clean.toUpperCase();
+    return hasLowercaseLetters ? clean : clean.toUpperCase();
   }
 
   // Fix merged or malformed legacy topics
+  let wasLegacyNormalized = false;
   if (/đội hình đội ngũ/i.test(clean) && /thể dục/i.test(clean)) {
     clean = 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC';
+    wasLegacyNormalized = true;
   } else if (/bài tập thể dục với gậy/i.test(clean)) {
     clean = 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC';
+    wasLegacyNormalized = true;
   } else if (/bài tập thể dục phát triển chung/i.test(clean)) {
     clean = grade === 1 ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC' : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC';
+    wasLegacyNormalized = true;
   } else if (/^bài thể dục$/i.test(clean)) {
     clean = 'CHỦ ĐỀ 2: BÀI THỂ DỤC';
+    wasLegacyNormalized = true;
   } else if (/^bài tập thể dục$/i.test(clean)) {
     clean = 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC';
+    wasLegacyNormalized = true;
   }
 
   // Ensure "CHỦ ĐỀ" prefix
   if (!clean.toUpperCase().startsWith('CHỦ ĐỀ')) {
     if (/thể dục/i.test(clean)) {
       clean = grade === 1 ? `CHỦ ĐỀ 2: BÀI THỂ DỤC` : `CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC`;
+      wasLegacyNormalized = true;
     } else if (/đội hình/i.test(clean)) {
       clean = `CHỦ ĐỀ 1: ĐỘI HÌNH ĐỘI NGŨ`;
+      wasLegacyNormalized = true;
     } else {
-      clean = `CHỦ ĐỀ: ${clean}`;
+      clean = hasLowercaseLetters ? `Chủ đề: ${clean}` : `CHỦ ĐỀ: ${clean}`;
     }
   }
 
-  return clean.toUpperCase();
+  return hasLowercaseLetters && !wasLegacyNormalized ? clean : clean.toUpperCase();
 }
 
 export interface AuditCheckItem {

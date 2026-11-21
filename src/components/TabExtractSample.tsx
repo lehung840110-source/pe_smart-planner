@@ -26,6 +26,7 @@ import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationDiagram } from '../data/formationDiagrams';
 import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
+import { TextCaseButtons } from './TextCaseToolbar';
 
 interface TabExtractSampleProps {
   currentMasterPlan: MasterPlanItem;
@@ -872,7 +873,10 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                   {/* Cột 1: Nội dung */}
                   <td className="p-3 align-top">
                     {isEditMode ? (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-end">
+                          <TextCaseButtons />
+                        </div>
                         <textarea
                           rows={4}
                           value={row.content}
@@ -954,12 +958,17 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                   {/* Cột 3: Hoạt động GV */}
                   <td className="p-3 align-top leading-relaxed text-slate-800">
                     {isEditMode ? (
-                      <textarea
-                        rows={5}
-                        value={row.gv}
-                        onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
-                        className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
-                      />
+                      <div className="space-y-1.5">
+                        <div className="flex justify-end">
+                          <TextCaseButtons />
+                        </div>
+                        <textarea
+                          rows={5}
+                          value={row.gv}
+                          onChange={(e) => handleUpdateRow(idx, 'gv', e.target.value)}
+                          className="w-full p-2 text-xs rounded-lg border border-slate-300 focus:border-blue-500 focus:outline-none"
+                        />
+                      </div>
                     ) : (
                       <div className="whitespace-pre-line">{row.gv}</div>
                     )}
@@ -968,7 +977,10 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                   {/* Cột 4: Hoạt động HS & Sơ đồ đội hình */}
                   <td className="p-3 align-top leading-relaxed text-slate-800">
                     {isEditMode ? (
-                      <div className="space-y-2">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-end">
+                          <TextCaseButtons />
+                        </div>
                         <textarea
                           rows={4}
                           value={row.hs}

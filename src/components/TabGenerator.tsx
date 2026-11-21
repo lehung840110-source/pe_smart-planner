@@ -32,6 +32,7 @@ import {
 import { GradeLevel, LessonRow, ScenarioItem, SgkImageItem, DiagramAttachment, UserCustomTemplate } from '../types/gdtc';
 import { MasterPlanItem, nextWeeksSyllabusPresets, masterPlansTuan8, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { PlanVersionHistoryModal } from './PlanVersionHistoryModal';
+import { TextCaseButtons } from './TextCaseToolbar';
 import {
   PlanVersionStore,
   LessonPlanVersion,
@@ -916,10 +917,13 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           </div>
 
           {/* Chủ đề */}
-          <div>
-            <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-              Chủ Đề:
-            </label>
+          <div data-case-field>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className="block text-[11px] font-semibold text-slate-600">
+                Chủ Đề:
+              </label>
+              <TextCaseButtons />
+            </div>
             <input
               type="text"
               value={topic}
@@ -930,10 +934,13 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         </div>
 
         {/* Tên bài học */}
-        <div>
-          <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-            Tên Bài Dạy Mới (Chứa các động tác cần học):
-          </label>
+        <div data-case-field>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="block text-[11px] font-semibold text-slate-600">
+              Tên Bài Dạy Mới (Chứa các động tác cần học):
+            </label>
+            <TextCaseButtons />
+          </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="text"
@@ -1511,13 +1518,14 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 </div>
 
                 {/* Cột 1: Nội dung / Kỹ thuật / Ảnh */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="space-y-2" data-case-field>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[11px] font-bold text-blue-700">
                       1. Nội dung / Kỹ thuật &amp; Ảnh minh họa
                     </span>
                     {effectiveEditMode && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <TextCaseButtons />
                         <button
                           type="button"
                           onClick={() =>
@@ -1706,21 +1714,24 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 </div>
 
                 {/* Cột 3: Hoạt động Giáo viên */}
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2" data-case-field>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[11px] font-bold text-emerald-800">
                       2. Hoạt động của Giáo viên
                     </span>
                     {effectiveEditMode && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setTargetColAttachment({ rowIndex: idx, col: 'gv', type: 'image' })
-                        }
-                        className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1"
-                      >
-                        <ImageIcon className="w-3 h-3" /> Chèn ảnh
-                      </button>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <TextCaseButtons />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTargetColAttachment({ rowIndex: idx, col: 'gv', type: 'image' })
+                          }
+                          className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-3 h-3" /> Chèn ảnh
+                        </button>
+                      </div>
                     )}
                   </div>
                   {effectiveEditMode ? (
@@ -1754,13 +1765,14 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                 </div>
 
                 {/* Cột 4: Hoạt động Học sinh & Sơ đồ */}
-                <div className="p-3 rounded-xl bg-blue-50/40 border border-blue-200/70 space-y-2">
+                <div className="p-3 rounded-xl bg-blue-50/40 border border-blue-200/70 space-y-2" data-case-field>
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-[11px] font-bold text-indigo-800">
                       3. Hoạt động của Học sinh &amp; Sơ đồ đội hình
                     </span>
                     {effectiveEditMode && (
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <TextCaseButtons />
                         <button
                           type="button"
                           onClick={() =>
@@ -1940,7 +1952,8 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                             </div>
 
                             {/* Inline Insertion at cursor for Column 1 */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap justify-end">
+                              <TextCaseButtons />
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2292,9 +2305,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
                       {effectiveEditMode ? (
                         <>
-                          <div className="flex items-center justify-between bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
+                          <div className="flex items-center justify-between gap-1 flex-wrap bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
                             <span className="font-bold text-emerald-800 text-[10px]">Cột 3: Kịch Bản GV</span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <TextCaseButtons />
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2417,9 +2431,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
                       {effectiveEditMode ? (
                         <>
-                          <div className="flex items-center justify-between bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">
+                          <div className="flex items-center justify-between gap-1 flex-wrap bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">
                             <span className="font-bold text-purple-800 text-[10px]">Cột 4: Hoạt Động HS</span>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <TextCaseButtons />
                               <button
                                 type="button"
                                 onClick={(e) => {

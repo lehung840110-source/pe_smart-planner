@@ -901,7 +901,21 @@ app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) =>
     'stick',
     'flag',
     'text',
-    'sgk_board'
+    'sgk_board',
+    'grid_box',
+    'parallel_lines',
+    'foot_left',
+    'foot_right',
+    'feet_pair',
+    'hand_left',
+    'hand_right',
+    'hands_pair',
+    'mat',
+    'hurdle',
+    'goal_gate',
+    'zigzag_path',
+    'jump_arc',
+    'star_target'
   ]);
 
   const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(val)));
@@ -924,6 +938,27 @@ app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) =>
       if (el.width !== undefined) item.width = clamp(Number(el.width) || 120, 20, 560);
       if (el.height !== undefined) item.height = clamp(Number(el.height) || 70, 6, 320);
       if (el.fontSize !== undefined) item.fontSize = clamp(Number(el.fontSize) || 12, 9, 22);
+      if (el.rotation !== undefined) item.rotation = clamp(Number(el.rotation) || 0, 0, 359);
+      if (typeof el.groupId === 'string' && el.groupId.trim()) item.groupId = el.groupId.trim().slice(0, 60);
+      if (el.scale !== undefined) {
+        const s = Number(el.scale);
+        if (Number.isFinite(s)) item.scale = Math.max(0.4, Math.min(2.2, Number(s.toFixed(2))));
+      }
+      if (type === 'grid_box') {
+        item.rows = clamp(Number(el.rows) || 3, 1, 8);
+        item.cols = clamp(Number(el.cols) || 3, 1, 8);
+        item.cellSize = clamp(Number(el.cellSize) || 36, 12, 72);
+        if (el.cellMode === 'numbers' || el.cellMode === 'hand_foot' || el.cellMode === 'empty') {
+          item.cellMode = el.cellMode;
+        }
+      }
+      if (type === 'parallel_lines') {
+        item.orientation = el.orientation === 'vertical' ? 'vertical' : 'horizontal';
+        item.lineCount = clamp(Number(el.lineCount) || 4, 2, 12);
+        item.lineSpacing = clamp(Number(el.lineSpacing) || 32, 6, 90);
+        item.lineLength = clamp(Number(el.lineLength) || 220, 24, 520);
+        item.lineStyle = el.lineStyle === 'dashed' ? 'dashed' : 'solid';
+      }
       if (type === 'line_solid' || type === 'line_dashed' || type === 'arrow_straight' || type === 'arrow_curved') {
         item.endX = clamp(Number(el.endX) || item.x + 100, 30, 610);
         item.endY = clamp(Number(el.endY) || item.y, 68, 405);
@@ -938,6 +973,34 @@ app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) =>
     const corpus = `${rawTitle} ${rawCaption}`.toLowerCase();
     const gNum = Number(gradeVal) || 1;
     const baseGv = { id: 'gv_main', type: 'gv', x: 320, y: 82, color: '#dc2626', label: 'GV Điều Hành' };
+
+    // 0. Chân tay khéo khỏe / Ô vuông 3x3
+    if (corpus.includes('chân tay') || corpus.includes('khéo khỏe') || corpus.includes('3x3') || corpus.includes('3×3')) {
+      return {
+        name: `Sơ đồ Trò chơi: ${cleanTitle} (Khối ${gNum})`,
+        subtitle: 'Lưới ô 3×3 · Đặt đúng bàn tay & bàn chân',
+        description: '2 đội xếp hàng sau vạch xuất phát, di chuyển qua lưới ô vuông 3×3 đặt đúng bàn tay và bàn chân theo ký hiệu.',
+        phase: 'tro_choi',
+        elements: [
+          baseGv,
+          { id: 'xp_ct', type: 'line_solid', x: 140, y: 120, endX: 140, endY: 365, color: '#dc2626', label: 'Vạch XP' },
+          { id: 'lane_ct', type: 'parallel_lines', x: 345, y: 245, orientation: 'horizontal', lineCount: 3, lineSpacing: 115, lineLength: 380, lineStyle: 'dashed', color: '#94a3b8' },
+          { id: 'd1_1', type: 'hs', x: 75, y: 185, color: '#2563eb', label: '1' },
+          { id: 'd1_2', type: 'hs', x: 105, y: 185, color: '#2563eb', label: '2' },
+          { id: 'grid_1', type: 'grid_box', x: 265, y: 185, rows: 3, cols: 3, cellSize: 32, cellMode: 'hand_foot', color: '#2563eb', label: 'Ô 3×3 (Đội 1)' },
+          { id: 'arr_1', type: 'jump_arc', x: 395, y: 185, width: 95, height: 32, color: '#ea580c', label: 'Bật nhảy' },
+          { id: 'hand_1', type: 'hands_pair', x: 472, y: 185, radius: 13, color: '#ea580c' },
+          { id: 'flag_1', type: 'flag', x: 545, y: 185, color: '#2563eb', label: 'Đích 1' },
+          { id: 'd2_1', type: 'hs', x: 75, y: 305, color: '#16a34a', label: '1' },
+          { id: 'd2_2', type: 'hs', x: 105, y: 305, color: '#16a34a', label: '2' },
+          { id: 'grid_2', type: 'grid_box', x: 265, y: 305, rows: 3, cols: 3, cellSize: 32, cellMode: 'hand_foot', color: '#16a34a', label: 'Ô 3×3 (Đội 2)' },
+          { id: 'arr_2', type: 'jump_arc', x: 395, y: 305, width: 95, height: 32, color: '#ea580c', label: 'Bật nhảy' },
+          { id: 'feet_2', type: 'feet_pair', x: 472, y: 305, radius: 13, color: '#16a34a' },
+          { id: 'flag_2', type: 'flag', x: 545, y: 305, color: '#16a34a', label: 'Đích 2' },
+          { id: 'txt_ct', type: 'text', x: 320, y: 400, color: '#475569', label: 'Đặt đúng bàn tay/bàn chân vào từng ô 3×3, chạm đích chạy về tiếp sức', fontSize: 11 }
+        ]
+      };
+    }
 
     // 1. Mèo đuổi chuột / Vòng tròn làm hang
     if (corpus.includes('mèo đuổi chuột') || (corpus.includes('mèo') && corpus.includes('chuột'))) {

@@ -39,6 +39,7 @@ import {
 import mammoth from 'mammoth';
 import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel } from '../types/gdtc';
 import { customTemplateToMasterPlan } from '../utils/documentParser';
+import { TextCaseButtons } from './TextCaseToolbar';
 import {
   RichTextWithImages,
   insertImageAtCursor,
@@ -4060,30 +4061,34 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <div className="pt-1.5">
                   {isEditMode ? (
                     <div className="space-y-1.5">
-                      <div className="flex justify-center items-center gap-2">
+                      <div className="flex justify-center items-center gap-2 flex-wrap" data-case-field>
                         <span className="text-xs text-slate-500">Chủ đề:</span>
                         <input
                           type="text"
                           value={plan.topic}
                           onChange={(e) => handlePlanMetaChange(plan.id, 'topic', e.target.value)}
-                          className="font-bold uppercase text-xs text-blue-900 bg-blue-50/80 px-3 py-1 rounded-full border border-blue-300 text-center w-80"
+                          className="font-bold text-xs text-blue-900 bg-blue-50/80 px-3 py-1 rounded-full border border-blue-300 text-center w-80"
                         />
+                        <TextCaseButtons />
                       </div>
-                      <input
-                        type="text"
-                        value={plan.title}
-                        onChange={(e) => handlePlanMetaChange(plan.id, 'title', e.target.value)}
-                        className="w-full text-center font-extrabold text-sm text-slate-900 uppercase focus:outline-none p-1 border border-blue-300 rounded bg-blue-50/50"
-                        title="Sửa tên bài học"
-                      />
+                      <div className="flex items-center gap-1.5" data-case-field>
+                        <input
+                          type="text"
+                          value={plan.title}
+                          onChange={(e) => handlePlanMetaChange(plan.id, 'title', e.target.value)}
+                          className="w-full text-center font-extrabold text-sm text-slate-900 focus:outline-none p-1 border border-blue-300 rounded bg-blue-50/50"
+                          title="Sửa tên bài học"
+                        />
+                        <TextCaseButtons />
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-1">
-                      <p className="font-bold uppercase text-xs tracking-wider text-blue-900">
+                      <p className="font-bold text-xs tracking-wider text-blue-900">
                         {cleanTopicForDisplay(plan.topic, plan.grade)}&nbsp;&nbsp;&nbsp;&nbsp;TIẾT {plan.lessonNum}
                       </p>
-                      <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 uppercase tracking-wide">
-                        {cleanLessonTitleForHeader(plan.title).toUpperCase()}
+                      <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide">
+                        {cleanLessonTitleForHeader(plan.title)}
                       </h3>
                     </div>
                   )}
@@ -4763,7 +4768,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     </button>
                                   </div>
 
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                                    <TextCaseButtons />
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -5063,7 +5069,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     <Users className="w-3 h-3 text-emerald-600" />
                                     <span>Hoạt động GV</span>
                                   </span>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                                    <TextCaseButtons />
                                     <button
                                       type="button"
                                       onClick={(e) => {
@@ -5217,7 +5224,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                     <Activity className="w-3 h-3 text-purple-600" />
                                     <span>Hoạt động HS & Sơ đồ</span>
                                   </span>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                                    <TextCaseButtons />
                                     <button
                                       type="button"
                                       onClick={(e) => {

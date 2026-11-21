@@ -19,6 +19,7 @@ import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { AuthModal } from './components/AuthModal';
 import { LockedFeatureGate } from './components/LockedFeatureGate';
+import { GlobalFloatingTextCaseBar } from './components/TextCaseToolbar';
 import { FormationDiagram, saveCustomFormationToStorage, standardFormationDiagrams } from './data/formationDiagrams';
 import { ParsedLessonFileResult, parseLessonFile, customTemplateToMasterPlan } from './utils/documentParser';
 import { exportWordDocument, buildWordExportPackage } from './utils/exportUtils';
@@ -2754,6 +2755,9 @@ export default function App() {
           showToast={showToast}
         />
       )}
+
+      {/* Global quick uppercase/lowercase bar on text selection + Shift+F3 shortcut */}
+      <GlobalFloatingTextCaseBar />
     </div>
   );
 }

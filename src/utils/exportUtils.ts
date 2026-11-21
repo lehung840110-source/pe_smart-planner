@@ -413,11 +413,11 @@ export async function buildWordExportPackage(
         <p style="margin: 2pt 0 6pt 0; font-size: 11pt; font-style: italic;">
           (${escapeHtml(plan.dateRange)})
         </p>
-        <p style="margin: 0; font-size: 12.5pt; font-weight: bold; text-transform: uppercase; color: #1e3a8a;">
+        <p style="margin: 0; font-size: 12.5pt; font-weight: bold; color: #1e3a8a;">
           ${escapeHtml(cleanTopicForDisplay(plan.topic, plan.grade))}&nbsp;&nbsp;&nbsp;&nbsp;TIẾT ${plan.lessonNum}
         </p>
-        <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold; text-transform: uppercase;">
-          ${escapeHtml(cleanLessonTitleForHeader(plan.title)).toUpperCase()}
+        <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">
+          ${escapeHtml(cleanLessonTitleForHeader(plan.title))}
         </p>
       </div>
 

@@ -18,7 +18,21 @@ export interface FormationElement {
     | 'stick'
     | 'flag'
     | 'text'
-    | 'sgk_board';
+    | 'sgk_board'
+    | 'grid_box'
+    | 'parallel_lines'
+    | 'foot_left'
+    | 'foot_right'
+    | 'feet_pair'
+    | 'hand_left'
+    | 'hand_right'
+    | 'hands_pair'
+    | 'mat'
+    | 'hurdle'
+    | 'goal_gate'
+    | 'zigzag_path'
+    | 'jump_arc'
+    | 'star_target';
   x: number;
   y: number;
   width?: number;
@@ -30,6 +44,410 @@ export interface FormationElement {
   label?: string;
   fontSize?: number;
   rotation?: number;
+  /** For grid_box */
+  rows?: number;
+  cols?: number;
+  cellSize?: number;
+  cellMode?: 'empty' | 'numbers' | 'hand_foot';
+  /** For parallel_lines */
+  orientation?: 'horizontal' | 'vertical';
+  lineCount?: number;
+  lineSpacing?: number;
+  lineLength?: number;
+  lineStyle?: 'solid' | 'dashed';
+  /** Persistent group ID for grouped selection & manipulation */
+  groupId?: string;
+  /** Uniform scale multiplier for fixed-geometry icons (gv, cone, marker, flag) */
+  scale?: number;
+}
+
+function getRotatedRectBox(cx: number, cy: number, w: number, h: number, rotationDeg?: number) {
+  if (!rotationDeg) {
+    return { x: cx - w / 2, y: cy - h / 2, w, h };
+  }
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  const rotW = w * cos + h * sin;
+  const rotH = w * sin + h * cos;
+  return { x: cx - rotW / 2, y: cy - rotH / 2, w: rotW, h: rotH };
+}
+
+export function getElementBoundingBox(el: FormationElement): { x: number; y: number; w: number; h: number } {
+  if (el.type === 'grid_box') {
+    const rows = Math.max(1, Math.min(8, el.rows ?? 3));
+    const cols = Math.max(1, Math.min(8, el.cols ?? 3));
+    const cell = Math.max(12, Math.min(72, el.cellSize ?? 36));
+    return getRotatedRectBox(el.x, el.y, cols * cell, rows * cell, el.rotation);
+  }
+  if (el.type === 'parallel_lines') {
+    const count = Math.max(2, Math.min(12, el.lineCount ?? 4));
+    const spacing = Math.max(6, Math.min(90, el.lineSpacing ?? 32));
+    const length = Math.max(24, Math.min(540, el.lineLength ?? 220));
+    const span = (count - 1) * spacing;
+    const isVert = el.orientation === 'vertical';
+    const w = isVert ? Math.max(20, span + 12) : length;
+    const h = isVert ? length : Math.max(20, span + 12);
+    return getRotatedRectBox(el.x, el.y, w, h, el.rotation);
+  }
+  if (
+    el.type === 'shape_rect' ||
+    el.type === 'sgk_board' ||
+    el.type === 'mat' ||
+    el.type === 'hurdle' ||
+    el.type === 'goal_gate' ||
+    el.type === 'stick'
+  ) {
+    const w =
+      el.width ||
+      (el.type === 'mat'
+        ? 76
+        : el.type === 'hurdle'
+        ? 52
+        : el.type === 'goal_gate'
+        ? 64
+        : el.type === 'stick'
+        ? 40
+        : 140);
+    const h =
+      el.height ||
+      (el.type === 'mat'
+        ? 42
+        : el.type === 'hurdle'
+        ? 18
+        : el.type === 'goal_gate'
+        ? 28
+        : el.type === 'stick'
+        ? 10
+        : 70);
+    return getRotatedRectBox(el.x, el.y, w, h, el.rotation);
+  }
+  if (el.type === 'zigzag_path' || el.type === 'jump_arc') {
+    const w = el.width || (el.type === 'zigzag_path' ? 160 : 90);
+    const h = el.height || (el.type === 'zigzag_path' ? 44 : 34);
+    return getRotatedRectBox(el.x, el.y, w, h, el.rotation);
+  }
+  if (el.type === 'line_solid' || el.type === 'line_dashed' || el.type === 'arrow_straight' || el.type === 'arrow_curved') {
+    const x2 = el.endX ?? el.x + 80;
+    const y2 = el.endY ?? el.y;
+    const minX = Math.min(el.x, x2);
+    const minY = Math.min(el.y, y2);
+    return { x: minX, y: minY, w: Math.max(20, Math.abs(x2 - el.x)), h: Math.max(20, Math.abs(y2 - el.y)) };
+  }
+  if (el.type === 'gv' || el.type === 'cone' || el.type === 'marker' || el.type === 'flag') {
+    const r = Math.round(16 * (el.scale ?? 1));
+    return { x: el.x - r, y: el.y - r, w: r * 2, h: r * 2 };
+  }
+  const r = el.radius || 16;
+  return { x: el.x - r, y: el.y - r, w: r * 2, h: r * 2 };
+}
+
+export type AlignmentMode =
+  | 'left'
+  | 'centerX'
+  | 'right'
+  | 'top'
+  | 'centerY'
+  | 'bottom'
+  | 'distributeH'
+  | 'distributeV'
+  | 'centerCourt';
+
+function shiftElementBy(el: FormationElement, dx: number, dy: number): FormationElement {
+  const nextX = Math.max(15, Math.min(625, Math.round(el.x + dx)));
+  const nextY = Math.max(60, Math.min(415, Math.round(el.y + dy)));
+  const actualDx = nextX - el.x;
+  const actualDy = nextY - el.y;
+  if (el.endX !== undefined && el.endY !== undefined) {
+    return {
+      ...el,
+      x: nextX,
+      y: nextY,
+      endX: Math.max(15, Math.min(625, Math.round(el.endX + actualDx))),
+      endY: Math.max(60, Math.min(415, Math.round(el.endY + actualDy)))
+    };
+  }
+  return { ...el, x: nextX, y: nextY };
+}
+
+/**
+ * Proportionally scale a set of selected elements (both positions & sizes) around an anchor point.
+ */
+export function scaleFormationElements(
+  elements: FormationElement[],
+  targetIds: string[],
+  factor: number,
+  anchorX?: number,
+  anchorY?: number
+): FormationElement[] {
+  const idSet = new Set(targetIds);
+  const selected = elements.filter((el) => idSet.has(el.id));
+  if (selected.length === 0) return elements;
+
+  let cx = anchorX;
+  let cy = anchorY;
+  if (cx === undefined || cy === undefined) {
+    let minX = 9999;
+    let maxX = -9999;
+    let minY = 9999;
+    let maxY = -9999;
+    selected.forEach((el) => {
+      const b = getElementBoundingBox(el);
+      minX = Math.min(minX, b.x);
+      maxX = Math.max(maxX, b.x + b.w);
+      minY = Math.min(minY, b.y);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+    cx = (minX + maxX) / 2;
+    cy = (minY + maxY) / 2;
+  }
+
+  const safeFactor = Math.max(0.35, Math.min(2.5, factor));
+  const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  return elements.map((el) => {
+    if (!idSet.has(el.id)) return el;
+    const next: FormationElement = {
+      ...el,
+      x: clampNum(Math.round(cx! + (el.x - cx!) * safeFactor), 18, 622),
+      y: clampNum(Math.round(cy! + (el.y - cy!) * safeFactor), 62, 412)
+    };
+    if (el.endX !== undefined && el.endY !== undefined) {
+      next.endX = clampNum(Math.round(cx! + (el.endX - cx!) * safeFactor), 18, 622);
+      next.endY = clampNum(Math.round(cy! + (el.endY - cy!) * safeFactor), 62, 412);
+    }
+
+    if (el.type === 'grid_box') {
+      next.cellSize = clampNum(Math.round((el.cellSize ?? 36) * safeFactor), 12, 72);
+    } else if (el.type === 'parallel_lines') {
+      next.lineSpacing = clampNum(Math.round((el.lineSpacing ?? 32) * safeFactor), 6, 90);
+      next.lineLength = clampNum(Math.round((el.lineLength ?? 220) * safeFactor), 24, 540);
+    } else if (
+      el.type === 'shape_rect' ||
+      el.type === 'sgk_board' ||
+      el.type === 'mat' ||
+      el.type === 'hurdle' ||
+      el.type === 'goal_gate' ||
+      el.type === 'zigzag_path' ||
+      el.type === 'jump_arc' ||
+      el.type === 'stick'
+    ) {
+      const baseW =
+        el.width ||
+        (el.type === 'mat'
+          ? 76
+          : el.type === 'hurdle'
+          ? 52
+          : el.type === 'goal_gate'
+          ? 64
+          : el.type === 'zigzag_path'
+          ? 160
+          : el.type === 'jump_arc'
+          ? 90
+          : el.type === 'stick'
+          ? 40
+          : 140);
+      const baseH =
+        el.height ||
+        (el.type === 'mat'
+          ? 42
+          : el.type === 'hurdle'
+          ? 18
+          : el.type === 'goal_gate'
+          ? 28
+          : el.type === 'zigzag_path'
+          ? 40
+          : el.type === 'jump_arc'
+          ? 34
+          : el.type === 'stick'
+          ? 7
+          : 70);
+      next.width = clampNum(Math.round(baseW * safeFactor), 20, 520);
+      next.height = clampNum(Math.round(baseH * safeFactor), 6, 300);
+    } else if (
+      el.type === 'hs' ||
+      el.type === 'cs' ||
+      el.type === 'tt' ||
+      el.type === 'ball' ||
+      el.type === 'hoop' ||
+      el.type === 'shape_circle' ||
+      el.type === 'foot_left' ||
+      el.type === 'foot_right' ||
+      el.type === 'feet_pair' ||
+      el.type === 'hand_left' ||
+      el.type === 'hand_right' ||
+      el.type === 'hands_pair' ||
+      el.type === 'star_target'
+    ) {
+      const baseR =
+        el.radius ||
+        (el.type === 'hs'
+          ? 11
+          : el.type === 'cs' || el.type === 'tt'
+          ? 12
+          : el.type === 'ball'
+          ? 13
+          : el.type === 'hoop'
+          ? 20
+          : el.type === 'shape_circle'
+          ? 50
+          : 16);
+      next.radius = clampNum(Math.round(baseR * safeFactor * 10) / 10, 5, 160);
+    } else if (el.type === 'gv' || el.type === 'cone' || el.type === 'marker' || el.type === 'flag') {
+      next.scale = clampNum(Math.round((el.scale ?? 1) * safeFactor * 100) / 100, 0.45, 2.2);
+    } else if (el.type === 'text') {
+      next.fontSize = clampNum(Math.round((el.fontSize ?? 12.5) * safeFactor * 10) / 10, 8, 28);
+    }
+    return next;
+  });
+}
+
+/**
+ * Align or distribute selected elements cleanly.
+ * If selection contains multiple distinct persistent groups, aligns each group as an atomic unit.
+ */
+export function alignFormationElements(
+  elements: FormationElement[],
+  targetIds: string[],
+  mode: AlignmentMode
+): FormationElement[] {
+  const idSet = new Set(targetIds);
+  const selected = elements.filter((el) => idSet.has(el.id));
+  if (selected.length === 0) return elements;
+
+  if (mode === 'centerCourt') {
+    let minX = 9999;
+    let maxX = -9999;
+    let minY = 9999;
+    let maxY = -9999;
+    selected.forEach((el) => {
+      const b = getElementBoundingBox(el);
+      minX = Math.min(minX, b.x);
+      maxX = Math.max(maxX, b.x + b.w);
+      minY = Math.min(minY, b.y);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+    const dx = 320 - (minX + maxX) / 2;
+    const dy = 235 - (minY + maxY) / 2;
+    return elements.map((el) => (idSet.has(el.id) ? shiftElementBy(el, dx, dy) : el));
+  }
+
+  if (selected.length < 2) return elements;
+
+  // Determine atomic units: if multiple distinct groups/items exist, preserve internal structure of distinct groups
+  const distinctGroups = new Set(selected.map((el) => el.groupId).filter(Boolean));
+  const useGroupUnits = distinctGroups.size >= 2 || (distinctGroups.size === 1 && selected.some((el) => !el.groupId));
+
+  interface AlignUnit {
+    key: string;
+    memberIds: string[];
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    cx: number;
+    cy: number;
+  }
+
+  const unitMap = new Map<string, FormationElement[]>();
+  selected.forEach((el) => {
+    const key = useGroupUnits && el.groupId ? `grp:${el.groupId}` : `el:${el.id}`;
+    const arr = unitMap.get(key) || [];
+    arr.push(el);
+    unitMap.set(key, arr);
+  });
+
+  const units: AlignUnit[] = Array.from(unitMap.entries()).map(([key, members]) => {
+    let minX = 9999;
+    let maxX = -9999;
+    let minY = 9999;
+    let maxY = -9999;
+    members.forEach((m) => {
+      const b = getElementBoundingBox(m);
+      minX = Math.min(minX, b.x);
+      maxX = Math.max(maxX, b.x + b.w);
+      minY = Math.min(minY, b.y);
+      maxY = Math.max(maxY, b.y + b.h);
+    });
+    return {
+      key,
+      memberIds: members.map((m) => m.id),
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY,
+      cx: (minX + maxX) / 2,
+      cy: (minY + maxY) / 2
+    };
+  });
+
+  if (units.length < 2) return elements;
+
+  const deltaByElId = new Map<string, { dx: number; dy: number }>();
+  const setUnitDelta = (u: AlignUnit, dx: number, dy: number) => {
+    u.memberIds.forEach((id) => deltaByElId.set(id, { dx, dy }));
+  };
+
+  if (mode === 'left') {
+    const targetLeft = Math.min(...units.map((u) => u.x));
+    units.forEach((u) => setUnitDelta(u, targetLeft - u.x, 0));
+  } else if (mode === 'right') {
+    const targetRight = Math.max(...units.map((u) => u.x + u.w));
+    units.forEach((u) => setUnitDelta(u, targetRight - (u.x + u.w), 0));
+  } else if (mode === 'centerX') {
+    const targetCx = units.reduce((acc, u) => acc + u.cx, 0) / units.length;
+    units.forEach((u) => setUnitDelta(u, targetCx - u.cx, 0));
+  } else if (mode === 'top') {
+    const targetTop = Math.min(...units.map((u) => u.y));
+    units.forEach((u) => setUnitDelta(u, 0, targetTop - u.y));
+  } else if (mode === 'bottom') {
+    const targetBottom = Math.max(...units.map((u) => u.y + u.h));
+    units.forEach((u) => setUnitDelta(u, 0, targetBottom - (u.y + u.h)));
+  } else if (mode === 'centerY') {
+    const targetCy = units.reduce((acc, u) => acc + u.cy, 0) / units.length;
+    units.forEach((u) => setUnitDelta(u, 0, targetCy - u.cy));
+  } else if (mode === 'distributeH' && units.length >= 3) {
+    const sorted = [...units].sort((a, b) => a.cx - b.cx);
+    const first = sorted[0].cx;
+    const last = sorted[sorted.length - 1].cx;
+    const step = (last - first) / (sorted.length - 1);
+    sorted.forEach((u, idx) => setUnitDelta(u, first + idx * step - u.cx, 0));
+  } else if (mode === 'distributeV' && units.length >= 3) {
+    const sorted = [...units].sort((a, b) => a.cy - b.cy);
+    const first = sorted[0].cy;
+    const last = sorted[sorted.length - 1].cy;
+    const step = (last - first) / (sorted.length - 1);
+    sorted.forEach((u, idx) => setUnitDelta(u, 0, first + idx * step - u.cy));
+  }
+
+  return elements.map((el) => {
+    const delta = deltaByElId.get(el.id);
+    if (!delta) return el;
+    return shiftElementBy(el, delta.dx, delta.dy);
+  });
+}
+
+export function buildFootSvgInner(color: string, mirrorX: boolean = false, scale: number = 1): string {
+  const sx = mirrorX ? -scale : scale;
+  return `
+    <g transform="scale(${sx}, ${scale})">
+      <path d="M -3.5,11 C -5.5,6 -4.5,0 -5.5,-4.5 C -5.8,-7.5 -2,-9.5 1.8,-8.5 C 5.5,-7.5 6.2,-3.5 4.6,2 C 3.6,6 4.5,10.5 1.2,12.5 C -1.5,13.5 -3,12.5 -3.5,11 Z" fill="${color}" stroke="#ffffff" stroke-width="1.2"/>
+      <ellipse cx="4.2" cy="-12.2" rx="2.3" ry="3.1" fill="${color}" stroke="#ffffff" stroke-width="0.9"/>
+      <ellipse cx="0.6" cy="-13" rx="1.6" ry="2.4" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
+      <ellipse cx="-2.3" cy="-12.2" rx="1.4" ry="2.1" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
+      <ellipse cx="-4.8" cy="-10.6" rx="1.25" ry="1.8" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
+      <ellipse cx="-6.7" cy="-8.4" rx="1.1" ry="1.5" fill="${color}" stroke="#ffffff" stroke-width="0.8"/>
+    </g>
+  `;
+}
+
+export function buildHandSvgInner(color: string, mirrorX: boolean = false, scale: number = 1): string {
+  const sx = mirrorX ? -scale : scale;
+  return `
+    <g transform="scale(${sx}, ${scale})">
+      <path d="M -6,11 C -8,8 -8.5,3 -8.5,-1 L -8.5,-7.5 C -8.5,-9 -6.5,-9 -6.5,-7.5 L -6.5,-1.5 L -5,-1.5 L -5,-10.5 C -5,-12 -2.8,-12 -2.8,-10.5 L -2.8,-2 L -1.2,-2 L -1.2,-12 C -1.2,-13.6 1.1,-13.6 1.1,-12 L 1.1,-2 L 2.7,-2 L 2.7,-10 C 2.7,-11.6 4.9,-11.6 4.9,-10 L 4.9,0.5 L 7.8,-2.8 C 9,-4 10.7,-2.5 9.5,-1.2 L 5.6,4.8 C 4.8,8.5 3.2,11.5 0,12 C -3,12.5 -5,12 -6,11 Z" fill="${color}" stroke="#ffffff" stroke-width="1.1" stroke-linejoin="round"/>
+    </g>
+  `;
 }
 
 export type CourtTheme = 'clean' | 'turf' | 'court';
@@ -104,13 +522,15 @@ export function renderFormationSvgString(
   const elementsSvg = elements
     .map((el) => {
       switch (el.type) {
-        case 'gv':
+        case 'gv': {
+          const sc = el.scale ?? 1;
           return `
-            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
               <polygon points="0,-18 -16,14 16,14" fill="${el.color || '#dc2626'}" />
               <text x="0" y="28" font-family="sans-serif" font-size="13" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle"> ${escXml(el.label || 'GV')}</text>
             </g>
           `;
+        }
         case 'hs': {
           const r = el.radius || 11;
           return `
@@ -212,8 +632,9 @@ export function renderFormationSvgString(
           `;
         }
         case 'cone': {
+          const sc = el.scale ?? 1;
           return `
-            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
               <polygon points="0,-16 -12,12 12,12" fill="${el.color || '#ea580c'}"/>
               <rect x="-14" y="10" width="28" height="4" rx="2" fill="${el.color || '#c2410c'}"/>
               <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6"/>
@@ -222,8 +643,9 @@ export function renderFormationSvgString(
           `;
         }
         case 'marker': {
+          const sc = el.scale ?? 1;
           return `
-            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
               <ellipse cx="0" cy="0" rx="14" ry="7" fill="${el.color || '#eab308'}" stroke="#ca8a04" stroke-width="1.5"/>
               <circle cx="0" cy="-1" r="3" fill="#ca8a04"/>
               ${el.label ? `<text x="0" y="17" font-family="sans-serif" font-size="10" font-weight="bold" fill="#a16207" text-anchor="middle">${escXml(el.label)}</text>` : ''}
@@ -249,8 +671,9 @@ export function renderFormationSvgString(
           `;
         }
         case 'flag': {
+          const sc = el.scale ?? 1;
           return `
-            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
               <line x1="0" y1="16" x2="0" y2="-18" stroke="#475569" stroke-width="2.5" stroke-linecap="round"/>
               <polygon points="0,-18 18,-11 0,-4" fill="${el.color || '#dc2626'}"/>
               <circle cx="0" cy="16" r="4" fill="#334155"/>
@@ -273,6 +696,208 @@ export function renderFormationSvgString(
               <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
               <text x="0" y="${-h / 2 + 20}" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="#b45309" text-anchor="middle">📖 TRANH KỸ THUẬT</text>
               <text x="0" y="${-h / 2 + 40}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#92400e" text-anchor="middle">${escXml(el.label || 'Động Tác Mẫu SGK')}</text>
+            </g>
+          `;
+        }
+        case 'grid_box': {
+          const rows = Math.max(1, Math.min(8, el.rows ?? 3));
+          const cols = Math.max(1, Math.min(8, el.cols ?? 3));
+          const cell = Math.max(12, Math.min(72, el.cellSize ?? 36));
+          const mode = el.cellMode || 'empty';
+          const totalW = cols * cell;
+          const totalH = rows * cell;
+          const strokeColor = el.color || '#2563eb';
+          const lines: string[] = [];
+          for (let c = 1; c < cols; c++) {
+            const lx = -totalW / 2 + c * cell;
+            lines.push(`<line x1="${lx}" y1="${-totalH / 2}" x2="${lx}" y2="${totalH / 2}" stroke="${strokeColor}" stroke-width="1.6"/>`);
+          }
+          for (let r = 1; r < rows; r++) {
+            const ly = -totalH / 2 + r * cell;
+            lines.push(`<line x1="${-totalW / 2}" y1="${ly}" x2="${totalW / 2}" y2="${ly}" stroke="${strokeColor}" stroke-width="1.6"/>`);
+          }
+          const cellContents: string[] = [];
+          for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+              const cx = -totalW / 2 + c * cell + cell / 2;
+              const cy = -totalH / 2 + r * cell + cell / 2;
+              if (mode === 'numbers') {
+                cellContents.push(
+                  `<text x="${cx}" y="${cy + 4.5}" font-family="sans-serif" font-size="${Math.max(8, Math.round(cell * 0.36))}" font-weight="bold" fill="${strokeColor}" text-anchor="middle">${r * cols + c + 1}</text>`
+                );
+              } else if (mode === 'hand_foot') {
+                const miniScale = Math.max(0.28, (cell / 36) * 0.68);
+                const idx = r * cols + c;
+                if (idx % 2 === 0) {
+                  cellContents.push(`<g transform="translate(${cx}, ${cy})">${buildFootSvgInner('#2563eb', idx % 4 === 2, miniScale)}</g>`);
+                } else {
+                  cellContents.push(`<g transform="translate(${cx}, ${cy})">${buildHandSvgInner('#ea580c', idx % 4 === 3, miniScale)}</g>`);
+                }
+              }
+            }
+          }
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
+              <rect x="${-totalW / 2}" y="${-totalH / 2}" width="${totalW}" height="${totalH}" rx="4" fill="${strokeColor}" fill-opacity="0.06" stroke="${strokeColor}" stroke-width="2.2"/>
+              ${lines.join('\n')}
+              ${cellContents.join('\n')}
+              ${el.label ? `<text x="0" y="${-totalH / 2 - 8}" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="${strokeColor}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'parallel_lines': {
+          const count = Math.max(2, Math.min(12, el.lineCount ?? 4));
+          const spacing = Math.max(6, Math.min(90, el.lineSpacing ?? 32));
+          const length = Math.max(24, Math.min(540, el.lineLength ?? 220));
+          const isVert = el.orientation === 'vertical';
+          const isDashed = el.lineStyle === 'dashed';
+          const strokeColor = el.color || '#0284c7';
+          const span = (count - 1) * spacing;
+          const lines: string[] = [];
+          for (let i = 0; i < count; i++) {
+            const offset = -span / 2 + i * spacing;
+            if (isVert) {
+              lines.push(
+                `<line x1="${offset}" y1="${-length / 2}" x2="${offset}" y2="${length / 2}" stroke="${strokeColor}" stroke-width="2.4" ${isDashed ? 'stroke-dasharray="7,4"' : ''} stroke-linecap="round"/>`
+              );
+            } else {
+              lines.push(
+                `<line x1="${-length / 2}" y1="${offset}" x2="${length / 2}" y2="${offset}" stroke="${strokeColor}" stroke-width="2.4" ${isDashed ? 'stroke-dasharray="7,4"' : ''} stroke-linecap="round"/>`
+              );
+            }
+          }
+          const labelY = isVert ? -length / 2 - 9 : -span / 2 - 9;
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
+              ${lines.join('\n')}
+              ${el.label ? `<text x="0" y="${labelY}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${strokeColor}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'foot_left':
+        case 'foot_right': {
+          const s = (el.radius || 16) / 16;
+          const col = el.color || '#2563eb';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              ${buildFootSvgInner(col, el.type === 'foot_right', s)}
+              ${el.label ? `<text x="0" y="${Math.round(18 * s + 9)}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'feet_pair': {
+          const s = (el.radius || 15) / 16;
+          const col = el.color || '#2563eb';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <g transform="translate(${-9 * s}, 0)">${buildFootSvgInner(col, false, s * 0.88)}</g>
+              <g transform="translate(${9 * s}, 0)">${buildFootSvgInner(col, true, s * 0.88)}</g>
+              ${el.label ? `<text x="0" y="${Math.round(18 * s + 9)}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'hand_left':
+        case 'hand_right': {
+          const s = (el.radius || 16) / 16;
+          const col = el.color || '#ea580c';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              ${buildHandSvgInner(col, el.type === 'hand_right', s)}
+              ${el.label ? `<text x="0" y="${Math.round(18 * s + 9)}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'hands_pair': {
+          const s = (el.radius || 15) / 16;
+          const col = el.color || '#ea580c';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <g transform="translate(${-11 * s}, 0)">${buildHandSvgInner(col, false, s * 0.85)}</g>
+              <g transform="translate(${11 * s}, 0)">${buildHandSvgInner(col, true, s * 0.85)}</g>
+              ${el.label ? `<text x="0" y="${Math.round(18 * s + 9)}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'mat': {
+          const w = el.width || 76;
+          const h = el.height || 42;
+          const col = el.color || '#0284c7';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="6" fill="${col}" fill-opacity="0.22" stroke="${col}" stroke-width="2.2"/>
+              <line x1="${-w / 6}" y1="${-h / 2 + 2}" x2="${-w / 6}" y2="${h / 2 - 2}" stroke="${col}" stroke-width="1.2" stroke-opacity="0.6"/>
+              <line x1="${w / 6}" y1="${-h / 2 + 2}" x2="${w / 6}" y2="${h / 2 - 2}" stroke="${col}" stroke-width="1.2" stroke-opacity="0.6"/>
+              ${el.label ? `<text x="0" y="4" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'hurdle': {
+          const w = el.width || 52;
+          const h = el.height || 18;
+          const col = el.color || '#dc2626';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <rect x="${-w / 2}" y="${-h / 2}" width="6" height="${h}" rx="2" fill="#334155"/>
+              <rect x="${w / 2 - 6}" y="${-h / 2}" width="6" height="${h}" rx="2" fill="#334155"/>
+              <rect x="${-w / 2 + 2}" y="-4" width="${w - 4}" height="8" rx="2" fill="${col}" stroke="#ffffff" stroke-width="1"/>
+              <line x1="${-w / 4}" y1="-4" x2="${-w / 4 + 4}" y2="4" stroke="#ffffff" stroke-width="2.5"/>
+              <line x1="0" y1="-4" x2="4" y2="4" stroke="#ffffff" stroke-width="2.5"/>
+              <line x1="${w / 4 - 4}" y1="-4" x2="${w / 4}" y2="4" stroke="#ffffff" stroke-width="2.5"/>
+              ${el.label ? `<text x="0" y="${h / 2 + 13}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'goal_gate': {
+          const w = el.width || 64;
+          const h = el.height || 28;
+          const col = el.color || '#16a34a';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="3" fill="${col}" fill-opacity="0.1" stroke="${col}" stroke-width="1.2" stroke-dasharray="3,3"/>
+              <path d="M ${-w / 2},${h / 2} L ${-w / 2},${-h / 2} L ${w / 2},${-h / 2} L ${w / 2},${h / 2}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              ${el.label ? `<text x="0" y="${h / 2 + 13}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'zigzag_path': {
+          const w = el.width || 160;
+          const h = el.height || 40;
+          const col = el.color || '#16a34a';
+          const x0 = -w / 2;
+          const seg = w / 4;
+          const pts = `${x0},0 ${x0 + seg * 0.7},${-h / 2} ${x0 + seg * 1.8},${h / 2} ${x0 + seg * 2.9},${-h / 2} ${w / 2},0`;
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
+              <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.6" stroke-dasharray="5,3" stroke-linejoin="round" marker-end="url(#arrowMarker)"/>
+              ${el.label ? `<text x="0" y="${-h / 2 - 7}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'jump_arc': {
+          const w = el.width || 90;
+          const h = el.height || 34;
+          const col = el.color || '#ea580c';
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
+              <path d="M ${-w / 2},${h / 3} Q ${-w / 4},${-h} 0,${h / 3} Q ${w / 4},${-h} ${w / 2},${h / 3}" fill="none" stroke="${col}" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arrowMarkerOrange)"/>
+              ${el.label ? `<text x="0" y="${-h / 2 - 4}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'star_target': {
+          const r = el.radius || 16;
+          const rInner = r * 0.45;
+          const col = el.color || '#eab308';
+          const starPts: string[] = [];
+          for (let i = 0; i < 10; i++) {
+            const rad = i % 2 === 0 ? r : rInner;
+            const ang = (Math.PI / 5) * i - Math.PI / 2;
+            starPts.push(`${(Math.cos(ang) * rad).toFixed(1)},${(Math.sin(ang) * rad).toFixed(1)}`);
+          }
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <polygon points="${starPts.join(' ')}" fill="${col}" stroke="#ffffff" stroke-width="1.6"/>
+              ${el.label ? `<text x="0" y="${r + 13}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -749,6 +1374,69 @@ export const formationStudioPresets: FormationPresetItem[] = [
       { id: 'txt_1', type: 'text', x: 320, y: 410, color: '#475569', label: 'Cả lớp di chuyển nhịp nhàng quanh vòng tròn theo hiệu lệnh còi', fontSize: 11.5 }
     ]
   },
+  {
+    id: 'p_tro_choi_chan_tay_kheo_khoe',
+    name: 'Trò Chơi Chân Tay Khéo Khỏe (Lưới Ô 3×3 + Tay & Chân)',
+    category: 'Trò Chơi',
+    title: 'SƠ ĐỒ TRÒ CHƠI: CHÂN TAY KHÉO KHỎE',
+    subtitle: 'Lưới ô 3×3 · Đặt đúng tay & chân',
+    description: '2 đội xếp hàng sau vạch xuất phát, di chuyển qua lưới ô vuông 3×3 đặt đúng bàn tay và bàn chân theo ký hiệu rồi về đích.',
+    elements: [
+      { id: 'gv_ct', type: 'gv', x: 320, y: 78, color: '#dc2626', label: 'GV / Trọng Tài' },
+      { id: 'xp_ct', type: 'line_solid', x: 140, y: 120, endX: 140, endY: 365, color: '#dc2626', label: 'Vạch XP' },
+      { id: 'lane_sep', type: 'parallel_lines', x: 345, y: 245, orientation: 'horizontal', lineCount: 3, lineSpacing: 115, lineLength: 380, lineStyle: 'dashed', color: '#94a3b8' },
+      // Đội 1
+      { id: 'd1_1', type: 'hs', x: 75, y: 185, color: '#2563eb', label: '1' },
+      { id: 'd1_2', type: 'hs', x: 105, y: 185, color: '#2563eb', label: '2' },
+      { id: 'grid_1', type: 'grid_box', x: 265, y: 185, rows: 3, cols: 3, cellSize: 32, cellMode: 'hand_foot', color: '#2563eb', label: 'Ô 3×3 (Đội 1)' },
+      { id: 'arr_ct1', type: 'jump_arc', x: 395, y: 185, width: 95, height: 32, color: '#ea580c', label: 'Bật nhảy' },
+      { id: 'hand_ct1', type: 'hands_pair', x: 472, y: 185, radius: 13, color: '#ea580c' },
+      { id: 'flag_ct1', type: 'flag', x: 545, y: 185, color: '#2563eb', label: 'Đích 1' },
+      // Đội 2
+      { id: 'd2_1', type: 'hs', x: 75, y: 305, color: '#16a34a', label: '1' },
+      { id: 'd2_2', type: 'hs', x: 105, y: 305, color: '#16a34a', label: '2' },
+      { id: 'grid_2', type: 'grid_box', x: 265, y: 305, rows: 3, cols: 3, cellSize: 32, cellMode: 'hand_foot', color: '#16a34a', label: 'Ô 3×3 (Đội 2)' },
+      { id: 'arr_ct2', type: 'jump_arc', x: 395, y: 305, width: 95, height: 32, color: '#ea580c', label: 'Bật nhảy' },
+      { id: 'feet_ct2', type: 'feet_pair', x: 472, y: 305, radius: 13, color: '#16a34a' },
+      { id: 'flag_ct2', type: 'flag', x: 545, y: 305, color: '#16a34a', label: 'Đích 2' },
+      { id: 'txt_ct', type: 'text', x: 320, y: 405, color: '#475569', label: 'Đặt đúng bàn tay/bàn chân vào từng ô vuông 3×3, chạm cờ đích rồi chạy về tiếp sức', fontSize: 11 }
+    ]
+  },
+  {
+    id: 'p_tro_choi_nhay_o_song_song',
+    name: 'Trò Chơi Nhảy Ô & Đường Song Song (Lưới Ô Số + Rào)',
+    category: 'Trò Chơi',
+    title: 'SƠ ĐỒ TRÒ CHƠI: NHẢY Ô TIẾP SỨC',
+    subtitle: 'Lưới ô vuông đánh số & làn song song',
+    description: 'Các làn kẻ song song với dãy ô vuông đánh số 1–5 và vật cản rào thấp cho trò chơi bật nhảy tiếp sức.',
+    elements: [
+      { id: 'gv_no', type: 'gv', x: 320, y: 76, color: '#dc2626', label: 'GV Điều Hành' },
+      { id: 'xp_no', type: 'line_solid', x: 130, y: 120, endX: 130, endY: 365, color: '#dc2626', label: 'Vạch XP' },
+      { id: 'pl_no', type: 'parallel_lines', x: 355, y: 245, orientation: 'horizontal', lineCount: 4, lineSpacing: 76, lineLength: 420, lineStyle: 'solid', color: '#0284c7', label: 'Các làn song song' },
+      // Làn 1
+      { id: 'no_1a', type: 'hs', x: 75, y: 168, color: '#1e293b' },
+      { id: 'no_1b', type: 'hs', x: 102, y: 168, color: '#1e293b' },
+      { id: 'g_no1', type: 'grid_box', x: 255, y: 168, rows: 1, cols: 5, cellSize: 32, cellMode: 'numbers', color: '#2563eb' },
+      { id: 'hur_1', type: 'hurdle', x: 400, y: 168, width: 44, height: 16, rotation: 90, color: '#dc2626' },
+      { id: 'mat_1', type: 'mat', x: 470, y: 168, width: 54, height: 32, color: '#0284c7', label: 'Đệm' },
+      { id: 'cone_no1', type: 'cone', x: 540, y: 168, color: '#ea580c' },
+      // Làn 2
+      { id: 'no_2a', type: 'hs', x: 75, y: 244, color: '#1e293b' },
+      { id: 'no_2b', type: 'hs', x: 102, y: 244, color: '#1e293b' },
+      { id: 'g_no2', type: 'grid_box', x: 255, y: 244, rows: 1, cols: 5, cellSize: 32, cellMode: 'numbers', color: '#16a34a' },
+      { id: 'hur_2', type: 'hurdle', x: 400, y: 244, width: 44, height: 16, rotation: 90, color: '#dc2626' },
+      { id: 'mat_2', type: 'mat', x: 470, y: 244, width: 54, height: 32, color: '#0284c7', label: 'Đệm' },
+      { id: 'cone_no2', type: 'cone', x: 540, y: 244, color: '#ea580c' },
+      // Làn 3
+      { id: 'no_3a', type: 'hs', x: 75, y: 320, color: '#1e293b' },
+      { id: 'no_3b', type: 'hs', x: 102, y: 320, color: '#1e293b' },
+      { id: 'g_no3', type: 'grid_box', x: 255, y: 320, rows: 1, cols: 5, cellSize: 32, cellMode: 'numbers', color: '#9333ea' },
+      { id: 'hur_3', type: 'hurdle', x: 400, y: 320, width: 44, height: 16, rotation: 90, color: '#dc2626' },
+      { id: 'mat_3', type: 'mat', x: 470, y: 320, width: 54, height: 32, color: '#0284c7', label: 'Đệm' },
+      { id: 'cone_no3', type: 'cone', x: 540, y: 320, color: '#ea580c' },
+      { id: 'txt_no', type: 'text', x: 320, y: 405, color: '#475569', label: 'Nhảy qua dãy ô số 1–5, bật qua rào tiếp đất đệm, vòng qua cọc mốc về tiếp sức', fontSize: 11 }
+    ]
+  },
 
   // 6. QUY TRÌNH TIẾT HỌC (Nhận Lớp, Quan Sát Tranh, Hồi Tĩnh)
   {
@@ -872,6 +1560,26 @@ export function generateFormationByContext(query: string): {
   elements: FormationElement[];
 } {
   const q = (query || '').toLowerCase().trim();
+
+  // 0. Chân tay khéo khỏe / Ô vuông 3x3
+  if (q.includes('chân tay') || q.includes('khéo khỏe') || q.includes('3x3') || q.includes('3×3')) {
+    const preset = formationStudioPresets.find((p) => p.id === 'p_tro_choi_chan_tay_kheo_khoe')!;
+    return {
+      title: `SƠ ĐỒ TRÒ CHƠI: ${query.toUpperCase()}`,
+      subtitle: 'Lưới ô 3×3 · Bàn tay & bàn chân',
+      elements: JSON.parse(JSON.stringify(preset.elements))
+    };
+  }
+
+  // 0b. Nhảy ô / Đường song song / Vượt rào
+  if (q.includes('nhảy ô') || q.includes('ô vuông') || q.includes('song song') || q.includes('vượt rào')) {
+    const preset = formationStudioPresets.find((p) => p.id === 'p_tro_choi_nhay_o_song_song')!;
+    return {
+      title: `SƠ ĐỒ TRÒ CHƠI: ${query.toUpperCase()}`,
+      subtitle: 'Ô vuông đánh số & làn song song',
+      elements: JSON.parse(JSON.stringify(preset.elements))
+    };
+  }
 
   // 1. Chạy tiếp sức
   if (q.includes('tiếp sức') || q.includes('chạy tiếp sức') || q.includes('chuyền gậy') || q.includes('lò cò')) {
