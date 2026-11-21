@@ -72,6 +72,7 @@ export interface SgkImageItem {
   imgUrl: string;
   caption: string;
   selected?: boolean;
+  sortOrder?: number;
   createdAt?: number;
   updatedAt?: number;
 }

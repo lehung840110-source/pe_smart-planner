@@ -5,13 +5,18 @@ import {
   findSgkLessonByPage,
   findSgkLessonByTopicOrTitle,
   findSgkLessonForMovement,
-  getEffectiveSgkCurriculumTree
+  getEffectiveSgkCurriculumTree,
+  isFabricatedLegacyGameName
 } from '../data/sgkCurriculumTree';
 import {
   extractMovementNamesFromTitle,
   getImageEffectiveSubFolder,
   partitionLessonMovements
 } from './planAutoMatcher';
+import {
+  extractContextSearchKeywords,
+  isCalisthenicsMovementLesson
+} from './keywordImageMatcher';
 
 export interface ImageUsageProvenance {
   grade: number;
@@ -370,6 +375,7 @@ export interface SlotMissingImageNotice {
   lessonName: string;
   pageLabel: string;
   suggestedPage?: number;
+  suggestedKeywords: string[];
   message: string;
 }
 
@@ -386,10 +392,30 @@ export function resolveSlotMissingImageNotice(
   const cLower = (rowContent || '').toLowerCase();
   const titleLower = (lessonTitle || '').toLowerCase();
 
-  // Assessment / review-only / attendance / cooldown rows do not require extracted SGK figures
-  if (/kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(titleLower)) {
+  // Assessment / review-only / attendance / cooldown / closing rows do NOT require extracted SGK figures
+  if (/kiểm tra|đánh giá|tổng kết|sơ kết|xếp loại|tiêu chuẩn rèn luyện/i.test(titleLower)) {
     return null;
   }
+
+  // Strictly exclude pure 1.1 Nhận lớp, 4.1 Hồi tĩnh (even when prefixed by "4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH"), and 4.3 Nhận xét
+  const isPureNhanLop =
+    (cLower.includes('1.1.') || cLower.includes('nhận lớp')) &&
+    !cLower.includes('1.2.') &&
+    !cLower.includes('1.3.');
+  if (isPureNhanLop) return null;
+
+  const isPureCooldown =
+    (cLower.includes('4.1.') || cLower.includes('4.1:') || cLower.includes('hồi tĩnh')) &&
+    !cLower.includes('4.2.') &&
+    !cLower.includes('4.2:') &&
+    !/4\.2\b/.test(cLower);
+  if (isPureCooldown) return null;
+
+  const isPureClosing =
+    (cLower.includes('4.3.') || cLower.includes('xuống lớp')) &&
+    !cLower.includes('4.2.') &&
+    !cLower.includes('4.2:');
+  if (isPureClosing) return null;
 
   let subFolder: SubFolderType | null = null;
   if (cLower.includes('1.3.') || (cLower.includes('trò chơi') && cLower.includes('khởi động'))) {
@@ -402,7 +428,7 @@ export function resolveSlotMissingImageNotice(
     subFolder = 'troChoi';
   } else if (cLower.includes('3.2.') || cLower.includes('tập luyện theo tổ')) {
     subFolder = 'luyenTap';
-  } else if (cLower.includes('4.2.') || cLower.includes('vận dụng')) {
+  } else if (cLower.includes('4.2.') || cLower.includes('4.2:') || /vận dụng\s*:/.test(cLower)) {
     subFolder = 'vanDung';
   }
 
@@ -410,8 +436,9 @@ export function resolveSlotMissingImageNotice(
 
   const effectiveTree = getEffectiveSgkCurriculumTree();
   let lesson = findSgkLessonByTopicOrTitle(grade, lessonTitle, topic);
+  const isBtdLesson = isCalisthenicsMovementLesson(lessonTitle, topic, lesson);
 
-  if (subFolder === 'kyThuat') {
+  if (subFolder === 'kyThuat' && isBtdLesson) {
     const movFromContent = extractMovementNamesFromTitle(rowContent);
     const movFromTitle = extractMovementNamesFromTitle(lessonTitle);
     const firstMov = movFromContent[0] || movFromTitle[0];
@@ -428,49 +455,78 @@ export function resolveSlotMissingImageNotice(
 
   let entityLabel = slotMeta.subFolderLabel;
   let suggestedPage: number | undefined = lesson?.startPage;
+  let suggestedKeywords: string[] = [];
 
   if (subFolder === 'khoiDong') {
     entityLabel = 'Khởi động chung (xoay các khớp)';
     suggestedPage = lesson?.subFolders?.khoiDong?.suggestedPage || lesson?.startPage;
+    suggestedKeywords = ['Khởi động chung', 'Xoay các khớp'];
   } else if (subFolder === 'troChoiKhoiDong') {
     const qMatch = (rowContent || '').match(/[""“']([^""”']+)[""”']/);
-    const gameName = qMatch?.[1]?.trim() || lesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName || 'Trò chơi bổ trợ khởi động';
+    const gameName = (qMatch?.[1]?.trim() || lesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName || '').trim();
+    if (!gameName || isFabricatedLegacyGameName(gameName)) return null;
     entityLabel = `Trò chơi khởi động "${gameName}"`;
     const matchedItem = lesson?.subFolders?.troChoiKhoiDong?.items?.find((it) =>
       (it.gameName || it.name || '').toLowerCase().includes(gameName.toLowerCase().slice(0, 8))
     );
     suggestedPage = matchedItem?.page || lesson?.subFolders?.troChoiKhoiDong?.suggestedPage || lesson?.startPage;
+    suggestedKeywords = [gameName];
   } else if (subFolder === 'kyThuat') {
-    const movList = extractMovementNamesFromTitle(lessonTitle);
-    const specificFromRow = extractMovementNamesFromTitle(rowContent);
-    const isP2 = /tiết\s*2/i.test(titleLower);
-    const partitioned = movList.length >= 2 ? partitionLessonMovements(movList, isP2) : null;
-    const targetMovs = partitioned?.newMovements?.length
-      ? partitioned.newMovements
-      : specificFromRow.length > 0
-      ? specificFromRow
-      : movList;
+    if (isBtdLesson) {
+      const movList = extractMovementNamesFromTitle(lessonTitle);
+      const specificFromRow = extractMovementNamesFromTitle(rowContent);
+      const isP2 = /tiết\s*2/i.test(titleLower);
+      const partitioned = movList.length >= 2 ? partitionLessonMovements(movList, isP2) : null;
+      const targetMovs = partitioned?.newMovements?.length
+        ? partitioned.newMovements
+        : specificFromRow.length > 0
+        ? specificFromRow
+        : movList;
 
-    entityLabel = targetMovs.length > 0 ? targetMovs.join(', ') : 'Động tác kỹ thuật mới';
-    const firstKeyWord = (targetMovs[0] || '').toLowerCase().replace(/^động tác\s+/i, '').trim();
-    const matchedTechItem = firstKeyWord
-      ? lesson?.subFolders?.kyThuat?.items?.find((it) => it.name.toLowerCase().includes(firstKeyWord))
-      : lesson?.subFolders?.kyThuat?.items?.[0];
-    suggestedPage = matchedTechItem?.page || lesson?.subFolders?.kyThuat?.items?.[0]?.page || lesson?.startPage;
+      entityLabel = targetMovs.length > 0 ? targetMovs.join(', ') : 'Động tác kỹ thuật mới';
+      const firstKeyWord = (targetMovs[0] || '').toLowerCase().replace(/^động tác\s+/i, '').trim();
+      const matchedTechItem = firstKeyWord
+        ? lesson?.subFolders?.kyThuat?.items?.find((it) => it.name.toLowerCase().includes(firstKeyWord))
+        : lesson?.subFolders?.kyThuat?.items?.[0];
+      suggestedPage = matchedTechItem?.page || lesson?.subFolders?.kyThuat?.items?.[0]?.page || lesson?.startPage;
+    } else {
+      const cleanSkill = cleanLessonName.replace(/^bài\s*\d+\s*[:\-–]?\s*/i, '').trim();
+      entityLabel = lesson?.subFolders?.kyThuat?.items?.[0]?.name || cleanSkill || 'Kỹ thuật bài học';
+      suggestedPage = lesson?.subFolders?.kyThuat?.items?.[0]?.page || lesson?.startPage;
+    }
+    suggestedKeywords = extractContextSearchKeywords(lessonTitle, topic, rowContent, lesson);
   } else if (subFolder === 'luyenTap') {
-    entityLabel = 'Luyện tập theo tổ / nhóm';
+    if (cLower.includes('3.1.') || cLower.includes('đồng loạt')) {
+      entityLabel = 'Luyện tập đồng loạt cả lớp';
+    } else if (cLower.includes('3.3.') || cLower.includes('cặp đôi')) {
+      entityLabel = 'Luyện tập cặp đôi & cá nhân';
+    } else if (cLower.includes('3.4.') || cLower.includes('thi đua') || cLower.includes('cá nhân')) {
+      entityLabel = 'Luyện tập cá nhân / Thi đua trình diễn';
+    } else {
+      entityLabel = 'Luyện tập theo tổ / nhóm';
+    }
     suggestedPage = lesson?.subFolders?.luyenTap?.items?.[0]?.page || lesson?.startPage;
+    suggestedKeywords = [
+      'Luyện tập',
+      ...extractContextSearchKeywords(lessonTitle, topic, rowContent, lesson).slice(0, 2)
+    ];
   } else if (subFolder === 'troChoi') {
     const qMatch = (rowContent || '').match(/[""“']([^""”']+)[""”']/);
-    const gameName = qMatch?.[1]?.trim() || lesson?.subFolders?.troChoi?.items?.[0]?.gameName || 'Trò chơi vận động';
+    const gameName = (qMatch?.[1]?.trim() || lesson?.subFolders?.troChoi?.items?.[0]?.gameName || '').trim();
+    if (!gameName || isFabricatedLegacyGameName(gameName)) return null;
     entityLabel = `Trò chơi vận động "${gameName}"`;
     const matchedItem = lesson?.subFolders?.troChoi?.items?.find((it) =>
       (it.gameName || it.name || '').toLowerCase().includes(gameName.toLowerCase().slice(0, 8))
     );
     suggestedPage = matchedItem?.page || lesson?.subFolders?.troChoi?.suggestedPage || lesson?.startPage;
+    suggestedKeywords = [gameName];
   } else if (subFolder === 'vanDung') {
     entityLabel = 'Vận dụng thực tế';
     suggestedPage = lesson?.subFolders?.vanDung?.suggestedPage || lesson?.endPage || lesson?.startPage;
+    suggestedKeywords = [
+      'Vận dụng',
+      ...extractContextSearchKeywords(lessonTitle, topic, rowContent, lesson).slice(0, 2)
+    ];
   }
 
   const pageLabel = suggestedPage
@@ -483,16 +539,20 @@ export function resolveSlotMissingImageNotice(
   let message = '';
   if (subFolder === 'kyThuat') {
     message =
-      `Chưa xác định được hình ảnh động tác phù hợp cho "${entityLabel}" (đúng SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
-      `Hệ thống không tự chèn ảnh khối lớp khác để tránh nhầm lẫn — vui lòng tìm hình ảnh đúng trong Thư viện hoặc trích xuất từ SGK Lớp ${grade}.`;
+      `Chưa xác định được hình ảnh phù hợp cho "${entityLabel}" (đúng SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
+      `Hệ thống không tự chèn nhầm ảnh bài thể dục hay khối lớp khác — hãy tìm và gán ảnh theo từ khóa trong Thư viện.`;
+  } else if (subFolder === 'khoiDong') {
+    message =
+      `Chưa tìm được ảnh Khởi động chung trong Thư viện (SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
+      `Có thể dùng chung hình ảnh khởi động xoay các khớp giữa các khối lớp — bấm để tìm và gán từ Thư viện.`;
   } else if (subFolder === 'troChoiKhoiDong' || subFolder === 'troChoi') {
     message =
       `Chưa tìm được ảnh cho ${entityLabel} (SGK Lớp ${grade} · ${sgkRef}). ` +
-      `Vui lòng tìm hình ảnh trong Thư viện (trò chơi cùng tên giữa các khối lớp có thể dùng chung).`;
+      `Bấm để tìm và gán ảnh trong Thư viện (trò chơi cùng tên giữa các khối lớp có thể dùng chung).`;
   } else {
     message =
       `Chưa tìm được hình ảnh phù hợp cho ${entityLabel} (SGK GDTC Lớp ${grade} · ${sgkRef}). ` +
-      `Vui lòng tìm hình ảnh đúng Khối ${grade} trong Thư viện (mục "${slotMeta.subFolderLabel}").`;
+      `Hệ thống ưu tiên đúng ảnh SGK Lớp ${grade} của bài học này — bấm để tìm theo từ khóa trong Thư viện.`;
   }
 
   return {
@@ -503,6 +563,7 @@ export function resolveSlotMissingImageNotice(
     lessonName: cleanLessonName,
     pageLabel,
     suggestedPage,
+    suggestedKeywords,
     message
   };
 }

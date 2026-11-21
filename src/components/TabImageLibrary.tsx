@@ -12,7 +12,9 @@ import {
   CheckSquare,
   Square,
   Layers,
+  ArrowLeft,
   ArrowRight,
+  ArrowUpDown,
   FolderTree,
   Folder,
   FolderOpen,
@@ -36,6 +38,7 @@ import {
 import { SgkImageItem, ImageCategory, SubFolderType } from '../types/gdtc';
 import { downloadZipOfImages, downloadJsonFile } from '../utils/exportUtils';
 import { removeBackgroundCanvas, autoCropCanvas, enhanceContrastCanvas } from '../utils/imageProcessing';
+import { isCalisthenicsMovementLesson, isNonCalisthenicsCoordinationText } from '../utils/keywordImageMatcher';
 import { Database, Wand2, Eraser } from 'lucide-react';
 import {
   SgkLessonFolder,
@@ -56,6 +59,7 @@ import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { FormationStudioModal } from './FormationStudioModal';
 import { saveCustomFormationToStorage } from '../data/formationDiagrams';
+import { sortLibraryImages, LibrarySortMode } from '../utils/libraryImageOrder';
 
 interface TabImageLibraryProps {
   images: SgkImageItem[];
@@ -89,6 +93,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const [selectedTopicId, setSelectedTopicId] = useState<string>('all');
   const [selectedLessonId, setSelectedLessonId] = useState<string>('all');
   const [selectedSubFolder, setSelectedSubFolder] = useState<string>('all'); // 'all' | 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung'
+  const [sortMode, setSortMode] = useState<LibrarySortMode>('sgk');
   const [imageToImageModalItem, setImageToImageModalItem] = useState<SgkImageItem | null>(null);
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState<boolean>(false);
   const [isCreateHdOpen, setIsCreateHdOpen] = useState<boolean>(false);
@@ -551,28 +556,14 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
       }
 
       // Làm sạch tiêu đề mặc định quá chung chung dựa theo leadTitle + leadCaption
+      // QUAN TRỌNG: Chỉ gắn tên "Động tác Tay/Chân/Phối hợp/Nhảy..." của Bài thể dục khi ảnh thực sự thuộc Chủ đề 2 (Bài tập thể dục)!
+      const isBtdContext =
+        isCalisthenicsMovementLesson(nextLessonTitle || img.title || '', nextTopicTitle || img.topicTitle || '') &&
+        !isNonCalisthenicsCoordinationText(ownText) &&
+        !isNonCalisthenicsCoordinationText(nextLessonTitle || '');
+
       if (lowerTitle.includes('thư mục ảnh') || (lowerTitle.includes('động tác vươn thở') && !ownText.includes('vươn thở'))) {
-        if (ownText.includes('tay')) {
-          newTitle = `Động tác Tay - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('chân')) {
-          newTitle = `Động tác Chân - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('lườn')) {
-          newTitle = `Động tác Lườn - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('bụng')) {
-          newTitle = `Động tác Bụng - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('phối hợp')) {
-          newTitle = `Động tác Phối hợp - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('nhảy')) {
-          newTitle = `Động tác Nhảy - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('điều hòa') || ownText.includes('điều hoà')) {
-          newTitle = `Động tác Điều hòa - SGK Lớp ${img.grade || 1}`;
-        } else if (ownText.includes('đi đều')) {
-          newTitle = `Động tác Đi đều, Đứng lại - SGK Lớp ${img.grade || 3}`;
-        } else if (ownText.includes('gậy')) {
-          newTitle = `Động tác với gậy - SGK Lớp ${img.grade || 5}`;
-        } else if (ownText.includes('thăng bằng')) {
-          newTitle = `Động tác Thăng bằng - SGK Lớp ${img.grade || 1}`;
-        } else if (newFolder === 'luyenTap') {
+        if (newFolder === 'luyenTap') {
           newTitle = `Luyện tập bài học - SGK Lớp ${img.grade || 1}`;
         } else if (newFolder === 'troChoiKhoiDong') {
           newTitle = `Trò chơi khởi động - SGK Lớp ${img.grade || 1}`;
@@ -582,6 +573,35 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           newTitle = `Khởi động chung - SGK Lớp ${img.grade || 1}`;
         } else if (newFolder === 'vanDung') {
           newTitle = `Vận dụng thực tế - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('vươn thở')) {
+          newTitle = `Động tác Vươn thở - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('tay')) {
+          newTitle = `Động tác Tay - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('chân')) {
+          newTitle = `Động tác Chân - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('lườn')) {
+          newTitle = `Động tác Lườn - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('bụng')) {
+          newTitle = `Động tác Bụng - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('vặn mình')) {
+          newTitle = `Động tác Vặn mình - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('toàn thân')) {
+          newTitle = `Động tác Toàn thân - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('phối hợp')) {
+          newTitle = `Động tác Phối hợp - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && ownText.includes('nhảy')) {
+          newTitle = `Động tác Nhảy - SGK Lớp ${img.grade || 1}`;
+        } else if (isBtdContext && (ownText.includes('điều hòa') || ownText.includes('điều hoà'))) {
+          newTitle = `Động tác Điều hòa - SGK Lớp ${img.grade || 1}`;
+        } else if (ownText.includes('đi đều')) {
+          newTitle = `Động tác Đi đều, Đứng lại - SGK Lớp ${img.grade || 3}`;
+        } else if (isBtdContext && ownText.includes('gậy')) {
+          newTitle = `Động tác với gậy - SGK Lớp ${img.grade || 5}`;
+        } else if (isBtdContext && ownText.includes('thăng bằng')) {
+          newTitle = `Động tác Thăng bằng - SGK Lớp ${img.grade || 1}`;
+        } else if (nextLessonTitle) {
+          const cleanLessonName = nextLessonTitle.replace(/^Bài\s*\d+\s*[:\-–]?\s*/i, '').trim();
+          newTitle = `${cleanLessonName || nextLessonTitle} - SGK Lớp ${img.grade || 1}`;
         }
       }
 
@@ -723,9 +743,9 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
     return images.filter((img) => checkImageMatchesFolder(img, folder) && checkImageMatchesSubFolder(img, subFolder)).length;
   };
 
-  // Filtered Image List
+  // Filtered & Deterministically Sorted Image List (defaults to SGK Tree -> 6 Subfolders -> sortOrder -> Page -> Title)
   const filteredImages = useMemo(() => {
-    return images.filter((img) => {
+    const matched = images.filter((img) => {
       // 1. Search filter
       const matchSearch =
         !searchTerm ||
@@ -754,7 +774,58 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
       return matchSearch && matchGrade && matchLesson && matchSubFolder;
     });
-  }, [images, searchTerm, filterGrade, selectedLessonId, selectedSubFolder, effectiveTree]);
+
+    return sortLibraryImages(matched, sortMode, effectiveTree);
+  }, [images, searchTerm, filterGrade, selectedLessonId, selectedSubFolder, sortMode, effectiveTree]);
+
+  // Move an image earlier/later inside the currently browsed folder and persist sortOrder for auto-matcher
+  const handleReorderFilteredImage = (visibleIdx: number, direction: 'prev' | 'next') => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Sắp xếp thứ tự hình ảnh trong thư mục');
+      return;
+    }
+    const swapIdx = direction === 'prev' ? visibleIdx - 1 : visibleIdx + 1;
+    if (swapIdx < 0 || swapIdx >= filteredImages.length) return;
+
+    const reorderedVisible = [...filteredImages];
+    const [moved] = reorderedVisible.splice(visibleIdx, 1);
+    reorderedVisible.splice(swapIdx, 0, moved);
+
+    const orderMap = new Map<string, number>();
+    reorderedVisible.forEach((item, idx) => {
+      orderMap.set(item.id, (idx + 1) * 10);
+    });
+
+    setImages((prev) => {
+      const updated = prev.map((img) =>
+        orderMap.has(img.id) ? { ...img, sortOrder: orderMap.get(img.id) } : img
+      );
+      saveImagesDB(updated).catch(() => {});
+      return updated;
+    });
+    if (sortMode !== 'sgk') setSortMode('sgk');
+    showToast('↕️ Đã cập nhật thứ tự ảnh trong cây thư mục (tự động ưu tiên khi chèn giáo án)!');
+  };
+
+  const handleResetFolderSortOrder = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Chuẩn hóa thứ tự hình ảnh theo SGK');
+      return;
+    }
+    const visibleIds = new Set(filteredImages.map((it) => it.id));
+    setImages((prev) => {
+      const updated = prev.map((img) => {
+        if (!visibleIds.has(img.id) || img.sortOrder === undefined) return img;
+        const copy = { ...img };
+        delete copy.sortOrder;
+        return copy;
+      });
+      saveImagesDB(updated).catch(() => {});
+      return updated;
+    });
+    setSortMode('sgk');
+    showToast('✅ Đã sắp xếp lại hình ảnh theo đúng thứ tự bài học & trang SGK!');
+  };
 
   const folderBadge = (folder?: SubFolderType, cat?: ImageCategory) => {
     if (folder === 'kyThuat' || cat === 'dong_tac') {
@@ -1698,26 +1769,54 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
 
         {/* Right: Images Grid View */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Active Tree Path Breadcrumb */}
+          {/* Active Tree Path Breadcrumb & Sort Controls */}
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800">
+            <div className="flex items-center gap-1.5 font-bold text-slate-800 min-w-0">
               <FolderOpen className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="text-blue-900">{activeBreadcrumbText}</span>
-              <span className="text-slate-400 font-normal">({filteredImages.length} ảnh)</span>
+              <span className="text-blue-900 truncate">{activeBreadcrumbText}</span>
+              <span className="text-slate-400 font-normal shrink-0">({filteredImages.length} ảnh)</span>
             </div>
 
-            {(filterGrade !== 'all' || selectedLessonId !== 'all' || selectedSubFolder !== 'all') && (
-              <button
-                onClick={() => {
-                  setFilterGrade('all');
-                  setSelectedLessonId('all');
-                  setSelectedSubFolder('all');
-                }}
-                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 underline"
-              >
-                Quay lại tất cả
-              </button>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1">
+                <ArrowUpDown className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <select
+                  value={sortMode}
+                  onChange={(e) => setSortMode(e.target.value as LibrarySortMode)}
+                  className="text-[11px] font-semibold text-slate-700 bg-transparent focus:outline-none cursor-pointer"
+                  title="Chọn cách sắp xếp hình ảnh khi duyệt cây thư mục"
+                >
+                  <option value="sgk">Thứ tự chuẩn cây SGK</option>
+                  <option value="page">Trang SGK tăng dần</option>
+                  <option value="title">Tên hình ảnh (A → Z)</option>
+                  <option value="newest">Mới cập nhật nhất</option>
+                </select>
+              </div>
+
+              {filteredImages.some((it) => typeof it.sortOrder === 'number') && (
+                <button
+                  type="button"
+                  onClick={handleResetFolderSortOrder}
+                  className="text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-lg flex items-center gap-1 transition"
+                  title="Khôi phục thứ tự mặc định theo mục & số trang SGK"
+                >
+                  <RotateCcw className="w-3 h-3" /> Chuẩn SGK
+                </button>
+              )}
+
+              {(filterGrade !== 'all' || selectedLessonId !== 'all' || selectedSubFolder !== 'all') && (
+                <button
+                  onClick={() => {
+                    setFilterGrade('all');
+                    setSelectedLessonId('all');
+                    setSelectedSubFolder('all');
+                  }}
+                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 underline"
+                >
+                  Quay lại tất cả
+                </button>
+              )}
+            </div>
           </div>
 
           {filteredImages.length === 0 ? (
@@ -1732,7 +1831,7 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filteredImages.map((img) => {
+              {filteredImages.map((img, visibleIdx) => {
                 const badge = folderBadge(img.folder, img.category);
                 const prov = resolveImageUsageProvenance(img);
                 return (
@@ -1744,24 +1843,56 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
                   >
                     <div className="space-y-3">
                       {/* Card Header */}
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 cursor-pointer">
+                      <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="checkbox"
                             checked={!!img.selected}
                             onChange={(e) => handleToggleSelectOne(img.id, e.target.checked)}
                             className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                           />
+                          <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded tabular-nums">
+                            #{visibleIdx + 1}
+                          </span>
                           <span className="text-[10px] font-bold text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded tabular-nums">
                             Khối Lớp {img.grade}
                           </span>
+                          {img.page ? (
+                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded tabular-nums">
+                              Tr.{img.page}
+                            </span>
+                          ) : null}
                         </label>
 
-                        <span
-                          className={`text-[9.5px] font-bold px-2 py-0.5 rounded border ${badge.color}`}
-                        >
-                          {badge.label}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          {sortMode === 'sgk' && filteredImages.length > 1 && (
+                            <div className="flex items-center bg-slate-100 rounded border border-slate-200 p-0.5">
+                              <button
+                                type="button"
+                                disabled={visibleIdx === 0}
+                                onClick={() => handleReorderFilteredImage(visibleIdx, 'prev')}
+                                className="p-0.5 rounded hover:bg-white disabled:opacity-30 text-slate-600"
+                                title="Đưa ảnh lên trước (ưu tiên chèn trước)"
+                              >
+                                <ArrowLeft className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={visibleIdx === filteredImages.length - 1}
+                                onClick={() => handleReorderFilteredImage(visibleIdx, 'next')}
+                                className="p-0.5 rounded hover:bg-white disabled:opacity-30 text-slate-600"
+                                title="Đưa ảnh xuống sau"
+                              >
+                                <ArrowRight className="w-3 h-3" />
+                              </button>
+                            </div>
+                          )}
+                          <span
+                            className={`text-[9.5px] font-bold px-2 py-0.5 rounded border ${badge.color}`}
+                          >
+                            {badge.label}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Image Preview Box + Hover Usage Provenance Tooltip */}

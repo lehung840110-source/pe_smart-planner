@@ -25,6 +25,14 @@ export interface WeeklyGradePpctInfo {
   periodLabel: string;    // "Tiết 17, 18"
   defaultTopic: string;
   defaultTitle: string;
+  period1Title?: string;
+  period2Title?: string;
+  period1Topic?: string;
+  period2Topic?: string;
+  period1Integration?: string;
+  period2Integration?: string;
+  period1Equipment?: string;
+  period2Equipment?: string;
 }
 
 /**
@@ -64,52 +72,31 @@ export function getWeekDateInfo(week: number, baseYear: number = 2026): WeekDate
 }
 
 import {
-  defaultGrade1Ppct,
-  defaultGrade2Ppct,
-  defaultGrade3Ppct,
-  defaultGrade4Ppct,
-  defaultGrade5Ppct
+  DEFAULT_GENERAL_PERIOD_INTEGRATION,
+  getPpctWeekItems
 } from '../data/defaultPpctData';
 
 /**
  * Calculates curriculum distribution (PPCT) periods for a given grade and week.
- * Dynamically queries official PPCT data across all 35 weeks for Grades 1, 2, 3, 4, and 5.
+ * Dynamically queries the stored/official PPCT data (including the 2026–2027 integrated plan for Grades 1, 3, 5)
+ * across all 35 weeks for Grades 1, 2, 3, 4, and 5.
  */
 export function getGradePpctInfo(grade: GradeLevel, week: number): WeeklyGradePpctInfo {
   const p1 = (week - 1) * 2 + 1;
   const p2 = (week - 1) * 2 + 2;
   const periods = [p1, p2];
 
-  const ppctList =
-    grade === 1
-      ? defaultGrade1Ppct
-      : grade === 2
-      ? defaultGrade2Ppct
-      : grade === 3
-      ? defaultGrade3Ppct
-      : grade === 4
-      ? defaultGrade4Ppct
-      : defaultGrade5Ppct;
-  const matched = ppctList.filter((item) => item.week === week);
-  const first = matched[0];
+  const matched = getPpctWeekItems(grade, week);
+  const first = matched.find((m) => m.period === p1) || matched[0];
+  const second = matched.find((m) => m.period === p2) || matched[1] || first;
 
-  const defaultTopic = first ? first.topic : (grade === 1 ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC' : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC');
-  let rawTitle = first ? first.lessonTitle : '';
-  if (!rawTitle) {
-    rawTitle = week === 9
-      ? (grade === 1
-          ? 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng'
-          : grade === 2
-          ? 'Bài 2: Động tác chân, động tác lườn'
-          : grade === 3
-          ? 'Bài 1: Động tác vươn thở, động tác tay, động tác chân'
-          : grade === 4
-          ? 'Bài 2: Động tác chân, động tác lườn với vòng thể dục'
-          : 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy')
-      : `Bài học thể dục Tuần ${week}`;
-  }
-  // Strip trailing (tiết 1), (tiết 2) and clean title
-  const defaultTitle = rawTitle.replace(/\s*\(\s*tiết\s*\d+[^)]*\)/gi, '').replace(/\.+$/, '').trim();
+  const fallbackTopic = grade === 1 ? 'CHỦ ĐỀ 2: BÀI THỂ DỤC' : 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC';
+  const defaultTopic = first?.topic || fallbackTopic;
+  const rawTitle1 = first?.lessonTitle || `Bài học giáo dục thể chất Tuần ${week} (Tiết 1)`;
+  const rawTitle2 = second?.lessonTitle || `Bài học giáo dục thể chất Tuần ${week} (Tiết 2)`;
+
+  // Strip trailing (tiết 1), (tiết 2) for compact summary display while preserving exact per-period titles
+  const defaultTitle = rawTitle1.replace(/\s*\(\s*tiết\s*\d+[^)]*\)/gi, '').replace(/\.+$/, '').trim();
 
   return {
     grade,
@@ -117,7 +104,15 @@ export function getGradePpctInfo(grade: GradeLevel, week: number): WeeklyGradePp
     periods,
     periodLabel: `Tiết ${p1}, ${p2}`,
     defaultTopic,
-    defaultTitle
+    defaultTitle,
+    period1Title: rawTitle1,
+    period2Title: rawTitle2,
+    period1Topic: first?.topic || defaultTopic,
+    period2Topic: second?.topic || defaultTopic,
+    period1Integration: first?.integrationNotes || '',
+    period2Integration: second?.integrationNotes || '',
+    period1Equipment: first?.equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL',
+    period2Equipment: second?.equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL'
   };
 }
 
@@ -138,8 +133,13 @@ export interface WeeklyIntegrationThemes {
 
 export function getWeeklyIntegrationThemes(week: number, grade?: number): WeeklyIntegrationThemes {
   const safeGrade = grade ? Math.min(5, Math.max(1, Math.round(grade))) : 1;
-  const addr = getIntegrationAddressForLesson(safeGrade, week);
-  const allGradeAddrs = [1, 2, 3, 4, 5].map((g) => getIntegrationAddressForLesson(g, week));
+  const p1 = (week - 1) * 2 + 1;
+  const p2 = (week - 1) * 2 + 2;
+  const addr = getIntegrationAddressForLesson(safeGrade, week, p1);
+  const allGradeAddrs = [1, 3, 5, 2, 4].flatMap((g) => [
+    getIntegrationAddressForLesson(g, week, p1),
+    getIntegrationAddressForLesson(g, week, p2)
+  ]);
 
   const qpanMatch = allGradeAddrs.find((a) => a.domains.includes('GDQPAN'));
   const envMatch = allGradeAddrs.find((a) => a.domains.includes('BVMT'));
@@ -171,235 +171,27 @@ export function getWeeklyIntegrationThemes(week: number, grade?: number): Weekly
   };
 }
 
-/**
- * EXACT 7-COLUMN OFFICIAL SCHEDULE (MẪU KẾ HOẠCH TRANG ĐẦU GIÁO ÁN) FOR WEEK 9
- * As provided in the teacher's uploaded Microsoft Word document
- */
-export const defaultWeek9Schedule: WeeklyMasterScheduleRow[] = [
-  {
-    id: 'w9_row_1',
-    dayOfWeek: 'Thứ 2 – Sáng',
-    period: 2,
-    className: '1A4',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người và sự phối hợp các bộ phận: không chạm thiết bị khi tay ướt, không tự ý bấm và báo giáo viên khi cần hỗ trợ.-',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_2',
-    dayOfWeek: 'Thứ 2 – Sáng',
-    period: 3,
-    className: '1A5',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người và sự phối hợp các bộ phận.',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_3',
-    dayOfWeek: 'Thứ 2 – Sáng',
-    period: 4,
-    className: '1A3',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người.',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_4',
-    dayOfWeek: 'Thứ 2 – Chiều',
-    period: 2,
-    className: '1A1',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người.',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_5',
-    dayOfWeek: 'Thứ 2 – Chiều',
-    period: 3,
-    className: '1A2',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a): Học sinh biết sử dụng thiết bị số an toàn khi quan sát học liệu về thứ tự nhịp, tư thế thân người.',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_6',
-    dayOfWeek: 'Thứ 3 – Chiều',
-    period: 1,
-    className: '5A1',
-    grade: 5,
-    lessonTitle: 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (6.1TC2a): Học sinh làm quen và bước đầu nhận thức được sự hỗ trợ của trí tuệ nhân tạo (AI) thông qua việc quan sát phần mềm phân tích tư thế chân, tay, thân người, cách cầm gậy, biên độ và nhịp động tác đúng/sai mà giáo viên giới thiệu.',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_7',
-    dayOfWeek: 'Thứ 3 – Chiều',
-    period: 2,
-    className: '3A1',
-    grade: 3,
-    lessonTitle: 'Bài 1: Động tác vươn thở, động tác tay (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp bảo vệ môi trường: Học sinh giữ vệ sinh sân tập, không xả rác; sử dụng dụng cụ tiết kiệm, đúng mục đích và thu dọn gọn gàng sau luyện tập.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_8',
-    dayOfWeek: 'Thứ 3 – Chiều',
-    period: 3,
-    className: '5A2',
-    grade: 5,
-    lessonTitle: 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (6.1TC2a): Học sinh làm quen và bước đầu nhận thức được sự hỗ trợ của trí tuệ nhân tạo (AI) thông qua việc quan sát phần mềm phân tích tư thế chân, tay, thân người, cách cầm gậy...',
-    equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_9',
-    dayOfWeek: 'Thứ 5 – Sáng',
-    period: 2,
-    className: '1A1',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_10',
-    dayOfWeek: 'Thứ 5 – Chiều',
-    period: 2,
-    className: '3A1',
-    grade: 3,
-    lessonTitle: 'Bài 1: Động tác vươn thở, động tác tay (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: HS rèn tác phong nhanh nhẹn, nghiêm túc, chấp hành khẩu lệnh, giữ đội hình và tinh thần đoàn kết.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_11',
-    dayOfWeek: 'Thứ 6 – Sáng',
-    period: 2,
-    className: '1A4',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_12',
-    dayOfWeek: 'Thứ 6 – Sáng',
-    period: 3,
-    className: '1A5',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_13',
-    dayOfWeek: 'Thứ 6 – Sáng',
-    period: 4,
-    className: '1A3',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_14',
-    dayOfWeek: 'Thứ 6 – Chiều',
-    period: 1,
-    className: '5A1',
-    grade: 5,
-    lessonTitle: 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp bảo vệ môi trường: Học sinh giữ vệ sinh sân tập, không xả rác; sử dụng dụng cụ tiết kiệm, đúng mục đích và thu dọn gọn gàng sau luyện tập.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_15',
-    dayOfWeek: 'Thứ 6 – Chiều',
-    period: 2,
-    className: '5A2',
-    grade: 5,
-    lessonTitle: 'Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp bảo vệ môi trường: Học sinh giữ vệ sinh sân tập, không xả rác; sử dụng dụng cụ tiết kiệm, đúng mục đích và thu dọn gọn gàng sau luyện tập.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_16',
-    dayOfWeek: 'Thứ 6 – Chiều',
-    period: 3,
-    className: '1A2',
-    grade: 1,
-    lessonTitle: 'Bài 2: Động tác chân, động tác vặn mình, động tác bụng. (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Học sinh rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh, phối hợp với bạn và bình tĩnh khi xử lí tình huống.',
-    equipment: 'SGK, Tranh ảnh, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_17',
-    dayOfWeek: 'Thứ 3 – Sáng',
-    period: 1,
-    className: '2A1',
-    grade: 2,
-    lessonTitle: 'Bài 2: Động tác chân, động tác lườn (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (3.1TC1a): Quan sát hình ảnh/video trình tự nhịp động tác chân, lườn an toàn theo hướng dẫn GV.',
-    equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_18',
-    dayOfWeek: 'Thứ 5 – Sáng',
-    period: 1,
-    className: '2A1',
-    grade: 2,
-    lessonTitle: 'Bài 2: Động tác chân, động tác lườn (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp giáo dục quốc phòng và an ninh: Rèn ý thức tổ chức kỉ luật, chấp hành hiệu lệnh.',
-    equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_19',
-    dayOfWeek: 'Thứ 4 – Sáng',
-    period: 1,
-    className: '4A1',
-    grade: 4,
-    lessonTitle: 'Bài 2: Động tác chân, động tác lườn với vòng thể dục (tiết 1)',
-    ppct: 17,
-    integrationNotes: '- Tích hợp năng lực số (4.1TC1a / 6.1TC2a): Quan sát học liệu số và phân tích tư thế giữ vòng thăng bằng qua hình ảnh minh họa.',
-    equipment: 'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
-  },
-  {
-    id: 'w9_row_20',
-    dayOfWeek: 'Thứ 4 – Chiều',
-    period: 1,
-    className: '4A1',
-    grade: 4,
-    lessonTitle: 'Bài 2: Động tác chân, động tác lườn với vòng thể dục (tiết 2)',
-    ppct: 18,
-    integrationNotes: '- Tích hợp bảo vệ môi trường: Thu dọn vòng thể dục ngăn nắp sau tập, giữ sân bãi sạch đẹp.',
-    equipment: 'SGK, Vòng thể dục, tranh ảnh, còi, dụng cụ TL'
+function formatPpctIntegrationCell(
+  grade: GradeLevel,
+  week: number,
+  period: number,
+  lessonTitle: string,
+  ppctNote?: string
+): string {
+  const cleaned = (ppctNote || '').trim();
+  if (cleaned) {
+    return cleaned.startsWith('-') ? cleaned : `- ${cleaned}`;
   }
-];
+  if (grade === 1 || grade === 3 || grade === 5) {
+    return `- ${DEFAULT_GENERAL_PERIOD_INTEGRATION}`;
+  }
+  return formatIntegrationForScheduleCell(grade, week, period, lessonTitle);
+}
 
 /**
- * Returns default schedule for any week (auto-generates based on week and PPCT rules if not week 9)
+ * Returns the exact 7-column weekly schedule for any week (1–35),
+ * pulling verbatim per-period titles, integration notes, and equipment from the
+ * official integrated curriculum plan (Grades 1, 3, 5) and GDPT 2018 (Grades 2, 4).
  */
 export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[] {
   const p1 = (week - 1) * 2 + 1;
@@ -410,16 +202,38 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
   const g4Info = getGradePpctInfo(4, week);
   const g5Info = getGradePpctInfo(5, week);
 
-  const g1Note1 = formatIntegrationForScheduleCell(1, week, p1, g1Info.defaultTitle);
-  const g1Note2 = formatIntegrationForScheduleCell(1, week, p2, g1Info.defaultTitle);
-  const g2Note1 = formatIntegrationForScheduleCell(2, week, p1, g2Info.defaultTitle);
-  const g2Note2 = formatIntegrationForScheduleCell(2, week, p2, g2Info.defaultTitle);
-  const g3Note1 = formatIntegrationForScheduleCell(3, week, p1, g3Info.defaultTitle);
-  const g3Note2 = formatIntegrationForScheduleCell(3, week, p2, g3Info.defaultTitle);
-  const g4Note1 = formatIntegrationForScheduleCell(4, week, p1, g4Info.defaultTitle);
-  const g4Note2 = formatIntegrationForScheduleCell(4, week, p2, g4Info.defaultTitle);
-  const g5Note1 = formatIntegrationForScheduleCell(5, week, p1, g5Info.defaultTitle);
-  const g5Note2 = formatIntegrationForScheduleCell(5, week, p2, g5Info.defaultTitle);
+  const g1Title1 = g1Info.period1Title || `${g1Info.defaultTitle} (tiết 1)`;
+  const g1Title2 = g1Info.period2Title || `${g1Info.defaultTitle} (tiết 2)`;
+  const g2Title1 = g2Info.period1Title || `${g2Info.defaultTitle} (tiết 1)`;
+  const g2Title2 = g2Info.period2Title || `${g2Info.defaultTitle} (tiết 2)`;
+  const g3Title1 = g3Info.period1Title || `${g3Info.defaultTitle} (tiết 1)`;
+  const g3Title2 = g3Info.period2Title || `${g3Info.defaultTitle} (tiết 2)`;
+  const g4Title1 = g4Info.period1Title || `${g4Info.defaultTitle} (tiết 1)`;
+  const g4Title2 = g4Info.period2Title || `${g4Info.defaultTitle} (tiết 2)`;
+  const g5Title1 = g5Info.period1Title || `${g5Info.defaultTitle} (tiết 1)`;
+  const g5Title2 = g5Info.period2Title || `${g5Info.defaultTitle} (tiết 2)`;
+
+  const g1Note1 = formatPpctIntegrationCell(1, week, p1, g1Title1, g1Info.period1Integration);
+  const g1Note2 = formatPpctIntegrationCell(1, week, p2, g1Title2, g1Info.period2Integration);
+  const g2Note1 = formatPpctIntegrationCell(2, week, p1, g2Title1, g2Info.period1Integration);
+  const g2Note2 = formatPpctIntegrationCell(2, week, p2, g2Title2, g2Info.period2Integration);
+  const g3Note1 = formatPpctIntegrationCell(3, week, p1, g3Title1, g3Info.period1Integration);
+  const g3Note2 = formatPpctIntegrationCell(3, week, p2, g3Title2, g3Info.period2Integration);
+  const g4Note1 = formatPpctIntegrationCell(4, week, p1, g4Title1, g4Info.period1Integration);
+  const g4Note2 = formatPpctIntegrationCell(4, week, p2, g4Title2, g4Info.period2Integration);
+  const g5Note1 = formatPpctIntegrationCell(5, week, p1, g5Title1, g5Info.period1Integration);
+  const g5Note2 = formatPpctIntegrationCell(5, week, p2, g5Title2, g5Info.period2Integration);
+
+  const g1Eq1 = g1Info.period1Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g1Eq2 = g1Info.period2Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g2Eq1 = g2Info.period1Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g2Eq2 = g2Info.period2Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g3Eq1 = g3Info.period1Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g3Eq2 = g3Info.period2Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g4Eq1 = g4Info.period1Equipment || 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL';
+  const g4Eq2 = g4Info.period2Equipment || 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL';
+  const g5Eq1 = g5Info.period1Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
+  const g5Eq2 = g5Info.period2Equipment || 'SGK, Tranh ảnh, còi, dụng cụ TL';
 
   return [
     {
@@ -428,10 +242,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '1A4',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g1Title1,
       ppct: p1,
       integrationNotes: g1Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g1Eq1
     },
     {
       id: `w${week}_2`,
@@ -439,10 +253,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 3,
       className: '1A5',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g1Title1,
       ppct: p1,
       integrationNotes: g1Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g1Eq1
     },
     {
       id: `w${week}_3`,
@@ -450,10 +264,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 4,
       className: '1A3',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g1Title1,
       ppct: p1,
       integrationNotes: g1Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g1Eq1
     },
     {
       id: `w${week}_4`,
@@ -461,10 +275,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '1A1',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g1Title1,
       ppct: p1,
       integrationNotes: g1Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g1Eq1
     },
     {
       id: `w${week}_5`,
@@ -472,10 +286,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 3,
       className: '1A2',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g1Title1,
       ppct: p1,
       integrationNotes: g1Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g1Eq1
     },
     {
       id: `w${week}_6`,
@@ -483,10 +297,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '5A1',
       grade: 5,
-      lessonTitle: `${g5Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g5Title1,
       ppct: p1,
       integrationNotes: g5Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g5Eq1
     },
     {
       id: `w${week}_7`,
@@ -494,10 +308,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '3A1',
       grade: 3,
-      lessonTitle: `${g3Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g3Title1,
       ppct: p1,
       integrationNotes: g3Note1,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g3Eq1
     },
     {
       id: `w${week}_8`,
@@ -505,10 +319,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 3,
       className: '5A2',
       grade: 5,
-      lessonTitle: `${g5Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g5Title1,
       ppct: p1,
       integrationNotes: g5Note1,
-      equipment: 'SGK, Tranh ảnh, video, dụng cụ TL'
+      equipment: g5Eq1
     },
     {
       id: `w${week}_9`,
@@ -516,10 +330,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '1A1',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g1Title2,
       ppct: p2,
       integrationNotes: g1Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g1Eq2
     },
     {
       id: `w${week}_10`,
@@ -527,10 +341,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '3A1',
       grade: 3,
-      lessonTitle: `${g3Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g3Title2,
       ppct: p2,
       integrationNotes: g3Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g3Eq2
     },
     {
       id: `w${week}_11`,
@@ -538,10 +352,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '1A4',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g1Title2,
       ppct: p2,
       integrationNotes: g1Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g1Eq2
     },
     {
       id: `w${week}_12`,
@@ -549,10 +363,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 3,
       className: '1A5',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g1Title2,
       ppct: p2,
       integrationNotes: g1Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g1Eq2
     },
     {
       id: `w${week}_13`,
@@ -560,10 +374,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 4,
       className: '1A3',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g1Title2,
       ppct: p2,
       integrationNotes: g1Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g1Eq2
     },
     {
       id: `w${week}_14`,
@@ -571,10 +385,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '5A1',
       grade: 5,
-      lessonTitle: `${g5Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g5Title2,
       ppct: p2,
       integrationNotes: g5Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g5Eq2
     },
     {
       id: `w${week}_15`,
@@ -582,10 +396,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 2,
       className: '5A2',
       grade: 5,
-      lessonTitle: `${g5Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g5Title2,
       ppct: p2,
       integrationNotes: g5Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g5Eq2
     },
     {
       id: `w${week}_16`,
@@ -593,10 +407,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 3,
       className: '1A2',
       grade: 1,
-      lessonTitle: `${g1Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g1Title2,
       ppct: p2,
       integrationNotes: g1Note2,
-      equipment: 'SGK, Tranh ảnh, dụng cụ TL'
+      equipment: g1Eq2
     },
     {
       id: `w${week}_17`,
@@ -604,10 +418,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '2A1',
       grade: 2,
-      lessonTitle: `${g2Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g2Title1,
       ppct: p1,
       integrationNotes: g2Note1,
-      equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+      equipment: g2Eq1
     },
     {
       id: `w${week}_18`,
@@ -615,10 +429,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '2A1',
       grade: 2,
-      lessonTitle: `${g2Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g2Title2,
       ppct: p2,
       integrationNotes: g2Note2,
-      equipment: 'SGK, Tranh ảnh, còi, dụng cụ TL'
+      equipment: g2Eq2
     },
     {
       id: `w${week}_19`,
@@ -626,10 +440,10 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '4A1',
       grade: 4,
-      lessonTitle: `${g4Info.defaultTitle} (tiết 1)`,
+      lessonTitle: g4Title1,
       ppct: p1,
       integrationNotes: g4Note1,
-      equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
+      equipment: g4Eq1
     },
     {
       id: `w${week}_20`,
@@ -637,13 +451,18 @@ export function getDefaultWeeklySchedule(week: number): WeeklyMasterScheduleRow[
       period: 1,
       className: '4A1',
       grade: 4,
-      lessonTitle: `${g4Info.defaultTitle} (tiết 2)`,
+      lessonTitle: g4Title2,
       ppct: p2,
       integrationNotes: g4Note2,
-      equipment: 'SGK, Vòng thể dục, tranh ảnh, dụng cụ TL'
+      equipment: g4Eq2
     }
   ];
 }
+
+/**
+ * Default Week 9 schedule derived directly from the official integrated curriculum plan.
+ */
+export const defaultWeek9Schedule: WeeklyMasterScheduleRow[] = getDefaultWeeklySchedule(9);
 
 /**
  * Universal Parser for Uploaded Weekly Plan Table (Word HTML or Tab-delimited text)

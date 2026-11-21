@@ -85,181 +85,404 @@ export const INTEGRATION_DOMAIN_META: Record<
 
 export const OFFICIAL_INTEGRATION_ADDRESSES: OfficialIntegrationAddress[] = [
   // =========================================================================
-  // 1. KHỐI LỚP 1 (35 tuần – 70 tiết)
+  // 1. KHỐI LỚP 1 — KHDH GDTC TÍCH HỢP 2026–2027 (TH & THCS NGHĨA HIỆP)
   // =========================================================================
   {
-    id: 'k1_w1_2',
+    id: 'nh_k1_p1',
     grade: 1,
     weekStart: 1,
-    weekEnd: 2,
+    weekEnd: 1,
     periodStart: 1,
-    periodEnd: 4,
-    lessonRef: 'CĐ1 – Bài 1: Tư thế đứng nghiêm, đứng nghỉ; Tập hợp hàng dọc, dóng hàng, điểm số',
+    periodEnd: 1,
+    lessonRef: 'CĐ1 – Bài 1: Các tư thế đứng nghiêm, đứng nghỉ (tiết 1)',
     headerLabel: 'GDQPAN & KNS',
-    content: 'Rèn tác phong nhanh nhẹn, chú ý lắng nghe hiệu lệnh, xếp hàng trật tự, biết nhường nhịn nhau khi xếp hàng.',
+    content: 'Rèn tác phong nhanh nhẹn, nghiêm túc, chú ý lắng nghe hiệu lệnh của người chỉ huy.',
     domains: ['GDQPAN', 'KNS'],
-    keywords: ['đứng nghiêm', 'đứng nghỉ', 'hàng dọc', 'dóng hàng dọc', 'điểm số']
+    keywords: ['đứng nghiêm', 'đứng nghỉ']
   },
   {
-    id: 'k1_w3_4',
+    id: 'nh_k1_p3',
+    grade: 1,
+    weekStart: 2,
+    weekEnd: 2,
+    periodStart: 3,
+    periodEnd: 3,
+    lessonRef: 'CĐ1 – Bài 1: Các tư thế đứng nghiêm, đứng nghỉ (tiết 3)',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Biết xếp hàng trật tự, nhường nhịn bạn bè; mọi HS đều có quyền tham gia bình đẳng.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['đứng nghiêm', 'đứng nghỉ', 'xếp hàng']
+  },
+  {
+    id: 'nh_k1_p5',
     grade: 1,
     weekStart: 3,
-    weekEnd: 4,
+    weekEnd: 3,
     periodStart: 5,
-    periodEnd: 8,
-    lessonRef: 'CĐ1 – Bài 2: Tập hợp hàng ngang, dóng hàng, điểm số, dàn hàng, dồn hàng',
-    headerLabel: 'Quyền trẻ em & BVMT',
-    content: 'Mọi HS đều được tham gia bình đẳng; nhắc nhở không xả rác, giữ gìn vệ sinh khu vực tập luyện.',
-    domains: ['QuyenTreEm', 'BVMT'],
-    keywords: ['hàng ngang', 'dàn hàng', 'dồn hàng', 'tập hợp hàng']
+    periodEnd: 5,
+    lessonRef: 'CĐ1 – Bài 2: Tập hợp đội hình hàng dọc, dóng hàng và điểm số (tiết 2)',
+    headerLabel: 'GDQPAN',
+    content: 'Rèn ý thức tổ chức kỷ luật, phối hợp đồng bộ trong hàng dọc khi dóng hàng và điểm số.',
+    domains: ['GDQPAN'],
+    keywords: ['hàng dọc', 'dóng hàng', 'điểm số']
   },
   {
-    id: 'k1_w5_7',
+    id: 'nh_k1_p8',
+    grade: 1,
+    weekStart: 4,
+    weekEnd: 4,
+    periodStart: 8,
+    periodEnd: 8,
+    lessonRef: 'CĐ1 – Bài 3: Tập hợp đội hình hàng ngang, dóng hàng, điểm số, dàn hàng, dồn hàng (tiết 1)',
+    headerLabel: 'BVMT',
+    content: 'Nhắc nhở HS giữ gìn vệ sinh sân tập, không xả rác bừa bãi trước và sau giờ học.',
+    domains: ['BVMT'],
+    keywords: ['hàng ngang', 'dàn hàng', 'dồn hàng']
+  },
+  {
+    id: 'nh_k1_p10',
     grade: 1,
     weekStart: 5,
-    weekEnd: 7,
-    periodStart: 9,
-    periodEnd: 14,
-    lessonRef: 'CĐ1 – Bài 3: Động tác quay các hướng; Trò chơi vận động & Ôn tập',
-    headerLabel: 'NLS (mức L1–L2)',
-    content: 'GV trình chiếu tranh/clip ngắn về hướng quay trái/phải để HS làm quen nhận diện hướng qua hình ảnh trực quan.',
-    domains: ['NLS'],
-    nlsCode: 'mức L1–L2',
-    keywords: ['quay các hướng', 'quay phải', 'quay trái', 'quay sau']
+    weekEnd: 5,
+    periodStart: 10,
+    periodEnd: 10,
+    lessonRef: 'CĐ1 – Bài 3: Tập hợp đội hình hàng ngang, dóng hàng, điểm số, dàn hàng, dồn hàng (tiết 3)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Hỗ trợ, giúp đỡ bạn dàn hàng, dồn hàng đúng khoảng cách; không chen lấn, xô đẩy.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['hàng ngang', 'dàn hàng', 'dồn hàng']
   },
   {
-    id: 'k1_w8_9',
+    id: 'nh_k1_p12',
+    grade: 1,
+    weekStart: 6,
+    weekEnd: 6,
+    periodStart: 12,
+    periodEnd: 12,
+    lessonRef: 'CĐ1 – Bài 4: Động tác quay các hướng (tiết 1)',
+    headerLabel: 'Năng lực số (L1–L2)',
+    content: 'HS quan sát tranh/video minh họa trên màn hình để nhận diện hướng quay trái/phải.',
+    domains: ['NLS'],
+    nlsCode: 'L1–L2',
+    keywords: ['quay các hướng', 'quay trái', 'quay phải']
+  },
+  {
+    id: 'nh_k1_p14',
+    grade: 1,
+    weekStart: 7,
+    weekEnd: 7,
+    periodStart: 14,
+    periodEnd: 14,
+    lessonRef: 'CĐ1 – Bài 4: Động tác quay các hướng (tiết 3)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn phản xạ nhanh, chính xác theo khẩu lệnh quay các hướng.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['quay các hướng']
+  },
+  {
+    id: 'nh_k1_p15',
     grade: 1,
     weekStart: 8,
-    weekEnd: 9,
+    weekEnd: 8,
     periodStart: 15,
-    periodEnd: 18,
-    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay; Trò chơi vận động',
-    headerLabel: 'NLS (mức L1–L2 – Mã 5.3)',
-    content: 'Tập theo tiếng đếm nhịp/nhạc nền phát từ loa/thiết bị số giúp HS giữ nhịp đều đặn.',
+    periodEnd: 15,
+    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay (tiết 1)',
+    headerLabel: 'Năng lực số (L1–L2 – Mã 5.3)',
+    content: 'Tập luyện theo nhịp đếm/nhạc nền phát từ thiết bị số giúp giữ nhịp đều.',
     domains: ['NLS'],
-    nlsCode: 'mức L1–L2 – Mã 5.3',
+    nlsCode: 'L1–L2 – Mã 5.3',
     keywords: ['vươn thở', 'động tác tay']
   },
   {
-    id: 'k1_w10_11',
+    id: 'nh_k1_p17',
     grade: 1,
-    weekStart: 10,
-    weekEnd: 11,
-    periodStart: 19,
-    periodEnd: 22,
-    lessonRef: 'CĐ2 – Bài 2: Động tác chân, động tác vặn mình, động tác bụng',
+    weekStart: 9,
+    weekEnd: 9,
+    periodStart: 17,
+    periodEnd: 17,
+    lessonRef: 'CĐ2 – Bài 2: Động tác chân, động tác vặn mình, động tác bụng (tiết 1)',
     headerLabel: 'Quyền trẻ em & KNS',
     content: 'Tôn trọng thể lực từng bạn; động viên bạn thực hiện động tác chưa dẻo, không trêu chọc.',
     domains: ['QuyenTreEm', 'KNS'],
     keywords: ['động tác chân', 'vặn mình', 'động tác bụng']
   },
   {
-    id: 'k1_w12_13',
+    id: 'nh_k1_p20',
+    grade: 1,
+    weekStart: 10,
+    weekEnd: 10,
+    periodStart: 20,
+    periodEnd: 20,
+    lessonRef: 'CĐ2 – Bài 3: Động tác phối hợp và động tác điều hòa (tiết 1)',
+    headerLabel: 'Năng lực số (L1–L2 – Mã 3.1)',
+    content: 'Khuyến khích PH quay video ngắn động tác tại nhà để HS tự quan sát tư thế.',
+    domains: ['NLS'],
+    nlsCode: 'L1–L2 – Mã 3.1',
+    keywords: ['phối hợp', 'điều hòa', 'điều hoà']
+  },
+  {
+    id: 'nh_k1_p22',
+    grade: 1,
+    weekStart: 11,
+    weekEnd: 11,
+    periodStart: 22,
+    periodEnd: 22,
+    lessonRef: 'CĐ2 – Ôn tập bài thể dục',
+    headerLabel: 'KNS & BVMT',
+    content: 'Tự giác ôn tập theo nhóm; thu dọn, kiểm tra vệ sinh khu vực luyện tập.',
+    domains: ['KNS', 'BVMT'],
+    keywords: ['ôn tập bài thể dục']
+  },
+  {
+    id: 'nh_k1_p24',
     grade: 1,
     weekStart: 12,
-    weekEnd: 13,
-    periodStart: 23,
-    periodEnd: 26,
-    lessonRef: 'CĐ2 – Bài 3: Động tác phối hợp, động tác điều hòa; Ôn bài thể dục',
-    headerLabel: 'NLS (mức L1–L2 – Mã 3.1)',
-    content: 'Khuyến khích phụ huynh chụp ảnh/quay video ngắn động tác ở nhà để HS tự xem lại tư thế.',
-    domains: ['NLS'],
-    nlsCode: 'mức L1–L2 – Mã 3.1',
-    keywords: ['động tác phối hợp', 'điều hòa', 'điều hoà', 'ôn bài thể dục']
+    weekEnd: 12,
+    periodStart: 24,
+    periodEnd: 24,
+    lessonRef: 'CĐ2 – Hoàn thiện bài tập thể dục (tiết 2)',
+    headerLabel: 'Quyền trẻ em',
+    content: 'Đánh giá sự tiến bộ của từng cá nhân một cách công bằng, khích lệ tinh thần tập luyện.',
+    domains: ['QuyenTreEm'],
+    keywords: ['hoàn thiện bài tập thể dục']
   },
   {
-    id: 'k1_w14_16',
+    id: 'nh_k1_p25',
+    grade: 1,
+    weekStart: 13,
+    weekEnd: 13,
+    periodStart: 25,
+    periodEnd: 25,
+    lessonRef: 'CĐ3 – Bài 1: Vận động của đầu, cổ (Tiết 1)',
+    headerLabel: 'ATGT',
+    content: 'Liên hệ tư thế giữ thẳng đầu, cổ, quan sát xung quanh an toàn khi đi bộ trên đường.',
+    domains: ['ATGT'],
+    keywords: ['vận động của đầu, cổ', 'đầu, cổ']
+  },
+  {
+    id: 'nh_k1_p28',
     grade: 1,
     weekStart: 14,
+    weekEnd: 14,
+    periodStart: 28,
+    periodEnd: 28,
+    lessonRef: 'CĐ3 – Bài 2: Vận động của tay (Tiết 1)',
+    headerLabel: 'KNS',
+    content: 'Rèn sự khéo léo, phối hợp nhịp nhàng giữa các thành viên trong nhóm khi vận động tay.',
+    domains: ['KNS'],
+    keywords: ['vận động của tay']
+  },
+  {
+    id: 'nh_k1_p32',
+    grade: 1,
+    weekStart: 16,
     weekEnd: 16,
-    periodStart: 27,
+    periodStart: 32,
     periodEnd: 32,
-    lessonRef: 'CĐ3 – Bài 1: Vận động của đầu, cổ, tay, chân',
+    lessonRef: 'CĐ3 – Bài 3: Vận động của chân (Tiết 1)',
     headerLabel: 'ATGT & BVMT',
-    content: 'Liên hệ tư thế đi/đứng an toàn, không chạy nhảy ùa ra đường; giữ sân tập sạch sẽ.',
+    content: 'Liên hệ đi đúng phần đường, không chạy nhảy ùa ra lòng đường; giữ sân bãi sạch đẹp.',
     domains: ['ATGT', 'BVMT'],
-    keywords: ['đầu, cổ', 'đầu cổ', 'vận động cơ bản của đầu']
+    keywords: ['vận động của chân']
   },
   {
-    id: 'k1_w17_18',
+    id: 'nh_k1_p35',
     grade: 1,
-    weekStart: 17,
+    weekStart: 18,
     weekEnd: 18,
-    periodStart: 33,
-    periodEnd: 36,
-    lessonRef: 'CĐ3 – Bài 2: Vận động phối hợp toàn bộ cơ thể; Ôn tập & KT cuối HKI',
+    periodStart: 35,
+    periodEnd: 35,
+    lessonRef: 'Ôn tập và đánh giá học kì 1',
     headerLabel: 'KNS & Quyền trẻ em',
-    content: 'Hợp tác theo nhóm nhỏ, tuân thủ luật chơi; đánh giá công bằng, tôn trọng sự cố gắng của bạn.',
+    content: 'Hợp tác nhóm nhỏ, tuân thủ luật chơi vận động, tôn trọng bạn chơi.',
     domains: ['KNS', 'QuyenTreEm'],
-    keywords: ['phối hợp toàn bộ cơ thể', 'học kỳ i', 'học kì i', 'cuối hki']
+    keywords: ['đánh giá học kì 1', 'ôn tập và đánh giá học kì 1']
   },
   {
-    id: 'k1_w19_22',
+    id: 'nh_k1_p36',
     grade: 1,
-    weekStart: 19,
-    weekEnd: 22,
-    periodStart: 37,
-    periodEnd: 44,
-    lessonRef: 'CĐ3 – Bài 3: Kỹ năng vận động cơ bản (bật nhảy, ném/bắt, di chuyển kết hợp)',
-    headerLabel: 'GDQPAN & KNS',
-    content: 'Rèn sự khéo léo, phản xạ nhanh và tinh thần đồng đội qua các trò chơi tiếp sức, ném trúng đích.',
-    domains: ['GDQPAN', 'KNS'],
-    keywords: ['bật nhảy', 'ném/bắt', 'di chuyển kết hợp', 'chân và thân mình']
+    weekStart: 18,
+    weekEnd: 18,
+    periodStart: 36,
+    periodEnd: 36,
+    lessonRef: 'Ôn tập - Kiểm tra cuối học kỳ I',
+    headerLabel: 'Quyền trẻ em',
+    content: 'Bình đẳng trong kiểm tra, đánh giá; tôn trọng sự cố gắng của mỗi học sinh.',
+    domains: ['QuyenTreEm'],
+    keywords: ['kiểm tra cuối học kỳ i', 'cuối học kỳ i']
   },
   {
-    id: 'k1_w23_25',
+    id: 'nh_k1_p39',
+    grade: 1,
+    weekStart: 20,
+    weekEnd: 20,
+    periodStart: 39,
+    periodEnd: 39,
+    lessonRef: 'CĐ3 – Bài 4: Vận động phối hợp của cơ thể (Tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn tính kỷ luật, tinh thần đồng đội và ý chí vượt qua thử thách trong vận động phối hợp.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['vận động phối hợp của cơ thể']
+  },
+  {
+    id: 'nh_k1_p42',
+    grade: 1,
+    weekStart: 21,
+    weekEnd: 21,
+    periodStart: 42,
+    periodEnd: 42,
+    lessonRef: 'CĐ3 – Bài 4: Vận động phối hợp của cơ thể (Tiết 4)',
+    headerLabel: 'Năng lực số (L1–L2)',
+    content: 'Quan sát hình ảnh/video mẫu tư thế phối hợp cơ thể để bắt chước đúng kỹ thuật.',
+    domains: ['NLS'],
+    nlsCode: 'L1–L2',
+    keywords: ['vận động phối hợp của cơ thể']
+  },
+  {
+    id: 'nh_k1_p45',
     grade: 1,
     weekStart: 23,
-    weekEnd: 25,
+    weekEnd: 23,
     periodStart: 45,
-    periodEnd: 50,
-    lessonRef: 'CĐ4 – Bài 1: Làm quen với bóng (Thể thao tự chọn – Bóng rổ/Bóng đá)',
-    headerLabel: 'NLS (mức L1–L2)',
-    content: 'Xem hình ảnh/video minh họa cách cầm bóng, giữ bóng an toàn trên màn hình/bảng tương tác.',
-    domains: ['NLS'],
-    nlsCode: 'mức L1–L2',
-    keywords: ['làm quen với bóng', 'thể thao tự chọn', 'cầm bóng']
+    periodEnd: 45,
+    lessonRef: 'CĐ3 – Bài 5: Vận động phối hợp của cơ thể (tiếp theo) (Tiết 1)',
+    headerLabel: 'KNS',
+    content: 'Rèn sự tự tin, kiên trì và khả năng giữ thăng bằng an toàn khi vận động.',
+    domains: ['KNS'],
+    keywords: ['vận động phối hợp của cơ thể (tiếp theo)']
   },
   {
-    id: 'k1_w26_28',
+    id: 'nh_k1_p48',
+    grade: 1,
+    weekStart: 24,
+    weekEnd: 24,
+    periodStart: 48,
+    periodEnd: 48,
+    lessonRef: 'CĐ3 – Bài 5: Vận động phối hợp của cơ thể (tiếp theo) (Tiết 4)',
+    headerLabel: 'BVMT & KNS',
+    content: 'Giữ gìn vệ sinh cá nhân, rửa tay sạch sẽ sau khi vận động trên sân.',
+    domains: ['BVMT', 'KNS'],
+    keywords: ['vận động phối hợp của cơ thể (tiếp theo)']
+  },
+  {
+    id: 'nh_k1_p51',
     grade: 1,
     weekStart: 26,
-    weekEnd: 28,
+    weekEnd: 26,
     periodStart: 51,
-    periodEnd: 56,
-    lessonRef: 'CĐ4 – Bài 2: Di chuyển không bóng & dẫn bóng cơ bản',
+    periodEnd: 51,
+    lessonRef: 'CĐ Bóng rổ – Bài 1: Làm quen với bóng (Tiết 1)',
+    headerLabel: 'Năng lực số (L1–L2)',
+    content: 'Xem hình ảnh/clip minh họa cách cầm bóng, giữ bóng rổ an toàn trên thiết bị trình chiếu.',
+    domains: ['NLS'],
+    nlsCode: 'L1–L2',
+    keywords: ['làm quen với bóng']
+  },
+  {
+    id: 'nh_k1_p53',
+    grade: 1,
+    weekStart: 27,
+    weekEnd: 27,
+    periodStart: 53,
+    periodEnd: 53,
+    lessonRef: 'CĐ Bóng rổ – Bài 1: Làm quen với bóng (Tiết 3)',
     headerLabel: 'Quyền trẻ em & KNS',
-    content: 'Luân phiên lượt chơi để mọi bạn đều có cơ hội chạm bóng; kiểm soát cảm xúc, không tranh giành thô bạo.',
+    content: 'Luân phiên lượt chơi để mọi bạn đều được làm quen với bóng; không tranh giành.',
     domains: ['QuyenTreEm', 'KNS'],
-    keywords: ['di chuyển không bóng', 'dẫn bóng cơ bản', 'chuyền bóng']
+    keywords: ['làm quen với bóng']
   },
   {
-    id: 'k1_w29_32',
+    id: 'nh_k1_p55',
     grade: 1,
-    weekStart: 29,
+    weekStart: 28,
+    weekEnd: 28,
+    periodStart: 55,
+    periodEnd: 55,
+    lessonRef: 'CĐ Bóng rổ – Bài 2: Động tác di chuyển không bóng (Tiết 1)',
+    headerLabel: 'ATGT & KNS',
+    content: 'Rèn kỹ năng quan sát hướng di chuyển, tránh va chạm với bạn trên sân tập.',
+    domains: ['ATGT', 'KNS'],
+    keywords: ['di chuyển không bóng']
+  },
+  {
+    id: 'nh_k1_p59',
+    grade: 1,
+    weekStart: 30,
+    weekEnd: 30,
+    periodStart: 59,
+    periodEnd: 59,
+    lessonRef: 'CĐ Bóng rổ – Bài 3: Động tác dẫn bóng (Tiết 1)',
+    headerLabel: 'KNS',
+    content: 'Rèn sự khéo léo, kiên nhẫn và kiểm soát cảm xúc khi thực hiện dẫn bóng.',
+    domains: ['KNS'],
+    keywords: ['dẫn bóng']
+  },
+  {
+    id: 'nh_k1_p61',
+    grade: 1,
+    weekStart: 31,
+    weekEnd: 31,
+    periodStart: 61,
+    periodEnd: 61,
+    lessonRef: 'CĐ Bóng rổ – Bài 3: Động tác dẫn bóng (Tiết 3)',
+    headerLabel: 'BVMT',
+    content: 'Thu gom bóng và dụng cụ học tập gọn gàng, đúng nơi quy định sau tiết học.',
+    domains: ['BVMT'],
+    keywords: ['dẫn bóng']
+  },
+  {
+    id: 'nh_k1_p64',
+    grade: 1,
+    weekStart: 32,
     weekEnd: 32,
-    periodStart: 57,
+    periodStart: 64,
     periodEnd: 64,
-    lessonRef: 'CĐ4 – Bài 3: Ném rổ/sút bóng cơ bản & Trò chơi vận động',
-    headerLabel: 'BVMT & KNS',
-    content: 'Thu dọn bóng và dụng cụ đúng nơi quy định sau tiết học; rèn tính trung thực và tinh thần fair-play.',
-    domains: ['BVMT', 'KNS'],
-    keywords: ['ném rổ', 'sút bóng', 'trò chơi vận động phát triển thể lực']
+    lessonRef: 'CĐ Bóng rổ – Bài 4: Động tác ném rổ hai tay trước ngực (tiết 1)',
+    headerLabel: 'Năng lực số (L1–L2)',
+    content: 'Quan sát video mẫu tư thế ném rổ hai tay trước ngực để nhận biết động tác đúng.',
+    domains: ['NLS'],
+    nlsCode: 'L1–L2',
+    keywords: ['ném rổ hai tay trước ngực']
   },
   {
-    id: 'k1_w33_35',
+    id: 'nh_k1_p67',
     grade: 1,
-    weekStart: 33,
+    weekStart: 34,
+    weekEnd: 34,
+    periodStart: 67,
+    periodEnd: 67,
+    lessonRef: 'CĐ Bóng rổ – Bài 4: Động tác ném rổ hai tay trước ngực (tiết 4)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Cổ vũ bạn ném bóng, rèn tinh thần đoàn kết và fair-play trong trò chơi.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['ném rổ hai tay trước ngực']
+  },
+  {
+    id: 'nh_k1_p69',
+    grade: 1,
+    weekStart: 35,
     weekEnd: 35,
-    periodStart: 65,
+    periodStart: 69,
+    periodEnd: 69,
+    lessonRef: 'Ôn tập và đánh giá học kì 2',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Tự tin thể hiện kỹ năng, tôn trọng kết quả của bản thân và bạn bè.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['đánh giá học kì 2']
+  },
+  {
+    id: 'nh_k1_p70',
+    grade: 1,
+    weekStart: 35,
+    weekEnd: 35,
+    periodStart: 70,
     periodEnd: 70,
-    lessonRef: 'Ôn tập tổng hợp & Kiểm tra đánh giá cuối năm học',
-    headerLabel: 'NLS (mức L1–L2 – Mã 2.2) & Quyền trẻ em',
-    content: 'Ghi nhận tiến bộ qua hình ảnh/clip đánh giá (nếu có); tôn trọng năng lực cá nhân.',
-    domains: ['NLS', 'QuyenTreEm'],
-    nlsCode: 'mức L1–L2 – Mã 2.2',
-    keywords: ['cuối năm', 'tổng kết năm học', 'kiểm tra đánh giá cuối năm']
+    lessonRef: 'Tổng kết môn học',
+    headerLabel: 'Năng lực số (L1–L2 – Mã 2.2) & BVMT',
+    content: 'Xem lại hình ảnh hoạt động nổi bật trong năm; nhắc nhở giữ vệ sinh trường lớp.',
+    domains: ['NLS', 'BVMT'],
+    nlsCode: 'L1–L2 – Mã 2.2',
+    keywords: ['tổng kết môn học']
   },
 
   // =========================================================================
@@ -426,169 +649,405 @@ export const OFFICIAL_INTEGRATION_ADDRESSES: OfficialIntegrationAddress[] = [
   },
 
   // =========================================================================
-  // 3. KHỐI LỚP 3 (35 tuần – 70 tiết)
+  // 3. KHỐI LỚP 3 — KHDH GDTC TÍCH HỢP 2026–2027 (TH & THCS NGHĨA HIỆP)
   // =========================================================================
   {
-    id: 'k3_w1_3',
+    id: 'nh_k3_p1',
     grade: 3,
     weekStart: 1,
-    weekEnd: 3,
+    weekEnd: 1,
     periodStart: 1,
-    periodEnd: 6,
-    lessonRef: 'CĐ1 – Bài 1: Biến đổi đội hình 1 hàng dọc thành 2, 3 hàng dọc và ngược lại',
-    headerLabel: 'GDQPAN & NLS (mức L2–L3 – Mã 1.1)',
-    content: 'Khai thác hình ảnh/video minh họa vị trí đứng, cự li hàng dọc; rèn tính kỷ luật.',
+    periodEnd: 1,
+    lessonRef: 'CĐ1 – Bài 1: Biến đổi ĐH từ một hàng dọc thành 2-3 hàng dọc và ngược lại (tiết 1)',
+    headerLabel: 'GDQPAN & Năng lực số (L2–L3 – Mã 1.1)',
+    content: 'Xem hình ảnh/video minh họa vị trí đứng hàng dọc; rèn tính kỷ luật.',
     domains: ['GDQPAN', 'NLS'],
-    nlsCode: 'mức L2–L3 – Mã 1.1',
-    keywords: ['hàng dọc', 'biến đổi đội hình 1 hàng dọc']
+    nlsCode: 'L2–L3 – Mã 1.1',
+    keywords: ['hàng dọc']
   },
   {
-    id: 'k3_w4_6',
+    id: 'nh_k3_p3',
+    grade: 3,
+    weekStart: 2,
+    weekEnd: 2,
+    periodStart: 3,
+    periodEnd: 3,
+    lessonRef: 'CĐ1 – Bài 1: Biến đổi ĐH từ một hàng dọc thành 2-3 hàng dọc và ngược lại (tiết 3)',
+    headerLabel: 'KNS',
+    content: 'Rèn tinh thần hợp tác, tự giác chấp hành hiệu lệnh khi biến đổi đội hình.',
+    domains: ['KNS'],
+    keywords: ['hàng dọc', 'biến đổi']
+  },
+  {
+    id: 'nh_k3_p5',
+    grade: 3,
+    weekStart: 3,
+    weekEnd: 3,
+    periodStart: 5,
+    periodEnd: 5,
+    lessonRef: 'CĐ1 – Bài 2: Biến đổi ĐH từ một hàng ngang thành 2-3 hàng ngang và ngược lại (tiết 1)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Phân công nhiệm vụ rõ ràng trong nhóm; tôn trọng và hỗ trợ bạn gióng hàng chuẩn.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['hàng ngang']
+  },
+  {
+    id: 'nh_k3_p7',
     grade: 3,
     weekStart: 4,
-    weekEnd: 6,
+    weekEnd: 4,
     periodStart: 7,
-    periodEnd: 12,
-    lessonRef: 'CĐ1 – Bài 2: Biến đổi đội hình 1 hàng ngang thành 2, 3 hàng ngang và ngược lại',
-    headerLabel: 'Quyền trẻ em & KNS',
-    content: 'Phân công nhiệm vụ rõ ràng trong nhóm; tôn trọng ý kiến và hỗ trợ bạn gióng hàng chuẩn.',
-    domains: ['QuyenTreEm', 'KNS'],
-    keywords: ['hàng ngang', 'biến đổi đội hình 1 hàng ngang', 'quay sau']
+    periodEnd: 7,
+    lessonRef: 'CĐ1 – Bài 2: Biến đổi ĐH từ một hàng ngang thành 2-3 hàng ngang và ngược lại (tiết 3)',
+    headerLabel: 'BVMT',
+    content: 'Kiểm tra vệ sinh sân tập trước giờ học, giữ gìn không gian tập luyện sạch sẽ.',
+    domains: ['BVMT'],
+    keywords: ['hàng ngang']
   },
   {
-    id: 'k3_w7_9',
+    id: 'nh_k3_p9',
+    grade: 3,
+    weekStart: 5,
+    weekEnd: 5,
+    periodStart: 9,
+    periodEnd: 9,
+    lessonRef: 'CĐ1 – Bài 3: Biến đổi ĐH từ một vòng tròn thành 2-3 vòng tròn và ngược lại (tiết 1)',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Phối hợp nhịp nhàng theo vòng tròn, tạo cơ hội cho mọi bạn cùng tham gia điều hành.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['vòng tròn']
+  },
+  {
+    id: 'nh_k3_p11',
+    grade: 3,
+    weekStart: 6,
+    weekEnd: 6,
+    periodStart: 11,
+    periodEnd: 11,
+    lessonRef: 'CĐ1 – Bài 4: Động tác đi đều và đứng lại (tiết 1)',
+    headerLabel: 'GDQPAN & ATGT',
+    content: 'Rèn tác phong nghiêm túc, đi đều đúng hàng; liên hệ đi bộ trật tự, an toàn giao thông.',
+    domains: ['GDQPAN', 'ATGT'],
+    keywords: ['đi đều', 'đứng lại']
+  },
+  {
+    id: 'nh_k3_p13',
     grade: 3,
     weekStart: 7,
-    weekEnd: 9,
+    weekEnd: 7,
     periodStart: 13,
-    periodEnd: 18,
-    lessonRef: 'CĐ1 – Bài 3 & 4: Động tác giậm chân tại chỗ; Đi đều, đứng lại',
-    headerLabel: 'GDQPAN, ATGT & NLS (Mã 4.3)',
-    content: 'Nhắc quy tắc an toàn khi xem video trên thiết bị số (tư thế, thời gian xem); liên hệ đi đều đúng hàng, an toàn giao thông.',
-    domains: ['GDQPAN', 'ATGT', 'NLS'],
-    nlsCode: 'Mã 4.3',
-    keywords: ['giậm chân tại chỗ', 'đi đều', 'đứng lại']
+    periodEnd: 13,
+    lessonRef: 'CĐ1 – Bài 4: Động tác đi đều và đứng lại (tiết 3)',
+    headerLabel: 'Năng lực số (L2–L3 – Mã 4.3)',
+    content: 'Nhắc quy tắc an toàn mắt và tư thế khi xem video hướng dẫn kỹ thuật.',
+    domains: ['NLS'],
+    nlsCode: 'L2–L3 – Mã 4.3',
+    keywords: ['đi đều', 'đứng lại']
   },
   {
-    id: 'k3_w10_11',
+    id: 'nh_k3_p15',
     grade: 3,
-    weekStart: 10,
-    weekEnd: 11,
-    periodStart: 19,
-    periodEnd: 22,
-    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay',
-    headerLabel: 'NLS (mức L2–L3)',
-    content: 'Sử dụng ứng dụng/nhạc đếm nhịp để điều hòa hơi thở và giữ nhịp luyện tập ổn định.',
+    weekStart: 8,
+    weekEnd: 8,
+    periodStart: 15,
+    periodEnd: 15,
+    lessonRef: 'CĐ1 – Ôn tập Chủ đề 1: Đội hình đội ngũ (tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Lồng ghép kỹ năng phòng tránh đuối nước; rèn ý thức kỷ luật khi ôn tập.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['ôn tập chủ đề 1', 'đuối nước']
+  },
+  {
+    id: 'nh_k3_p16',
+    grade: 3,
+    weekStart: 8,
+    weekEnd: 8,
+    periodStart: 16,
+    periodEnd: 16,
+    lessonRef: 'CĐ1 – Ôn tập Chủ đề 1: Đội hình đội ngũ (tiết 2)',
+    headerLabel: 'Quyền trẻ em',
+    content: 'Đảm bảo quyền được bảo vệ an toàn; thực hành nhận biết nguy cơ mất an toàn dưới nước.',
+    domains: ['QuyenTreEm'],
+    keywords: ['ôn tập chủ đề 1', 'dưới nước']
+  },
+  {
+    id: 'nh_k3_p17',
+    grade: 3,
+    weekStart: 9,
+    weekEnd: 9,
+    periodStart: 17,
+    periodEnd: 17,
+    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay (tiết 1)',
+    headerLabel: 'Năng lực số (L2–L3 – Mã 5.3)',
+    content: 'Sử dụng nhạc nền/nhịp đếm số từ thiết bị điện tử để điều hòa nhịp thở và động tác.',
     domains: ['NLS'],
-    nlsCode: 'mức L2–L3',
+    nlsCode: 'L2–L3 – Mã 5.3',
     keywords: ['vươn thở', 'động tác tay']
   },
   {
-    id: 'k3_w12_14',
+    id: 'nh_k3_p19',
     grade: 3,
-    weekStart: 12,
-    weekEnd: 14,
-    periodStart: 23,
-    periodEnd: 28,
-    lessonRef: 'CĐ2 – Bài 2: Động tác chân, động tác lườn, động tác bụng',
+    weekStart: 10,
+    weekEnd: 10,
+    periodStart: 19,
+    periodEnd: 19,
+    lessonRef: 'CĐ2 – Bài 2: Động tác chân, động tác lườn, động tác bụng (tiết 1)',
     headerLabel: 'BVMT & KNS',
-    content: 'Giáo dục thói quen giữ vệ sinh cá nhân, thay trang phục/lau mồ hôi đúng cách; duy trì sự kiên trì.',
+    content: 'Giáo dục thói quen giữ vệ sinh cá nhân, lau mồ hôi, uống nước hợp lý sau vận động.',
     domains: ['BVMT', 'KNS'],
-    keywords: ['động tác chân', 'động tác lườn', 'động tác bụng', 'động tác nhảy', 'điều hòa']
+    keywords: ['động tác chân', 'động tác lườn', 'động tác bụng']
   },
   {
-    id: 'k3_w15_17',
+    id: 'nh_k3_p21',
+    grade: 3,
+    weekStart: 11,
+    weekEnd: 11,
+    periodStart: 21,
+    periodEnd: 21,
+    lessonRef: 'CĐ2 – Bài 3: Động tác phối hợp, động tác nhảy, động tác điều hòa (tiết 1)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Động viên, hỗ trợ bạn thực hiện động tác nhảy và phối hợp; không chê bai bạn.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['phối hợp', 'động tác nhảy', 'điều hòa']
+  },
+  {
+    id: 'nh_k3_p25',
+    grade: 3,
+    weekStart: 13,
+    weekEnd: 13,
+    periodStart: 25,
+    periodEnd: 25,
+    lessonRef: 'CĐ3 – Bài 1: Bài tập phối hợp di chuyển vượt qua chướng ngại vật trên đường thẳng (tiết 1)',
+    headerLabel: 'GDQPAN & ATGT',
+    content: 'Rèn sự bình tĩnh, quan sát vật cản phía trước; liên hệ tránh chướng ngại vật an toàn.',
+    domains: ['GDQPAN', 'ATGT'],
+    keywords: ['chướng ngại vật trên đường thẳng']
+  },
+  {
+    id: 'nh_k3_p29',
     grade: 3,
     weekStart: 15,
-    weekEnd: 17,
+    weekEnd: 15,
     periodStart: 29,
-    periodEnd: 34,
-    lessonRef: 'CĐ3 – Bài 1: Phối hợp di chuyển vượt chướng ngại vật trên đường thẳng',
-    headerLabel: 'GDQPAN & ATGT',
-    content: 'Rèn sự bình tĩnh, quan sát vật cản phía trước; liên hệ tránh vật cản an toàn khi di chuyển.',
-    domains: ['GDQPAN', 'ATGT'],
-    keywords: ['vượt chướng ngại vật', 'đường thẳng', 'chướng ngại vật thấp']
+    periodEnd: 29,
+    lessonRef: 'CĐ3 – Bài 2: Bài tập phối hợp di chuyển vượt qua chướng ngại vật trên đường gấp khúc (tiết 1)',
+    headerLabel: 'Năng lực số (L2–L3)',
+    content: 'Quan sát video phân tích cách hạ trọng tâm khi đổi hướng gấp khúc để giữ thăng bằng.',
+    domains: ['NLS'],
+    nlsCode: 'L2–L3',
+    keywords: ['đường gấp khúc']
   },
   {
-    id: 'k3_w18',
+    id: 'nh_k3_p32',
+    grade: 3,
+    weekStart: 16,
+    weekEnd: 16,
+    periodStart: 32,
+    periodEnd: 32,
+    lessonRef: 'CĐ3 – Bài 2: Bài tập phối hợp di chuyển vượt qua chướng ngại vật trên đường gấp khúc (tiết 4)',
+    headerLabel: 'KNS & ATGT',
+    content: 'Rèn kỹ năng kiểm soát tốc độ và hướng di chuyển an toàn khi qua đường gấp khúc.',
+    domains: ['KNS', 'ATGT'],
+    keywords: ['đường gấp khúc']
+  },
+  {
+    id: 'nh_k3_p35',
     grade: 3,
     weekStart: 18,
     weekEnd: 18,
     periodStart: 35,
-    periodEnd: 36,
-    lessonRef: 'Ôn tập & Kiểm tra đánh giá cuối học kì I',
-    headerLabel: 'KNS & Quyền trẻ em',
-    content: 'Tự tin thể hiện kỹ năng, trung thực trong thực hiện yêu cầu và tôn trọng bạn cùng nhóm.',
-    domains: ['KNS', 'QuyenTreEm'],
-    keywords: ['học kỳ i', 'học kì i', 'hk i']
+    periodEnd: 35,
+    lessonRef: 'Ôn tập và đánh giá học kì I',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Đánh giá công bằng, trung thực trong kiểm tra; tôn trọng năng lực từng học sinh.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['đánh giá học kì i']
   },
   {
-    id: 'k3_w19_22',
+    id: 'nh_k3_p37',
     grade: 3,
     weekStart: 19,
-    weekEnd: 22,
+    weekEnd: 19,
     periodStart: 37,
-    periodEnd: 44,
-    lessonRef: 'CĐ3 – Bài 2: Phối hợp di chuyển vượt chướng ngại vật trên đường gấp khúc',
-    headerLabel: 'NLS (mức L2–L3)',
-    content: 'Quan sát video phân tích cách hạ trọng tâm khi đổi hướng gấp khúc để giữ thăng bằng.',
-    domains: ['NLS'],
-    nlsCode: 'mức L2–L3',
-    keywords: ['đường gấp khúc', 'bật xa', 'nhảy dây']
+    periodEnd: 37,
+    lessonRef: 'CĐ3 – Bài 3: Bài tập phối hợp di chuyển vượt qua chướng ngại vật trên địa hình (tiết 1)',
+    headerLabel: 'GDQPAN & BVMT',
+    content: 'Rèn ý chí vượt khó trên địa hình tự nhiên; giữ gìn cảnh quan, cây xanh sân trường.',
+    domains: ['GDQPAN', 'BVMT'],
+    keywords: ['trên địa hình']
   },
   {
-    id: 'k3_w23_25',
+    id: 'nh_k3_p40',
+    grade: 3,
+    weekStart: 20,
+    weekEnd: 20,
+    periodStart: 40,
+    periodEnd: 40,
+    lessonRef: 'CĐ3 – Bài 3: Bài tập phối hợp di chuyển vượt qua chướng ngại vật trên địa hình (tiết 4)',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Hợp tác, hỗ trợ đồng đội vượt chướng ngại vật an toàn.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['trên địa hình']
+  },
+  {
+    id: 'nh_k3_p43',
+    grade: 3,
+    weekStart: 22,
+    weekEnd: 22,
+    periodStart: 43,
+    periodEnd: 43,
+    lessonRef: 'CĐ3 – Bài 4: Bài tập tại chỗ tung - bắt bóng bằng hai tay (tiết 1)',
+    headerLabel: 'Năng lực số (L2–L3)',
+    content: 'Xem clip mẫu kỹ thuật tung – bắt bóng tại chỗ bằng hai tay để nhận diện điểm tiếp xúc bóng.',
+    domains: ['NLS'],
+    nlsCode: 'L2–L3',
+    keywords: ['tại chỗ tung', 'tung - bắt bóng']
+  },
+  {
+    id: 'nh_k3_p45',
     grade: 3,
     weekStart: 23,
-    weekEnd: 25,
+    weekEnd: 23,
     periodStart: 45,
-    periodEnd: 50,
-    lessonRef: 'CĐ3 – Bài 3: Các bài tập phối hợp kỹ năng vận động cơ bản (chạy, nhảy, ném/bắt)',
-    headerLabel: 'Quyền trẻ em & KNS',
-    content: 'Bảo đảm không gian tập an toàn cho nhau; hợp tác giải quyết tình huống vận động nhóm.',
-    domains: ['QuyenTreEm', 'KNS'],
-    keywords: ['ném bóng trúng đích', 'chạy, nhảy', 'kỹ năng vận động cơ bản']
+    periodEnd: 45,
+    lessonRef: 'CĐ3 – Bài 4: Bài tập tại chỗ tung - bắt bóng bằng hai tay (tiết 3)',
+    headerLabel: 'KNS',
+    content: 'Rèn sự tập trung, phối hợp mắt – tay và tinh thần trách nhiệm với bạn cùng cặp.',
+    domains: ['KNS'],
+    keywords: ['tại chỗ tung', 'tung - bắt bóng']
   },
   {
-    id: 'k3_w26_29',
+    id: 'nh_k3_p47',
+    grade: 3,
+    weekStart: 24,
+    weekEnd: 24,
+    periodStart: 47,
+    periodEnd: 47,
+    lessonRef: 'CĐ3 – Bài 5: Bài tập di chuyển tung - bắt bóng bằng hai tay (tiết 1)',
+    headerLabel: 'BVMT & KNS',
+    content: 'Giữ vệ sinh sân bãi và dụng cụ tập luyện; rèn sự khéo léo khi phối hợp di chuyển.',
+    domains: ['BVMT', 'KNS'],
+    keywords: ['di chuyển tung']
+  },
+  {
+    id: 'nh_k3_p51',
     grade: 3,
     weekStart: 26,
-    weekEnd: 29,
+    weekEnd: 26,
     periodStart: 51,
-    periodEnd: 58,
-    lessonRef: 'CĐ4 – Bài 1 & 2: Kỹ thuật cơ bản môn Thể thao tự chọn (dẫn bóng, chuyền/ném hoặc đá cầu/bơi)',
-    headerLabel: 'NLS (mức L2–L3) & BVMT',
-    content: 'Xem clip kỹ thuật chuẩn; giữ gìn nguồn nước (nếu học bơi) hoặc vệ sinh sân tập.',
+    periodEnd: 51,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 1: Bài tập bổ trợ với bóng (tiết 1)',
+    headerLabel: 'Năng lực số (L2–L3 – Mã 1.1) & BVMT',
+    content: 'Xem video bài tập bổ trợ bóng rổ; giữ vệ sinh sân bãi, dụng cụ.',
     domains: ['NLS', 'BVMT'],
-    nlsCode: 'mức L2–L3',
-    keywords: ['thể thao tự chọn', 'tâng bóng', 'dẫn bóng', 'đá cầu', 'bơi']
+    nlsCode: 'L2–L3 – Mã 1.1',
+    keywords: ['bổ trợ với bóng']
   },
   {
-    id: 'k3_w30_32',
+    id: 'nh_k3_p55',
+    grade: 3,
+    weekStart: 28,
+    weekEnd: 28,
+    periodStart: 55,
+    periodEnd: 55,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 2: Động tác dẫn bóng theo hướng thẳng, dẫn bóng đổi hướng (tiết 1)',
+    headerLabel: 'KNS',
+    content: 'Rèn sự khéo léo, kiên trì khi dẫn bóng thẳng và đổi hướng.',
+    domains: ['KNS'],
+    keywords: ['dẫn bóng theo hướng thẳng', 'dẫn bóng đổi hướng']
+  },
+  {
+    id: 'nh_k3_p57',
+    grade: 3,
+    weekStart: 29,
+    weekEnd: 29,
+    periodStart: 57,
+    periodEnd: 57,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 2: Động tác dẫn bóng theo hướng thẳng, dẫn bóng đổi hướng (tiết 3)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Luân phiên lượt tập công bằng giữa các thành viên trong tổ.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['dẫn bóng theo hướng thẳng', 'dẫn bóng đổi hướng']
+  },
+  {
+    id: 'nh_k3_p59',
     grade: 3,
     weekStart: 30,
-    weekEnd: 32,
+    weekEnd: 30,
     periodStart: 59,
-    periodEnd: 64,
-    lessonRef: 'CĐ4 – Bài 3: Phối hợp kỹ thuật và trò chơi vận động trong thể thao tự chọn',
-    headerLabel: 'KNS & Quyền trẻ em',
-    content: 'Điều chỉnh cảm xúc khi thắng/thua, tôn trọng trọng tài và bạn chơi.',
-    domains: ['KNS', 'QuyenTreEm'],
-    keywords: ['trò chơi thi đua tiếp sức', 'phối hợp kỹ thuật']
+    periodEnd: 59,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 3: Động tác chuyền bóng hai tay trước ngực (tiết 1)',
+    headerLabel: 'Năng lực số (L2–L3)',
+    content: 'Quan sát hình ảnh/video phân tích động tác chuyền bóng hai tay trước ngực.',
+    domains: ['NLS'],
+    nlsCode: 'L2–L3',
+    keywords: ['chuyền bóng hai tay trước ngực']
   },
   {
-    id: 'k3_w33_35',
+    id: 'nh_k3_p62',
     grade: 3,
-    weekStart: 33,
+    weekStart: 31,
+    weekEnd: 31,
+    periodStart: 62,
+    periodEnd: 62,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 3: Động tác chuyền bóng hai tay trước ngực (tiết 4)',
+    headerLabel: 'KNS',
+    content: 'Rèn kỹ năng giao tiếp, ra tín hiệu và phối hợp đồng đội khi chuyền – bắt bóng.',
+    domains: ['KNS'],
+    keywords: ['chuyền bóng hai tay trước ngực']
+  },
+  {
+    id: 'nh_k3_p64',
+    grade: 3,
+    weekStart: 32,
+    weekEnd: 32,
+    periodStart: 64,
+    periodEnd: 64,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 4: Bài tập phối hợp dẫn bóng - ném rổ bằng hai tay trước ngực (tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn sự quyết đoán, bình tĩnh và phối hợp nhịp nhàng giữa dẫn bóng và ném rổ.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['phối hợp dẫn bóng', 'ném rổ bằng hai tay']
+  },
+  {
+    id: 'nh_k3_p67',
+    grade: 3,
+    weekStart: 34,
+    weekEnd: 34,
+    periodStart: 67,
+    periodEnd: 67,
+    lessonRef: 'CĐ4 Bóng rổ – Bài 4: Bài tập phối hợp dẫn bóng - ném rổ bằng hai tay trước ngực (tiết 4)',
+    headerLabel: 'Quyền trẻ em & BVMT',
+    content: 'Tôn trọng luật chơi, cổ vũ bạn; thu dọn bóng gọn gàng sau tiết học.',
+    domains: ['QuyenTreEm', 'BVMT'],
+    keywords: ['phối hợp dẫn bóng', 'ném rổ bằng hai tay']
+  },
+  {
+    id: 'nh_k3_p69',
+    grade: 3,
+    weekStart: 35,
     weekEnd: 35,
-    periodStart: 65,
+    periodStart: 69,
+    periodEnd: 69,
+    lessonRef: 'Ôn tập và đánh giá học kì 2',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Tự tin thể hiện kỹ thuật, đánh giá khách quan kết quả học tập.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['đánh giá học kì 2']
+  },
+  {
+    id: 'nh_k3_p70',
+    grade: 3,
+    weekStart: 35,
+    weekEnd: 35,
+    periodStart: 70,
     periodEnd: 70,
-    lessonRef: 'Ôn tập tổng hợp & Kiểm tra đánh giá cuối năm học',
-    headerLabel: 'NLS (mức L2–L3) & KNS',
-    content: 'Tự nhận xét sự tiến bộ của bản thân và lập kế hoạch vận động hè đơn giản.',
+    lessonRef: 'Tổng kết năm học',
+    headerLabel: 'Năng lực số (L2–L3) & KNS',
+    content: 'Tự nhận xét sự tiến bộ và lập kế hoạch rèn luyện thể thao an toàn dịp hè.',
     domains: ['NLS', 'KNS'],
-    nlsCode: 'mức L2–L3',
-    keywords: ['cuối năm', 'tổng kết năm học']
+    nlsCode: 'L2–L3',
+    keywords: ['tổng kết năm học']
   },
 
   // =========================================================================
@@ -744,152 +1203,390 @@ export const OFFICIAL_INTEGRATION_ADDRESSES: OfficialIntegrationAddress[] = [
   },
 
   // =========================================================================
-  // 5. KHỐI LỚP 5 (35 tuần – 70 tiết)
+  // 5. KHỐI LỚP 5 — KHDH GDTC TÍCH HỢP 2026–2027 (TH & THCS NGHĨA HIỆP)
   // =========================================================================
   {
-    id: 'k5_w1_3',
+    id: 'nh_k5_p1',
     grade: 5,
     weekStart: 1,
-    weekEnd: 3,
+    weekEnd: 1,
     periodStart: 1,
-    periodEnd: 6,
-    lessonRef: 'CĐ1 – Bài 1: Bài tập phối hợp đội hình đội ngũ (biến đổi hàng dọc, hàng ngang, vòng tròn)',
-    headerLabel: 'GDQPAN & NLS (mức L4–L5 – Mã 1.1)',
-    content: 'HS tự tìm kiếm/lọc video kỹ thuật phối hợp đội hình trong kho học liệu số; rèn tác phong chỉ huy/chấp hành.',
+    periodEnd: 1,
+    lessonRef: 'CĐ1 – Bài 1: Bài tập phối hợp đội hình đội ngũ (Tiết 1)',
+    headerLabel: 'GDQPAN & Năng lực số (L4–L5 – Mã 1.1)',
+    content: 'HS tự tìm kiếm/xem video kỹ thuật phối hợp đội hình; rèn tác phong chỉ huy.',
     domains: ['GDQPAN', 'NLS'],
-    nlsCode: 'mức L4–L5 – Mã 1.1',
-    keywords: ['đội hình hàng dọc', 'hàng ngang', 'biến đổi đội hình', 'vòng tròn']
+    nlsCode: 'L4–L5 – Mã 1.1',
+    keywords: ['phối hợp đội hình đội ngũ']
   },
   {
-    id: 'k5_w4_6',
+    id: 'nh_k5_p3',
+    grade: 5,
+    weekStart: 2,
+    weekEnd: 2,
+    periodStart: 3,
+    periodEnd: 3,
+    lessonRef: 'CĐ1 – Bài 1: Bài tập phối hợp đội hình đội ngũ (Tiết 3)',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Phát huy vai trò tự quản của nhóm trưởng; tôn trọng ý kiến đóng góp của các bạn trong tổ.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['phối hợp đội hình đội ngũ']
+  },
+  {
+    id: 'nh_k5_p5',
+    grade: 5,
+    weekStart: 3,
+    weekEnd: 3,
+    periodStart: 5,
+    periodEnd: 5,
+    lessonRef: 'CĐ1 – Bài 2: Bài tập phối hợp biến đổi đội hình (Tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn tính kỷ luật, sự thống nhất và phối hợp đồng bộ khi biến đổi đội hình.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['biến đổi đội hình']
+  },
+  {
+    id: 'nh_k5_p8',
     grade: 5,
     weekStart: 4,
-    weekEnd: 6,
-    periodStart: 7,
-    periodEnd: 12,
-    lessonRef: 'CĐ1 – Bài 2: Phối hợp đi đều vòng các hướng; Giậm chân, đi đều, đi đều vòng sau',
-    headerLabel: 'NLS (mức L4–L5 – Mã 6.1) & ATGT',
-    content: 'Dùng ứng dụng AI đơn giản/video phân tích tư thế để nhận diện lỗi sai khi đi đều; liên hệ di chuyển an toàn trên đường.',
-    domains: ['NLS', 'ATGT'],
-    nlsCode: 'mức L4–L5 – Mã 6.1',
-    keywords: ['đi đều vòng', 'giậm chân', 'đi đều vòng sau']
+    weekEnd: 4,
+    periodStart: 8,
+    periodEnd: 8,
+    lessonRef: 'CĐ1 – Bài 2: Bài tập phối hợp biến đổi đội hình (Tiết 4)',
+    headerLabel: 'BVMT',
+    content: 'Kiểm tra vệ sinh sân tập, nhắc nhở ý thức giữ gìn môi trường xanh – sạch – đẹp.',
+    domains: ['BVMT'],
+    keywords: ['biến đổi đội hình']
   },
   {
-    id: 'k5_w7_9',
+    id: 'nh_k5_p11',
+    grade: 5,
+    weekStart: 6,
+    weekEnd: 6,
+    periodStart: 11,
+    periodEnd: 11,
+    lessonRef: 'CĐ1 – Bài 3: Bài tập phối hợp đi đều vòng các hướng (Tiết 1)',
+    headerLabel: 'Năng lực số (L4–L5 – Mã 6.1) & ATGT',
+    content: 'Dùng video/ứng dụng phân tích tư thế nhận diện lỗi đi đều; liên hệ đi đúng phần đường.',
+    domains: ['NLS', 'ATGT'],
+    nlsCode: 'L4–L5 – Mã 6.1',
+    keywords: ['đi đều vòng các hướng']
+  },
+  {
+    id: 'nh_k5_p13',
     grade: 5,
     weekStart: 7,
-    weekEnd: 9,
+    weekEnd: 7,
     periodStart: 13,
-    periodEnd: 18,
-    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay, động tác chân với gậy',
+    periodEnd: 13,
+    lessonRef: 'CĐ1 – Bài 3: Bài tập phối hợp đi đều vòng các hướng (Tiết 3)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn tác phong nghiêm trang, giữ cự li và tốc độ đều khi đi đều vòng các hướng.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['đi đều vòng các hướng']
+  },
+  {
+    id: 'nh_k5_p15',
+    grade: 5,
+    weekStart: 8,
+    weekEnd: 8,
+    periodStart: 15,
+    periodEnd: 15,
+    lessonRef: 'CĐ2 – Bài 1: Động tác vươn thở, động tác tay, động tác chân với gậy (Tiết 1)',
     headerLabel: 'GDQPAN, KNS & BVMT',
-    content: 'Rèn sự khéo léo, kỷ luật khi sử dụng gậy tập; thu dọn dụng cụ ngăn nắp, giữ sân tập sạch sẽ.',
+    content: 'Rèn sự khéo léo, kỷ luật khi sử dụng gậy; kiểm tra độ an toàn dụng cụ trước khi tập.',
     domains: ['GDQPAN', 'KNS', 'BVMT'],
     keywords: ['vươn thở', 'động tác tay', 'động tác chân với gậy']
   },
   {
-    id: 'k5_w10_12',
+    id: 'nh_k5_p17',
+    grade: 5,
+    weekStart: 9,
+    weekEnd: 9,
+    periodStart: 17,
+    periodEnd: 17,
+    lessonRef: 'CĐ2 – Bài 2: Động tác bụng, động tác vặn mình, động tác toàn thân với gậy (tiết 1)',
+    headerLabel: 'Năng lực số (L4–L5 – Mã 5.3)',
+    content: 'Sử dụng ứng dụng đếm nhịp số để chủ động điều chỉnh nhịp tập bài thể dục với gậy.',
+    domains: ['NLS'],
+    nlsCode: 'L4–L5 – Mã 5.3',
+    keywords: ['động tác bụng', 'vặn mình', 'toàn thân với gậy']
+  },
+  {
+    id: 'nh_k5_p20',
     grade: 5,
     weekStart: 10,
-    weekEnd: 12,
-    periodStart: 19,
-    periodEnd: 24,
-    lessonRef: 'CĐ2 – Bài 2: Động tác lườn, động tác bụng, động tác phối hợp, bật nhảy, điều hòa với gậy',
-    headerLabel: 'NLS (mức L4–L5 – Mã 5.3) & Quyền trẻ em',
-    content: 'Dùng bộ đếm nhịp số để chủ động điều chỉnh nhịp tập; hỗ trợ bạn yếu hơn một cách tôn trọng.',
-    domains: ['NLS', 'QuyenTreEm'],
-    nlsCode: 'mức L4–L5 – Mã 5.3',
-    keywords: ['động tác bụng', 'vặn mình', 'toàn thân với gậy', 'động tác lườn', 'động tác nhảy', 'điều hòa với gậy']
+    weekEnd: 10,
+    periodStart: 20,
+    periodEnd: 20,
+    lessonRef: 'CĐ2 – Bài 3: Động tác nhảy và động tác điều hòa với gậy (tiết 1)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Hỗ trợ bạn thực hiện động tác khó một cách tôn trọng; đảm bảo khoảng cách an toàn khi cầm gậy.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['động tác nhảy', 'điều hòa với gậy']
   },
   {
-    id: 'k5_w13_16',
+    id: 'nh_k5_p22',
     grade: 5,
-    weekStart: 13,
+    weekStart: 11,
+    weekEnd: 11,
+    periodStart: 22,
+    periodEnd: 22,
+    lessonRef: 'CĐ2 – Hoàn thiện bài thể dục phát triển chung với gậy (Tiết 1)',
+    headerLabel: 'KNS & BVMT',
+    content: 'Tự giác luyện tập nhóm; thu dọn và bảo quản gậy tập gọn gàng, đúng quy định.',
+    domains: ['KNS', 'BVMT'],
+    keywords: ['hoàn thiện bài thể dục phát triển chung với gậy']
+  },
+  {
+    id: 'nh_k5_p28',
+    grade: 5,
+    weekStart: 14,
+    weekEnd: 14,
+    periodStart: 28,
+    periodEnd: 28,
+    lessonRef: 'CĐ3 – Bài 1: Bài tập rèn luyện kĩ năng lăn (Tiết 4)',
+    headerLabel: 'Năng lực số (L4–L5)',
+    content: 'Xem video chậm (slow-motion) phân tích kỹ thuật lăn để phòng tránh chấn thương cột sống.',
+    domains: ['NLS'],
+    nlsCode: 'L4–L5',
+    keywords: ['kĩ năng lăn', 'kỹ năng lăn']
+  },
+  {
+    id: 'nh_k5_p31',
+    grade: 5,
+    weekStart: 16,
     weekEnd: 16,
-    periodStart: 25,
-    periodEnd: 32,
-    lessonRef: 'CĐ3 – Bài 1 & 2: Kỹ năng vận động cơ bản nâng cao (chạy, nhảy, ném/bắt, phối hợp vận động)',
+    periodStart: 31,
+    periodEnd: 31,
+    lessonRef: 'CĐ3 – Bài 2: Bài tập rèn luyện kĩ năng lộn xuôi (Tiết 1)',
     headerLabel: 'KNS & Quyền trẻ em',
-    content: 'Rèn kỹ năng tự đánh giá mức độ sẵn sàng luyện tập, tôn trọng khác biệt thể chất.',
+    content: 'Tuân thủ nguyên tắc an toàn, hỗ trợ bảo hiểm cho bạn khi tập lộn xuôi; không đùa nghịch.',
     domains: ['KNS', 'QuyenTreEm'],
-    keywords: ['chạy tiếp sức', 'vượt rào cản', 'vận động cơ bản nâng cao']
+    keywords: ['lộn xuôi']
   },
   {
-    id: 'k5_w17_18',
+    id: 'nh_k5_p35',
     grade: 5,
-    weekStart: 17,
+    weekStart: 18,
     weekEnd: 18,
-    periodStart: 33,
-    periodEnd: 36,
-    lessonRef: 'Ôn tập & Kiểm tra đánh giá cuối học kì I',
-    headerLabel: 'NLS (mức L4–L5) & KNS',
-    content: 'Quan sát video/nhận xét của GV để điều chỉnh kỹ thuật; giữ thái độ trung thực, cầu thị.',
-    domains: ['NLS', 'KNS'],
-    nlsCode: 'mức L4–L5',
-    keywords: ['học kỳ i', 'học kì i', 'hk i']
+    periodStart: 35,
+    periodEnd: 35,
+    lessonRef: 'Ôn tập học kì I',
+    headerLabel: 'KNS',
+    content: 'Rèn tính tự giác, trung thực và kỹ năng tự điều chỉnh động tác trước kiểm tra.',
+    domains: ['KNS'],
+    keywords: ['ôn tập học kì i']
   },
   {
-    id: 'k5_w19_22',
+    id: 'nh_k5_p36',
     grade: 5,
-    weekStart: 19,
-    weekEnd: 22,
-    periodStart: 37,
-    periodEnd: 44,
-    lessonRef: 'CĐ3 – Bài 3: Các bài tập phát triển thể lực và trò chơi vận động phối hợp',
-    headerLabel: 'GDQPAN & KNS',
-    content: 'Rèn ý chí bền bỉ, tinh thần đồng đội và khả năng phối hợp chiến thuật nhỏ trong nhóm.',
-    domains: ['GDQPAN', 'KNS'],
-    keywords: ['bật cao', 'nhảy xa kiểu bước qua', 'phát triển thể lực']
+    weekStart: 18,
+    weekEnd: 18,
+    periodStart: 36,
+    periodEnd: 36,
+    lessonRef: 'Kiểm tra cuối học kỳ I',
+    headerLabel: 'Quyền trẻ em',
+    content: 'Đánh giá công bằng, tôn trọng sự khác biệt về thể lực và tốc độ tiến bộ của từng HS.',
+    domains: ['QuyenTreEm'],
+    keywords: ['kiểm tra cuối học kỳ i']
   },
   {
-    id: 'k5_w23_28',
+    id: 'nh_k5_p39',
+    grade: 5,
+    weekStart: 20,
+    weekEnd: 20,
+    periodStart: 39,
+    periodEnd: 39,
+    lessonRef: 'CĐ3 – Bài 3: Bài tập rèn luyện kĩ năng leo (Tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn sức mạnh, sự bền bỉ và ý chí vượt khó trong bài tập rèn luyện kỹ năng leo.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['kĩ năng leo', 'kỹ năng leo']
+  },
+  {
+    id: 'nh_k5_p42',
+    grade: 5,
+    weekStart: 21,
+    weekEnd: 21,
+    periodStart: 42,
+    periodEnd: 42,
+    lessonRef: 'CĐ3 – Bài 3: Bài tập rèn luyện kĩ năng leo (Tiết 4)',
+    headerLabel: 'Năng lực số (L4–L5) & BVMT',
+    content: 'Quan sát clip hướng dẫn điểm tựa an toàn khi leo; giữ vệ sinh khu vực tập luyện.',
+    domains: ['NLS', 'BVMT'],
+    nlsCode: 'L4–L5',
+    keywords: ['kĩ năng leo', 'kỹ năng leo']
+  },
+  {
+    id: 'nh_k5_p45',
     grade: 5,
     weekStart: 23,
-    weekEnd: 28,
+    weekEnd: 23,
     periodStart: 45,
-    periodEnd: 56,
-    lessonRef: 'CĐ4 – Bài 1 & 2: Kỹ thuật nâng cao môn Thể thao tự chọn (Bóng rổ / Bơi / Đá cầu...)',
-    headerLabel: 'NLS (mức L4–L5 – Mã 1.1 & 6.1)',
-    content: 'Khai thác học liệu số chuẩn; ứng dụng AI/video hỗ trợ nhận diện lỗi kỹ thuật đơn giản (GV kiểm duyệt).',
-    domains: ['NLS'],
-    nlsCode: 'mức L4–L5 – Mã 1.1 & 6.1',
-    keywords: ['chạy cự ly ngắn', 'chạy bền', 'dắt bóng', 'chuyền bóng', 'thể thao tự chọn']
+    periodEnd: 45,
+    lessonRef: 'CĐ3 – Bài 4: Bài tập rèn luyện kỹ năng trèo (Tiết 1)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn sự bình tĩnh, khéo léo và tinh thần hỗ trợ đồng đội khi thực hiện kỹ năng trèo.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['kỹ năng trèo', 'kĩ năng trèo']
   },
   {
-    id: 'k5_w29_32',
+    id: 'nh_k5_p48',
+    grade: 5,
+    weekStart: 24,
+    weekEnd: 24,
+    periodStart: 48,
+    periodEnd: 48,
+    lessonRef: 'CĐ3 – Bài 4: Bài tập rèn luyện kỹ năng trèo (Tiết 4)',
+    headerLabel: 'Quyền trẻ em & KNS',
+    content: 'Đảm bảo an toàn tuyệt đối cho bản thân và bạn bè; tuân thủ nghiêm quy định sân bãi.',
+    domains: ['QuyenTreEm', 'KNS'],
+    keywords: ['kỹ năng trèo', 'kĩ năng trèo']
+  },
+  {
+    id: 'nh_k5_p54',
+    grade: 5,
+    weekStart: 27,
+    weekEnd: 27,
+    periodStart: 54,
+    periodEnd: 54,
+    lessonRef: 'CĐ Bóng rổ – Bài 1: Dẫn bóng thay đổi tốc độ, dẫn bóng theo đường vòng (tiết 4)',
+    headerLabel: 'ATGT & KNS',
+    content: 'Rèn khả năng quan sát rộng, làm chủ tốc độ và chuyển hướng linh hoạt, tránh va chạm.',
+    domains: ['ATGT', 'KNS'],
+    keywords: ['dẫn bóng thay đổi tốc độ', 'đường vòng']
+  },
+  {
+    id: 'nh_k5_p57',
     grade: 5,
     weekStart: 29,
-    weekEnd: 32,
+    weekEnd: 29,
     periodStart: 57,
-    periodEnd: 64,
-    lessonRef: 'CĐ4 – Bài 3: Phối hợp kỹ thuật, luật chơi và thi đấu/trò chơi vận động',
-    headerLabel: 'Quyền trẻ em, KNS & BVMT',
-    content: 'Tôn trọng luật chơi và đối thủ, giải quyết bất đồng ôn hòa; giữ gìn vệ sinh môi trường tập luyện.',
-    domains: ['QuyenTreEm', 'KNS', 'BVMT'],
-    keywords: ['luật thi đấu', 'chiến thuật nhóm', 'thi đấu tập', 'ném rổ', 'sút bóng']
+    periodEnd: 57,
+    lessonRef: 'CĐ Bóng rổ – Bài 2: Động tác chuyền, bắt bóng bằng hai tay trên cao (Tiết 1)',
+    headerLabel: 'Năng lực số (L4–L5 – Mã 6.1)',
+    content: 'Quay video ngắn hoặc dùng ứng dụng AI đơn giản tự soi tư thế chuyền, bắt bóng trên cao.',
+    domains: ['NLS'],
+    nlsCode: 'L4–L5 – Mã 6.1',
+    keywords: ['chuyền, bắt bóng bằng hai tay trên cao']
   },
   {
-    id: 'k5_w33_35',
+    id: 'nh_k5_p59',
     grade: 5,
-    weekStart: 33,
+    weekStart: 30,
+    weekEnd: 30,
+    periodStart: 59,
+    periodEnd: 59,
+    lessonRef: 'CĐ Bóng rổ – Bài 2: Động tác chuyền, bắt bóng bằng hai tay trên cao (Tiết 3)',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Rèn kỹ năng phối hợp đồng đội, tin tưởng và chia sẻ cơ hội bóng công bằng cho mọi bạn.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['chuyền, bắt bóng bằng hai tay trên cao']
+  },
+  {
+    id: 'nh_k5_p61',
+    grade: 5,
+    weekStart: 31,
+    weekEnd: 31,
+    periodStart: 61,
+    periodEnd: 61,
+    lessonRef: 'CĐ Bóng rổ – Bài 3: Động tác hai bước ném rổ bằng một tay trên vai (Tiết 1)',
+    headerLabel: 'Năng lực số (L4–L5 – Mã 1.1)',
+    content: 'Xem video phân tích nhịp bước chân (2 bước) và động tác ném rổ một tay trên vai.',
+    domains: ['NLS'],
+    nlsCode: 'L4–L5 – Mã 1.1',
+    keywords: ['hai bước ném rổ']
+  },
+  {
+    id: 'nh_k5_p64',
+    grade: 5,
+    weekStart: 32,
+    weekEnd: 32,
+    periodStart: 64,
+    periodEnd: 64,
+    lessonRef: 'CĐ Bóng rổ – Bài 3: Động tác hai bước ném rổ bằng một tay trên vai (Tiết 4)',
+    headerLabel: 'GDQPAN & KNS',
+    content: 'Rèn sự quyết đoán, tập trung cao độ và bản lĩnh thi đấu trong thực hành ném rổ.',
+    domains: ['GDQPAN', 'KNS'],
+    keywords: ['hai bước ném rổ']
+  },
+  {
+    id: 'nh_k5_p67',
+    grade: 5,
+    weekStart: 34,
+    weekEnd: 34,
+    periodStart: 67,
+    periodEnd: 67,
+    lessonRef: 'CĐ Bóng rổ – Bài 3: Động tác hai bước ném rổ bằng một tay trên vai (Tiết 7)',
+    headerLabel: 'Quyền trẻ em, KNS & BVMT',
+    content: 'Tôn trọng luật chơi và đối thủ, giải quyết bất đồng ôn hòa; thu gom dụng cụ sạch sẽ.',
+    domains: ['QuyenTreEm', 'KNS', 'BVMT'],
+    keywords: ['hai bước ném rổ']
+  },
+  {
+    id: 'nh_k5_p69',
+    grade: 5,
+    weekStart: 35,
     weekEnd: 35,
-    periodStart: 65,
+    periodStart: 69,
+    periodEnd: 69,
+    lessonRef: 'Ôn tập và đánh giá học kì II',
+    headerLabel: 'KNS & Quyền trẻ em',
+    content: 'Tự tin thể hiện năng lực, đánh giá khách quan kết quả rèn luyện cuối năm.',
+    domains: ['KNS', 'QuyenTreEm'],
+    keywords: ['đánh giá học kì ii']
+  },
+  {
+    id: 'nh_k5_p70',
+    grade: 5,
+    weekStart: 35,
+    weekEnd: 35,
+    periodStart: 70,
     periodEnd: 70,
-    lessonRef: 'Ôn tập tổng hợp & Kiểm tra đánh giá cuối năm học',
-    headerLabel: 'NLS (mức L4–L5) & KNS',
-    content: 'Lập kế hoạch rèn luyện thể chất vừa sức cho bản thân và chia sẻ sản phẩm/kinh nghiệm tập luyện.',
+    lessonRef: 'Kiểm tra cuối năm. Tổng kết môn học',
+    headerLabel: 'Năng lực số (L4–L5) & KNS',
+    content: 'Lập kế hoạch rèn luyện TDTT vừa sức trong dịp hè và chia sẻ kinh nghiệm cùng bạn bè.',
     domains: ['NLS', 'KNS'],
-    nlsCode: 'mức L4–L5',
-    keywords: ['cuối năm', 'tổng kết năm học', 'tiêu chuẩn rèn luyện thân thể']
+    nlsCode: 'L4–L5',
+    keywords: ['kiểm tra cuối năm', 'tổng kết môn học']
   }
 ];
 
+function buildGeneralKnowledgeFallbackAddress(
+  grade: GradeLevel,
+  week: number,
+  period?: number,
+  lessonTitle?: string
+): OfficialIntegrationAddress {
+  const p = period || (week - 1) * 2 + 1;
+  return {
+    id: `nh_k${grade}_p${p}_general`,
+    grade,
+    weekStart: week,
+    weekEnd: week,
+    periodStart: p,
+    periodEnd: p,
+    lessonRef: lessonTitle || `Kiến thức chung về GDTC (Tuần ${week} – Tiết ${p})`,
+    headerLabel: 'Kiến thức chung & KNS – BVMT',
+    content:
+      'Lồng ghép vệ sinh sân tập, vệ sinh cá nhân, chuẩn bị dụng cụ tập luyện, dinh dưỡng hợp lý và phòng chống tai nạn thương tích.',
+    domains: ['KNS', 'BVMT'],
+    keywords: ['kiến thức chung', 'vệ sinh sân tập', 'an toàn tập luyện']
+  };
+}
+
 /**
  * Looks up the exact official integration address for a given Grade, Week, Period, and optional Lesson Title.
- * Smart matching:
- * 1. First checks if `title` strongly matches a specific lesson entry of the same grade within ±3 weeks
- *    (handles schools whose PPCT shifts a lesson by 1-2 weeks relative to the reference schedule).
- * 2. Otherwise returns the exact `(grade, week)` or `(grade, period)` match from the 35-week official table.
+ *
+ * For Grades 1, 3, 5 (synced to the official 2026-2027 Nghĩa Hiệp integrated plan):
+ * 1. Exact `(grade, period)` match ALWAYS takes top priority.
+ * 2. If `period` is specified and that specific period has no dedicated note in the PDF table,
+ *    returns the official "Kiến thức chung về GDTC" thread (matching the PDF's top guidance row).
+ * 3. If `period` is omitted (week-level summary), returns the week's explicit entry if present,
+ *    otherwise the "Kiến thức chung về GDTC" thread.
+ *
+ * For Grades 2 & 4: keeps the week-range + keyword matcher intact.
  */
 export function getIntegrationAddressForLesson(
   grade: number,
@@ -901,7 +1598,24 @@ export function getIntegrationAddressForLesson(
   const safeWeek = Math.min(35, Math.max(1, Math.round(week || 1)));
   const gradeEntries = OFFICIAL_INTEGRATION_ADDRESSES.filter((item) => item.grade === safeGrade);
 
-  // Exact week match (always exists for weeks 1..35)
+  // Grades 1, 3, 5 follow the exact per-period 2026-2027 Nghĩa Hiệp integrated plan
+  if (safeGrade === 1 || safeGrade === 3 || safeGrade === 5) {
+    if (period && period >= 1 && period <= 70) {
+      const exactPeriodMatch = gradeEntries.find(
+        (item) => period >= item.periodStart && period <= item.periodEnd
+      );
+      if (exactPeriodMatch) return exactPeriodMatch;
+      return buildGeneralKnowledgeFallbackAddress(safeGrade, safeWeek, period, lessonTitle);
+    }
+
+    const weekMatch = gradeEntries.find(
+      (item) => safeWeek >= item.weekStart && safeWeek <= item.weekEnd
+    );
+    if (weekMatch) return weekMatch;
+    return buildGeneralKnowledgeFallbackAddress(safeGrade, safeWeek, undefined, lessonTitle);
+  }
+
+  // Grades 2 & 4: week-range + keyword match
   const exactWeekMatch =
     gradeEntries.find((item) => safeWeek >= item.weekStart && safeWeek <= item.weekEnd) ||
     (period
@@ -909,7 +1623,6 @@ export function getIntegrationAddressForLesson(
       : undefined) ||
     gradeEntries[0];
 
-  // If lessonTitle is provided, check whether a nearby entry (±3 weeks) matches the exact lesson content much better
   if (lessonTitle && lessonTitle.trim().length >= 4) {
     const cleanTitle = lessonTitle.toLowerCase();
     let bestEntry: OfficialIntegrationAddress | null = null;
@@ -928,7 +1641,6 @@ export function getIntegrationAddressForLesson(
           score += kw.length >= 10 ? 15 : 10;
         }
       }
-      // Bonus for exact week range
       if (weekDist === 0 && score > 0) score += 6;
 
       if (score > bestScore) {
@@ -1159,21 +1871,26 @@ function resolveSlotForClause(
     return '3.5_tro_choi';
   }
 
-  // 2. Home application / Summer plan / Daily habit / Real-life ATGT connection / Post-lesson cleanup & hygiene -> 4.2 Vận dụng & Kết thúc
+  // 2. Home application / Summer plan / Daily habit / Drowning safety / Real-life ATGT connection / Post-lesson cleanup & hygiene -> 4.2 Vận dụng & Kết thúc
   if (
-    /ở nhà|phụ huynh|lập kế hoạch|vận động hè|tự tổng kết|thói quen vận động hằng ngày|chia sẻ sản phẩm|tự nhận xét sự tiến bộ/.test(
+    /ở nhà|tại nhà|phụ huynh|lập kế hoạch|vận động hè|dịp hè|tự tổng kết|thói quen vận động hằng ngày|chia sẻ sản phẩm|chia sẻ kinh nghiệm|tự nhận xét sự tiến bộ|hoạt động nổi bật trong năm|đuối nước|dưới nước/.test(
       lower
     )
   ) {
     return '4.2_van_dung';
   }
 
-  if (/liên hệ|ùa ra đường|trên đường|khi đi lại|an toàn giao thông/.test(lower)) {
+  if (/liên hệ|ùa ra đường|ùa ra lòng đường|trên đường|khi đi lại|an toàn giao thông|đúng phần đường/.test(lower)) {
     return '4.2_van_dung';
   }
 
+  // Pre-lesson facility & equipment safety inspection -> 1.1 Nhận lớp
+  if (/kiểm tra vệ sinh sân tập trước giờ học|kiểm tra độ an toàn dụng cụ trước khi tập/.test(lower)) {
+    return '1.1_nhan_lop';
+  }
+
   if (
-    /thu dọn|không xả rác|vệ sinh sân|vệ sinh khu vực|vệ sinh môi trường|vệ sinh cá nhân|chai nước|nguồn nước|hồ bơi|lau mồ hôi|sân tập sạch|giữ gìn dụng cụ cá nhân/.test(
+    /thu dọn|thu gom|không xả rác|vệ sinh sân|vệ sinh khu vực|vệ sinh môi trường|vệ sinh trường lớp|vệ sinh cá nhân|rửa tay|chai nước|nguồn nước|hồ bơi|lau mồ hôi|uống nước|sân tập sạch|sân bãi sạch|cảnh quan|cây xanh|giữ gìn dụng cụ/.test(
       lower
     )
   ) {
@@ -1182,7 +1899,7 @@ function resolveSlotForClause(
 
   // 3. Visual / Video / AI observation -> 2.1 Kiến thức mới (or 3.4/4.2 if assessment review)
   if (
-    /trình chiếu|xem hình ảnh|xem video|xem clip|tìm kiếm|lọc video|khai thác video|khai thác hình ảnh|khai thác học liệu|bảng tương tác|màn hình|nhận diện hướng|nhận diện lỗi|quy tắc an toàn khi xem video|phân tích tư thế|phân tích kỹ thuật|phân tích cách hạ trọng tâm|quan sát video/.test(
+    /trình chiếu|xem hình ảnh|xem video|xem clip|tìm kiếm|lọc video|khai thác video|khai thác hình ảnh|khai thác học liệu|bảng tương tác|màn hình|nhận diện hướng|nhận diện lỗi|quy tắc an toàn mắt|quy tắc an toàn khi xem video|phân tích tư thế|phân tích kỹ thuật|phân tích cách hạ trọng tâm|phân tích động tác|phân tích nhịp bước|quan sát video|quan sát hình ảnh|quan sát clip|tự soi tư thế|slow-motion/.test(
       lower
     )
   ) {
@@ -1198,13 +1915,13 @@ function resolveSlotForClause(
   }
 
   // 5. Opening formation / Lining up / Listening to command (Grade 1 W1-2) -> 1.1 Nhận lớp
-  if (/xếp hàng trật tự|nhường nhịn nhau khi xếp hàng/.test(lower)) {
+  if (/xếp hàng trật tự|nhường nhịn bạn bè|nhường nhịn nhau khi xếp hàng/.test(lower)) {
     return '1.1_nhan_lop';
   }
 
   // 6. Games, Relays, Rules, Fair-play, Emotions -> 3.5 Trò chơi vận động
   if (
-    /trò chơi|tiếp sức|luật chơi|fair-play|tranh giành|thắng\/thua|trọng tài|đối thủ|thi đấu|bịt mắt|bất đồng|mâu thuẫn|chạm bóng|ném trúng đích/.test(
+    /trò chơi|tiếp sức|luật chơi|fair-play|tranh giành|thắng\/thua|trọng tài|đối thủ|thi đấu|bịt mắt|bất đồng|mâu thuẫn|chạm bóng|ném trúng đích|cổ vũ bạn/.test(
       lower
     )
   ) {
@@ -1213,7 +1930,7 @@ function resolveSlotForClause(
 
   // 7. Assessment / Fair evaluation / Peer applause -> 3.4 Thi đua / Tổng hợp kết quả
   if (
-    /đánh giá công bằng|tự đánh giá|ghi nhận tiến bộ|tự tin thể hiện kỹ năng|cổ vũ tích cực|tôn trọng kết quả|tôn trọng năng lực|thái độ trung thực, cầu thị/.test(
+    /đánh giá công bằng|đánh giá khách quan|đánh giá sự tiến bộ|bình đẳng trong kiểm tra|tự đánh giá|ghi nhận tiến bộ|tự tin thể hiện kỹ năng|tự tin thể hiện năng lực|tự tin thể hiện kỹ thuật|cổ vũ tích cực|tôn trọng kết quả|tôn trọng năng lực|thái độ trung thực|trung thực và kỹ năng tự điều chỉnh/.test(
       lower
     )
   ) {
@@ -1222,7 +1939,7 @@ function resolveSlotForClause(
 
   // 8. Whole-class formation discipline / Marching / Pace / Wand safety -> 3.1 Tập đồng loạt
   if (
-    /hiệu lệnh|hàng ngũ|cự li|đồng bộ|vạch kẻ|đi theo vạch|gậy tập|chỉ huy|chấp hành|vật cản|tăng tốc độ|tác phong|kỷ luật/.test(
+    /hiệu lệnh|khẩu lệnh|hàng ngũ|hàng dọc|cự li|đồng bộ|vạch kẻ|đi theo vạch|gậy tập|sử dụng gậy|chỉ huy|chấp hành|vật cản|tăng tốc độ|tác phong|kỷ luật|tránh va chạm/.test(
       lower
     )
   ) {
@@ -1231,7 +1948,7 @@ function resolveSlotForClause(
 
   // 9. Group cooperation, equality, helping peers, safe space, perseverance -> 3.2 Tập tổ / nhóm
   if (
-    /nhóm|tổ|bình đẳng|hỗ trợ bạn|tôn trọng|không trêu chọc|chia sẻ|phân công|không gian tập|tự học|kiên trì|phối hợp mắt – tay|chiến thuật nhỏ|khéo léo|sẵn sàng luyện tập|an toàn tuyệt đối/.test(
+    /nhóm|tổ|bình đẳng|hỗ trợ bạn|hỗ trợ bảo hiểm|hỗ trợ đồng đội|tôn trọng|không trêu chọc|không chê bai|chia sẻ|phân công|không gian tập|tự học|kiên trì|phối hợp mắt – tay|chiến thuật nhỏ|khéo léo|sẵn sàng luyện tập|an toàn tuyệt đối|bảo hiểm|khoảng cách an toàn|luân phiên lượt/.test(
       lower
     )
   ) {
@@ -1546,6 +2263,7 @@ function stripPreviousIntegrationLinesFromAction(text: string, isEndingRow: bool
     .filter((line) => {
       const trimmed = line.trim();
       if (/^[-•+]?\s*\(Tích hợp\s+[^:\n)]+\):/i.test(trimmed)) return false;
+      if (/^[-•+]?\s*Tích hợp(?:\s+[^:\n]{0,60})?:/i.test(trimmed)) return false;
       // Remove legacy generic environment reminder on 4.2 when we inject the structured official BVMT / Kiến thức chung line
       if (
         isEndingRow &&

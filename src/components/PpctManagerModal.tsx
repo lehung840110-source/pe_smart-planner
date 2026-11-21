@@ -24,7 +24,12 @@ import {
   auditScheduleAgainstPpct,
   syncScheduleFromPpct
 } from '../utils/ppctParser';
-import { defaultAllPpctData, saveStoredPpctData } from '../data/defaultPpctData';
+import {
+  defaultAllPpctData,
+  saveStoredPpctData,
+  OFFICIAL_PPCT_SOURCE_LABEL,
+  DEFAULT_GENERAL_PERIOD_INTEGRATION
+} from '../data/defaultPpctData';
 
 interface PpctManagerModalProps {
   isOpen: boolean;
@@ -141,10 +146,14 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
 
   // Restore Default PPCT
   const handleRestoreDefault = () => {
-    if (confirm('Khôi phục phân phối chương trình chuẩn Bộ GD&ĐT cho cả 5 khối (K1, K2, K3, K4, K5 - 70 tiết)?')) {
+    if (
+      confirm(
+        `Khôi phục Kế hoạch dạy học tích hợp chuẩn (${OFFICIAL_PPCT_SOURCE_LABEL} cho Khối 1, 3, 5 và GDPT 2018 cho Khối 2, 4 – 70 tiết/khối)?`
+      )
+    ) {
       onUpdatePpctList(defaultAllPpctData);
       saveStoredPpctData(defaultAllPpctData);
-      showToast('Đã khôi phục PPCT chuẩn GDPT 2018 (70 tiết/khối)!');
+      showToast('Đã khôi phục Kế hoạch dạy học tích hợp 35 tuần (70 tiết/khối) cho Khối 1, 3, 5 và GDPT 2018!');
     }
   };
 
@@ -154,19 +163,19 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
         {/* Modal Header */}
         <div className="flex justify-between items-start border-b border-slate-200 pb-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
                 <BookOpen className="w-5 h-5 text-emerald-600" />
               </div>
               <h3 className="font-bold text-base sm:text-lg text-slate-900">
-                Phân Phối Chương Trình (PPCT) & Rà Soát Giáo Án 5 Khối
+                Phân Phối Chương Trình (PPCT) & Rà Soát Giáo Án
               </h3>
               <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
-                GDPT 2018 · 70 Tiết / Khối
+                Kế hoạch tích hợp 2026–2027 (Khối 1, 3, 5) · 70 Tiết/Khối
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Quản lý phân phối chương trình Khối 1, 2, 3, 4, 5; rà soát và đối chiếu thời khóa biểu tuần thực tế với PPCT gốc để đảm bảo đúng tiến độ.
+              Nguồn chuẩn: {OFFICIAL_PPCT_SOURCE_LABEL} (Khối 1, 3, 5) kết hợp GDPT 2018 (Khối 2, 4). Tự động đồng bộ tên bài, tiết PPCT và nội dung tích hợp vào mọi kế hoạch tuần.
             </p>
           </div>
           <button
@@ -525,8 +534,12 @@ export const PpctManagerModal: React.FC<PpctManagerModalProps> = ({
                           <td className="p-2 font-semibold text-slate-900">
                             {item.lessonTitle}
                           </td>
-                          <td className="p-2 text-slate-500 text-[11px] whitespace-pre-line">
-                            {item.integrationNotes || '—'}
+                          <td className="p-2 text-slate-600 text-[11px] whitespace-pre-line">
+                            {item.integrationNotes ? (
+                              <span className="text-indigo-900 font-medium">{item.integrationNotes}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">{DEFAULT_GENERAL_PERIOD_INTEGRATION}</span>
+                            )}
                           </td>
                         </tr>
                       ))

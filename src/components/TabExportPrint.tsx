@@ -82,8 +82,9 @@ import { SelectFormationModal } from './SelectFormationModal';
 import { ClassifiedImagePickerModal, ImageClassificationCategory } from './ClassifiedImagePickerModal';
 import { PpctManagerModal } from './PpctManagerModal';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
-import { resolveSlotMissingImageNotice } from '../utils/imageProvenance';
-import { getStoredPpctData, saveStoredPpctData } from '../data/defaultPpctData';
+import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
+import { isCalisthenicsMovementLesson, extractContextSearchKeywords } from '../utils/keywordImageMatcher';
+import { getStoredPpctData, saveStoredPpctData, getPpctPeriodItem } from '../data/defaultPpctData';
 import { extractIntegrationFromPlan } from '../utils/ppctParser';
 import { setAppStateDB, getAppStateDB, safeLocalStorageSet } from '../utils/db';
 import {
@@ -103,7 +104,8 @@ import {
   findMatchingGameSlotsAcrossPlans,
   applyGameImageToMatchingPlans,
   autoSyncSharedGameImagesAcrossPlans,
-  normalizeGameNameForMatch
+  normalizeGameNameForMatch,
+  stripFabricatedGameRows
 } from '../utils/planAutoMatcher';
 import {
   cleanLessonTitleForHeader,
@@ -365,10 +367,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   // View mode
   const [viewMode, setViewMode] = useState<'all_grades' | 'grade_1' | 'grade_2' | 'grade_3' | 'grade_4' | 'grade_5' | 'single' | 'custom_template'>('all_grades');
 
-  // Multi-grade checkboxes for merging selected grades into the weekly lesson plan bundle
+  // Multi-grade checkboxes for merging selected grades into the weekly lesson plan bundle (default Khối 1, 3, 5)
   const [selectedBundleGrades, setSelectedBundleGrades] = useState<GradeLevel[]>(() => {
     try {
-      const saved = localStorage.getItem('gdtc_preview_bundle_grades_v1');
+      const saved = localStorage.getItem('gdtc_preview_bundle_grades_v2');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -380,13 +382,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }
       }
     } catch {}
-    return [1, 2, 3, 4, 5];
+    return [1, 3, 5];
   });
   const [includeScheduleInBundle, setIncludeScheduleInBundle] = useState<boolean>(true);
 
   useEffect(() => {
     try {
-      localStorage.setItem('gdtc_preview_bundle_grades_v1', JSON.stringify(selectedBundleGrades));
+      localStorage.setItem('gdtc_preview_bundle_grades_v2', JSON.stringify(selectedBundleGrades));
     } catch {}
   }, [selectedBundleGrades]);
 
@@ -823,11 +825,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
     const key = `k${g}_t${pNum}`;
     const ppct = getGradePpctInfo(g, targetWeek);
+    const ppctPeriod = getPpctPeriodItem(g, pNum, ppctList);
     const rule = getCurriculumRule(g, pNum, targetWeek);
 
     const timetableMatch = targetSchedule.find((r) => r.grade === g && r.ppct === pNum);
-    const resolvedTitle = timetableMatch?.lessonTitle || rule.cleanTitle || ppct.defaultTitle;
-    const resolvedTopic = rule.topic || ppct.defaultTopic;
+    const resolvedTitle =
+      timetableMatch?.lessonTitle ||
+      ppctPeriod?.lessonTitle ||
+      rule.cleanTitle ||
+      ppct.defaultTitle;
+    const resolvedTopic = ppctPeriod?.topic || rule.topic || ppct.defaultTopic;
 
     let base: MasterPlanItem;
     if (targetWeek === 9 && masterPlansTuan9[key]) {
@@ -894,15 +901,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     }
 
     const slotAssets = resolveLessonSlotAssets(g, resolvedTitle, resolvedTopic, images, rule.warmupGame, rule.practiceGame);
-    const isGranularRaw = rawRows.length >= 9;
+    const cleanedRawRows = stripFabricatedGameRows(rawRows);
+    const isGranularRaw = cleanedRawRows.length >= 9;
 
-    const rows = rawRows.map((r, rIdx) => {
+    const rows = cleanedRawRows.map((r, rIdx) => {
       const rLower = (r.content || '').toLowerCase();
       const isWarmupGame = r.content.includes('1.3') || (rLower.includes('trò chơi') && rLower.includes('khởi động')) || (!isGranularRaw && rIdx === 0);
       const isKhoiDongChung = !isWarmupGame && (r.content.includes('1.2.') || (rLower.includes('khởi động') && !r.content.includes('1.1.')));
       const isMovement = r.content.includes('2.1') || rLower.includes('khám phá') || rLower.includes('kỹ thuật mới') || (!isGranularRaw && rIdx === 1);
       const isPracticeGame = r.content.includes('3.5') || (rLower.includes('trò chơi') && rLower.includes('vận động')) || (!isGranularRaw && rIdx === 5);
-      const isPracticeGroup = !isPracticeGame && (r.content.includes('3.2.') || (!isGranularRaw && r.content.includes('3.1.')));
+      const isPracticeSubRow = !isPracticeGame && (r.content.includes('3.1.') || r.content.includes('3.2.') || r.content.includes('3.3.') || r.content.includes('3.4.'));
       const isCooldownRow = r.content.includes('4.1') || rLower.includes('hồi tĩnh');
       const isVanDung = !isCooldownRow && (r.content.includes('4.2') || rLower.includes('vận dụng'));
 
@@ -919,10 +927,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       }
 
       if (isWarmupGame) {
-        const wName = slotAssets.warmupGameName || rule.warmupGame;
+        const wName = (slotAssets.warmupGameName || rule.warmupGame || '').trim();
+        if (!wName) {
+          return sanitizeRowColumn1Media(r, g, resolvedTitle);
+        }
         const gameImg = slotAssets.warmupGameImg;
         let contentText = r.content || '';
-        if (wName && !contentText.toLowerCase().includes(wName.toLowerCase())) {
+        if (!contentText.toLowerCase().includes(wName.toLowerCase())) {
           if (contentText.includes('1.3.')) {
             contentText = contentText.replace(/1\.3\..*$/m, `1.3. Trò chơi bổ trợ khởi động: "${wName}".`);
           } else {
@@ -931,14 +942,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }
         let gvText = r.gv || '';
         let hsText = r.hs || '';
-        if (wName) {
-          gvText = gvText
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`)
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`);
-          hsText = hsText
-            .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`)
-            .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`);
-        }
+        gvText = gvText
+          .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`)
+          .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`);
+        hsText = hsText
+          .replace(/trò chơi khởi động "[^"]*"/gi, `trò chơi khởi động "${wName}"`)
+          .replace(/trò chơi bổ trợ khởi động "[^"]*"/gi, `trò chơi bổ trợ khởi động "${wName}"`);
         return {
           ...r,
           content: contentText,
@@ -965,18 +974,20 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         const tLower = resolvedTitle.toLowerCase();
 
         // Inspect BOTH URL and Title so authentic cropped PNGs (data:image/png...) are NOT falsely discarded,
-        // while fake .svg placeholders and cross-grade leaks are strictly rejected!
+        // while fake .svg placeholders and cross-grade/cross-domain leaks are strictly rejected!
+        // IMPORTANT: Only run Bài thể dục movement keyword checks when this lesson actually belongs to Chủ đề 2 (Bài thể dục).
+        const isBtdLesson = isCalisthenicsMovementLesson(resolvedTitle, resolvedTopic);
         const isWrongImage =
           !currentUrl ||
           isInvalidColumn1AttachmentForRow(compactedMovRow.content, currentUrl, compactedMovRow.contentImgTitle, g, resolvedTitle) ||
           isMismatched ||
-          (g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
-          (g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !mediaCorpus.includes('vặn mình') && !mediaCorpus.includes('van_minh')) ||
-          (g === 5 && (tLower.includes('toàn thân') || cLower.includes('toàn thân')) && !mediaCorpus.includes('toàn thân') && !mediaCorpus.includes('toan_than')) ||
-          (g === 5 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
-          (g === 1 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
-          (g === 1 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
-          ((tLower.includes('phối hợp') || cLower.includes('phối hợp')) && !mediaCorpus.includes('phối hợp') && !mediaCorpus.includes('phoi_hop'));
+          (isBtdLesson && g === 5 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
+          (isBtdLesson && g === 5 && (tLower.includes('vặn mình') || cLower.includes('vặn mình')) && !mediaCorpus.includes('vặn mình') && !mediaCorpus.includes('van_minh')) ||
+          (isBtdLesson && g === 5 && (tLower.includes('toàn thân') || cLower.includes('toàn thân')) && !mediaCorpus.includes('toàn thân') && !mediaCorpus.includes('toan_than')) ||
+          (isBtdLesson && g === 5 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
+          (isBtdLesson && g === 1 && (tLower.includes('bụng') || cLower.includes('bụng')) && !mediaCorpus.includes('bụng') && !mediaCorpus.includes('bung')) ||
+          (isBtdLesson && g === 1 && (tLower.includes('chân') || cLower.includes('chân')) && !mediaCorpus.includes('chân') && !mediaCorpus.includes('chan')) ||
+          (isBtdLesson && (tLower.includes('phối hợp') || cLower.includes('phối hợp')) && !mediaCorpus.includes('phối hợp') && !mediaCorpus.includes('phoi_hop'));
 
         if (isWrongImage) {
           if (acc.imgUrl) {
@@ -1000,27 +1011,40 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         return sanitizeRowColumn1Media(compactedMovRow, g, resolvedTitle);
       }
 
-      if (isPracticeGroup) {
+      if (isPracticeSubRow) {
         const cleanedPractice = sanitizeRowColumn1Media(r, g, resolvedTitle);
-        if (slotAssets.luyenTapImg?.url && !cleanedPractice.contentImgUrl) {
+        const targetLtImg = r.content.includes('3.1.')
+          ? slotAssets.luyenTapBySlot.dongLoat || (!isGranularRaw ? slotAssets.luyenTapImg : null)
+          : r.content.includes('3.2.')
+          ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
+          : r.content.includes('3.3.')
+          ? slotAssets.luyenTapBySlot.capDoi
+          : r.content.includes('3.4.')
+          ? slotAssets.luyenTapBySlot.caNhan
+          : null;
+
+        if (targetLtImg?.url && !cleanedPractice.contentImgUrl) {
           return {
             ...cleanedPractice,
-            contentImgUrl: slotAssets.luyenTapImg.url,
-            contentImgTitle: slotAssets.luyenTapImg.title,
-            contentImages: [{ id: `lt_${rIdx}`, url: slotAssets.luyenTapImg.url, title: slotAssets.luyenTapImg.title }]
+            contentImgUrl: targetLtImg.url,
+            contentImgTitle: targetLtImg.title,
+            contentImages: [{ id: `lt_${rIdx}`, url: targetLtImg.url, title: targetLtImg.title }]
           };
         }
         return cleanedPractice;
       }
 
       if (isPracticeGame) {
-        const pName = slotAssets.practiceGameName || rule.practiceGame;
+        const pName = (slotAssets.practiceGameName || rule.practiceGame || '').trim();
+        if (!pName) {
+          return sanitizeRowColumn1Media(r, g, resolvedTitle);
+        }
         const gameImg = slotAssets.practiceGameImg;
         let contentText = r.content || '';
         if (contentText.includes('Kéo co thể thao')) {
-          contentText = contentText.replace(/Kéo co thể thao/g, pName || 'Trao gậy tiếp sức');
+          contentText = contentText.replace(/Kéo co thể thao/g, pName);
         }
-        if (pName && !contentText.toLowerCase().includes(pName.toLowerCase())) {
+        if (!contentText.toLowerCase().includes(pName.toLowerCase())) {
           if (contentText.includes('Trò chơi vận động:')) {
             contentText = contentText.replace(/\*?\s*Trò chơi vận động:[^\n]*/i, `* Trò chơi vận động: "${pName}": Tổ chức cho học sinh chơi theo luật.`);
           } else {
@@ -1029,14 +1053,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         }
         let gvText = r.gv || '';
         let hsText = r.hs || '';
-        if (pName) {
-          gvText = gvText
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
-          hsText = hsText
-            .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
-            .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
-        }
+        gvText = gvText
+          .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
+          .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
+        hsText = hsText
+          .replace(/trò chơi vận động "[^"]*"/gi, `trò chơi vận động "${pName}"`)
+          .replace(/trò chơi "[^"]*"/gi, `trò chơi "${pName}"`);
         if (g === 1) {
           contentText = contentText.replace(/4\s*gậy\/bóng\/cọc tiêu/gi, 'vạch xuất phát, cọc mốc an toàn');
           gvText = gvText.replace(/cất gậy và\s*/gi, '').replace(/4\s*gậy/gi, 'cọc mốc');
@@ -1048,7 +1070,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         const isWrongGameImg =
           !currentGameUrl ||
           isInvalidColumn1AttachmentForRow(r.content, currentGameUrl, r.contentImgTitle, g, resolvedTitle) ||
-          (g === 5 && (pName?.includes('Trao gậy') || contentText.includes('Trao gậy')) && !gameCorpus.includes('trao gậy') && !gameCorpus.includes('trao_gay')) ||
+          (g === 5 && (pName.includes('Trao gậy') || contentText.includes('Trao gậy')) && !gameCorpus.includes('trao gậy') && !gameCorpus.includes('trao_gay')) ||
           (g === 5 && currentGameUrl.includes('k1_tro_choi'));
 
         const nextUrl = isWrongGameImg ? (gameImg.url || '') : currentGameUrl;
@@ -1098,7 +1120,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     if (timetableMatch && timetableMatch.integrationNotes) {
       const cleanInteg = timetableMatch.integrationNotes.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const isGenericLegacyNote =
-        /^tích hợp năng lực số|tích hợp an toàn tập luyện|giữ vệ sinh sân tập/i.test(cleanInteg);
+        /^[-•+]?\s*(tích hợp năng lực số|tích hợp an toàn tập luyện|giữ vệ sinh sân tập|lồng ghép kiến thức chung)/i.test(cleanInteg);
 
       if (cleanInteg && !isGenericLegacyNote) {
         const splitMatch = cleanInteg.replace(/^[-•+]\s*/, '').match(/^([^:]{2,70}):\s*(.+)$/);
@@ -1130,6 +1152,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       }
     }
 
+    const resolvedEquipment = ppctPeriod?.equipment || timetableMatch?.equipment || '';
+    const resolvedLocationEquipment =
+      resolvedEquipment && /gậy|bóng rổ|thảm|nệm|chướng ngại vật|vòng thể dục|nhảy dây/i.test(resolvedEquipment)
+        ? {
+            ...normalized.locationEquipment,
+            teacherTools: `Giáo án, SGK, SGV; ${resolvedEquipment}.`,
+            studentTools: `SGK, giày thể thao, trang phục gọn gàng; dụng cụ luyện tập (${resolvedEquipment}).`
+          }
+        : normalized.locationEquipment;
+
     return {
       ...normalized,
       id: `plan_k${g}_t${pNum}_w${targetWeek}`,
@@ -1139,6 +1171,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       topic: resolvedTopic,
       title: resolvedTitle,
       dateRange: targetDateRange,
+      locationEquipment: resolvedLocationEquipment,
       rows: applyOfficialIntegrationsToLessonRows(
         sanitizePlanRowsVanDung(rows, g),
         g,
@@ -1178,9 +1211,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const key = `k${g}_t${pNum}`;
 
     const expectedRule = getCurriculumRule(g, pNum, targetWeek);
+    const expectedPpctPeriod = getPpctPeriodItem(g, pNum, ppctList);
+    const isPdfIntegratedGrade = g === 1 || g === 3 || g === 5;
     const isAssessmentWeekTarget =
       expectedRule.movementKey === 'danh_gia' ||
-      /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(expectedRule.cleanTitle || '');
+      /kiểm tra|đánh giá|tổng kết|sơ kết|xếp loại|tiêu chuẩn rèn luyện/i.test(expectedRule.cleanTitle || '');
 
     const hasStaleExerciseLeakInAssessment = (planObj: MasterPlanItem): boolean => {
       if (!isAssessmentWeekTarget) return false;
@@ -1193,20 +1228,197 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       return corpus.includes('vươn thở') || corpus.includes('bài thể dục') || corpus.includes('bài tập thể dục');
     };
 
+    const hasStalePpctTitleMismatch = (planObj: MasterPlanItem): boolean => {
+      if (!isPdfIntegratedGrade || !expectedPpctPeriod?.lessonTitle) return false;
+      const norm = (s: string) =>
+        cleanLessonTitleForHeader(s || '')
+          .toLowerCase()
+          .replace(/[^a-z0-9àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const a = norm(planObj.title || '');
+      const b = norm(expectedPpctPeriod.lessonTitle);
+      if (!a || !b) return false;
+      return a !== b && !a.includes(b.slice(0, 14)) && !b.includes(a.slice(0, 14));
+    };
+
+    // Helper: non-destructively sanitize invalid cross-domain attachments and hydrate empty Column 1 image slots
+    // using the current library (e.g. after IndexedDB loads all 273+ images). Never overwrites valid teacher-chosen images.
+    const hydrateEmptySlotImages = (
+      rowsIn: LessonRow[],
+      gradeNum: number,
+      lessonTitleStr: string,
+      lessonTopicStr: string,
+      warmupGameHint?: string,
+      practiceGameHint?: string
+    ): { rows: LessonRow[]; changed: boolean } => {
+      if (!images || images.length === 0) return { rows: rowsIn, changed: false };
+      const slotAssets = resolveLessonSlotAssets(
+        gradeNum,
+        lessonTitleStr,
+        lessonTopicStr,
+        images,
+        warmupGameHint,
+        practiceGameHint
+      );
+      const isGranular = rowsIn.length >= 9;
+      const isAssessmentPlan =
+        lessonTitleStr.toLowerCase().includes('kiểm tra') ||
+        lessonTitleStr.toLowerCase().includes('đánh giá');
+
+      let changed = false;
+      const nextRows = rowsIn.map((origRow, rIdx) => {
+        const cleaned = sanitizeRowColumn1Media(origRow, gradeNum, lessonTitleStr);
+        if (
+          cleaned.contentImgUrl !== origRow.contentImgUrl ||
+          (cleaned.contentImages?.length || 0) !== (origRow.contentImages?.length || 0)
+        ) {
+          changed = true;
+        }
+
+        const alreadyHasMedia =
+          Boolean(cleaned.contentImgUrl) ||
+          Boolean(cleaned.contentImages && cleaned.contentImages.length > 0) ||
+          hasInlineMedia(cleaned.content);
+        if (alreadyHasMedia) return cleaned;
+
+        const rLower = (cleaned.content || '').toLowerCase();
+        const isPureNhanLop =
+          (rLower.includes('1.1.') || rLower.includes('nhận lớp')) &&
+          !rLower.includes('1.2.') &&
+          !rLower.includes('1.3.');
+        if (isPureNhanLop) return cleaned;
+
+        const isWarmupGame =
+          cleaned.content.includes('1.3') ||
+          (rLower.includes('trò chơi') && rLower.includes('khởi động')) ||
+          (!isGranular && rIdx === 0);
+        const isKhoiDongChung =
+          !isWarmupGame &&
+          (cleaned.content.includes('1.2.') || (rLower.includes('khởi động') && !cleaned.content.includes('1.1.')));
+        const isMovement =
+          cleaned.content.includes('2.1') ||
+          rLower.includes('khám phá') ||
+          rLower.includes('kỹ thuật mới') ||
+          (!isGranular && rIdx === 1);
+        const isPracticeGame =
+          cleaned.content.includes('3.5') ||
+          (rLower.includes('trò chơi') && rLower.includes('vận động')) ||
+          (!isGranular && rIdx === 5);
+        const isPracticeSubRow =
+          !isPracticeGame &&
+          (cleaned.content.includes('3.1.') ||
+            cleaned.content.includes('3.2.') ||
+            cleaned.content.includes('3.3.') ||
+            cleaned.content.includes('3.4.'));
+        const isPureCooldown =
+          (cleaned.content.includes('4.1') || rLower.includes('hồi tĩnh')) &&
+          !cleaned.content.includes('4.2');
+        const isPureDismissal =
+          (cleaned.content.includes('4.3') || rLower.includes('nhận xét') || rLower.includes('xuống lớp')) &&
+          !cleaned.content.includes('4.2');
+        const isVanDung =
+          !isPureCooldown &&
+          !isPureDismissal &&
+          (cleaned.content.includes('4.2') || /vận dụng\s*:/.test(rLower));
+
+        if (isKhoiDongChung && slotAssets.khoiDongImg?.url) {
+          changed = true;
+          return {
+            ...cleaned,
+            contentImgUrl: slotAssets.khoiDongImg.url,
+            contentImgTitle: slotAssets.khoiDongImg.title,
+            contentImages: [{ id: `hyd_kdc_${rIdx}`, url: slotAssets.khoiDongImg.url, title: slotAssets.khoiDongImg.title }]
+          };
+        }
+        if (isWarmupGame && slotAssets.warmupGameImg?.url) {
+          changed = true;
+          return {
+            ...cleaned,
+            contentImgUrl: slotAssets.warmupGameImg.url,
+            contentImgTitle: slotAssets.warmupGameImg.title,
+            contentImages: [{ id: `hyd_wg_${rIdx}`, url: slotAssets.warmupGameImg.url, title: slotAssets.warmupGameImg.title }]
+          };
+        }
+        if (isMovement && !isAssessmentPlan && slotAssets.movementDetails?.imgUrl) {
+          changed = true;
+          const mov = slotAssets.movementDetails;
+          return {
+            ...cleaned,
+            contentImgUrl: mov.imgUrl,
+            contentImgTitle: mov.imgTitle,
+            contentImages:
+              mov.allImages && mov.allImages.length > 0
+                ? mov.allImages
+                : [{ id: `hyd_mv_${rIdx}`, url: mov.imgUrl, title: mov.imgTitle }]
+          };
+        }
+        if (isPracticeSubRow) {
+          const targetLtImg = cleaned.content.includes('3.1.')
+            ? slotAssets.luyenTapBySlot.dongLoat || (!isGranular ? slotAssets.luyenTapImg : null)
+            : cleaned.content.includes('3.2.')
+            ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
+            : cleaned.content.includes('3.3.')
+            ? slotAssets.luyenTapBySlot.capDoi
+            : cleaned.content.includes('3.4.')
+            ? slotAssets.luyenTapBySlot.caNhan
+            : null;
+          if (targetLtImg?.url) {
+            changed = true;
+            return {
+              ...cleaned,
+              contentImgUrl: targetLtImg.url,
+              contentImgTitle: targetLtImg.title,
+              contentImages: [{ id: `hyd_lt_${rIdx}`, url: targetLtImg.url, title: targetLtImg.title }]
+            };
+          }
+        }
+        if (isPracticeGame && slotAssets.practiceGameImg?.url) {
+          changed = true;
+          return {
+            ...cleaned,
+            contentImgUrl: slotAssets.practiceGameImg.url,
+            contentImgTitle: slotAssets.practiceGameImg.title,
+            contentImages: [{ id: `hyd_pg_${rIdx}`, url: slotAssets.practiceGameImg.url, title: slotAssets.practiceGameImg.title }]
+          };
+        }
+        if (isVanDung && slotAssets.vanDungImg?.url) {
+          changed = true;
+          return {
+            ...cleaned,
+            contentImgUrl: slotAssets.vanDungImg.url,
+            contentImgTitle: slotAssets.vanDungImg.title,
+            contentImages: [{ id: `hyd_vd_${rIdx}`, url: slotAssets.vanDungImg.url, title: slotAssets.vanDungImg.title }]
+          };
+        }
+
+        return cleaned;
+      });
+
+      return { rows: nextRows, changed };
+    };
+
     // Priority 1: Preferred (last edited / active / best) version from persistent planVersionStore
     const preferredVer = getPreferredVersionForPlan(planVersionStore, targetWeek, g, pNum);
     if (preferredVer?.snapshot) {
       const snap = normalizeMasterPlan(preferredVer.snapshot);
-      // Bypass stale un-pinned auto-drafts if they leaked old Bài thể dục content onto an Assessment week
+      const isUnpinnedDraft = preferredVer.status === 'draft' && !preferredVer.isStarredBest;
+      // Bypass stale un-pinned auto-drafts if they leaked old Bài thể dục onto Assessment OR disagree with the uploaded 2026–2027 integrated PPCT plan
       if (
-        !(preferredVer.status === 'draft' && !preferredVer.isStarredBest && hasStaleExerciseLeakInAssessment(snap))
+        !(isUnpinnedDraft && (hasStaleExerciseLeakInAssessment(snap) || hasStalePpctTitleMismatch(snap)))
       ) {
-        // Always strip fake .svg placeholders & cross-grade movement leaks, compact verbose 8-beat 2.1 walls, and upgrade legacy shared Col 4 formations
-        const cleanedSnapRows = snap.rows.map((r) =>
-          compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))
-        );
+        // Always strip fake .svg placeholders & cross-grade/cross-domain movement leaks, compact verbose 8-beat 2.1 walls,
+        // hydrate empty Column 1 slots from the current image library, and upgrade legacy shared Col 4 formations
+        const cleanedSnapRows = hydrateEmptySlotImages(
+          stripFabricatedGameRows(snap.rows).map((r) => compactOverlongKnowledgeRow(r)),
+          g,
+          snap.title || expectedRule.cleanTitle,
+          snap.topic || expectedRule.topic,
+          expectedRule.warmupGame,
+          expectedRule.practiceGame
+        ).rows;
         const sanitizedRows =
-          preferredVer.status === 'draft' && !preferredVer.isStarredBest
+          isUnpinnedDraft
             ? applyGradeDistinctFormationsToRows(
                 sanitizePlanRowsVanDung(cleanedSnapRows, g),
                 g,
@@ -1219,32 +1431,25 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           pNum,
           snap.title || expectedRule.cleanTitle
         );
-        const hydratedIntegrations =
-          snap.integrations?.addressLabel && snap.integrations?.addressContent
-            ? snap.integrations
-            : {
-                ...officialSnapInteg,
-                ...(snap.integrations || {}),
-                addressLabel: officialSnapInteg.addressLabel,
-                addressContent: officialSnapInteg.addressContent,
-                domains: officialSnapInteg.domains,
-                digitalSkill: officialSnapInteg.digitalSkill,
-                digitalDescription: officialSnapInteg.digitalDescription,
-                qpan: officialSnapInteg.qpan,
-                childRights: officialSnapInteg.childRights,
-                trafficSafety: officialSnapInteg.trafficSafety,
-                lifeSkills: officialSnapInteg.lifeSkills,
-                environmentalEducation: officialSnapInteg.environmentalEducation
-              };
-        const rowsWithIntegrations = hasActivityIntegrationMarkers(sanitizedRows)
-          ? sanitizedRows
-          : applyOfficialIntegrationsToLessonRows(
-              sanitizedRows,
-              g,
-              targetWeek,
-              pNum,
-              snap.title || expectedRule.cleanTitle
-            );
+        const needsPdfIntegRefresh =
+          !snap.integrations?.addressLabel ||
+          !snap.integrations?.addressContent ||
+          (isUnpinnedDraft && isPdfIntegratedGrade && snap.integrations.addressContent !== officialSnapInteg.addressContent);
+        const hydratedIntegrations = needsPdfIntegRefresh
+          ? {
+              ...officialSnapInteg
+            }
+          : snap.integrations;
+        const rowsWithIntegrations =
+          hasActivityIntegrationMarkers(sanitizedRows) && !needsPdfIntegRefresh
+            ? sanitizedRows
+            : applyOfficialIntegrationsToLessonRows(
+                sanitizedRows,
+                g,
+                targetWeek,
+                pNum,
+                snap.title || expectedRule.cleanTitle
+              );
         return {
           ...snap,
           integrations: hydratedIntegrations,
@@ -1275,49 +1480,43 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     const savedDictPlan = weekSpecific || fallbackDict;
     if (savedDictPlan && savedDictPlan.rows && savedDictPlan.rows.length >= 5) {
       const snap = normalizeMasterPlan(savedDictPlan);
-      if (!hasStaleExerciseLeakInAssessment(snap)) {
+      if (!hasStaleExerciseLeakInAssessment(snap) && !hasStalePpctTitleMismatch(snap)) {
         const officialDictInteg = buildMasterPlanIntegrationsFromAddress(
           g,
           targetWeek,
           pNum,
           snap.title || expectedRule.cleanTitle
         );
-        const hydratedDictIntegrations =
-          snap.integrations?.addressLabel && snap.integrations?.addressContent
-            ? snap.integrations
-            : {
-                ...officialDictInteg,
-                ...(snap.integrations || {}),
-                addressLabel: officialDictInteg.addressLabel,
-                addressContent: officialDictInteg.addressContent,
-                domains: officialDictInteg.domains,
-                digitalSkill: officialDictInteg.digitalSkill,
-                digitalDescription: officialDictInteg.digitalDescription,
-                qpan: officialDictInteg.qpan,
-                childRights: officialDictInteg.childRights,
-                trafficSafety: officialDictInteg.trafficSafety,
-                lifeSkills: officialDictInteg.lifeSkills,
-                environmentalEducation: officialDictInteg.environmentalEducation
-              };
+        const needsDictIntegRefresh =
+          !snap.integrations?.addressLabel ||
+          !snap.integrations?.addressContent ||
+          (isPdfIntegratedGrade && snap.integrations.addressContent !== officialDictInteg.addressContent);
+        const hydratedDictIntegrations = needsDictIntegRefresh
+          ? { ...officialDictInteg }
+          : snap.integrations;
+        const hydratedDictRows = hydrateEmptySlotImages(
+          stripFabricatedGameRows(snap.rows).map((r) => compactOverlongKnowledgeRow(r)),
+          g,
+          snap.title || expectedRule.cleanTitle,
+          snap.topic || expectedRule.topic,
+          expectedRule.warmupGame,
+          expectedRule.practiceGame
+        ).rows;
         const cleanedDictRows = applyGradeDistinctFormationsToRows(
-          sanitizePlanRowsVanDung(
-            snap.rows.map((r) =>
-              compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, g, snap.title || expectedRule.cleanTitle))
-            ),
-            g
-          ),
+          sanitizePlanRowsVanDung(hydratedDictRows, g),
           g,
           false
         );
-        const dictRowsWithIntegrations = hasActivityIntegrationMarkers(cleanedDictRows)
-          ? cleanedDictRows
-          : applyOfficialIntegrationsToLessonRows(
-              cleanedDictRows,
-              g,
-              targetWeek,
-              pNum,
-              snap.title || expectedRule.cleanTitle
-            );
+        const dictRowsWithIntegrations =
+          hasActivityIntegrationMarkers(cleanedDictRows) && !needsDictIntegRefresh
+            ? cleanedDictRows
+            : applyOfficialIntegrationsToLessonRows(
+                cleanedDictRows,
+                g,
+                targetWeek,
+                pNum,
+                snap.title || expectedRule.cleanTitle
+              );
         return {
           ...snap,
           integrations: hydratedDictIntegrations,
@@ -1427,6 +1626,181 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     setPlansByGrade(list);
     latestPlansRef.current = list;
   }, [selectedWeek, versionRefreshNonce]);
+
+  // Non-destructive auto-hydration whenever the image library finishes loading from IndexedDB (e.g. 50 -> 273+ images)
+  // or when new photos are added in Tab 2: fills empty Column 1 slots & clears cross-domain leaks without touching user edits.
+  useEffect(() => {
+    if (!images || images.length === 0) return;
+
+    setPlansByGrade((prevPlans) => {
+      if (!prevPlans || prevPlans.length === 0) return prevPlans;
+      let anyPlanChanged = false;
+
+      const updatedPlans = prevPlans.map((plan) => {
+        const g = plan.grade;
+        const titleStr = plan.title || '';
+        const topicStr = plan.topic || '';
+        const isAssessmentPlan =
+          titleStr.toLowerCase().includes('kiểm tra') ||
+          titleStr.toLowerCase().includes('đánh giá');
+
+        const warmupRow = plan.rows.find((r) => r.content?.includes('1.3'));
+        const practiceRow = plan.rows.find((r) => r.content?.includes('3.5'));
+        const warmupGameHint = warmupRow ? extractGameNameFromRowText(warmupRow.content || '') : '';
+        const practiceGameHint = practiceRow ? extractGameNameFromRowText(practiceRow.content || '') : '';
+
+        const slotAssets = resolveLessonSlotAssets(
+          g,
+          titleStr,
+          topicStr,
+          images,
+          warmupGameHint || undefined,
+          practiceGameHint || undefined
+        );
+        const strippedRows = stripFabricatedGameRows(plan.rows);
+        const isGranular = strippedRows.length >= 9;
+        let planChanged = strippedRows.length !== plan.rows.length;
+
+        const nextRows = strippedRows.map((origRow, rIdx) => {
+          const cleaned = sanitizeRowColumn1Media(origRow, g, titleStr);
+          if (
+            cleaned.contentImgUrl !== origRow.contentImgUrl ||
+            (cleaned.contentImages?.length || 0) !== (origRow.contentImages?.length || 0)
+          ) {
+            planChanged = true;
+          }
+
+          const alreadyHasMedia =
+            Boolean(cleaned.contentImgUrl) ||
+            Boolean(cleaned.contentImages && cleaned.contentImages.length > 0) ||
+            hasInlineMedia(cleaned.content);
+          if (alreadyHasMedia) return cleaned;
+
+          const rLower = (cleaned.content || '').toLowerCase();
+          const isPureNhanLop =
+            (rLower.includes('1.1.') || rLower.includes('nhận lớp')) &&
+            !rLower.includes('1.2.') &&
+            !rLower.includes('1.3.');
+          if (isPureNhanLop) return cleaned;
+
+          const isWarmupGame =
+            cleaned.content.includes('1.3') ||
+            (rLower.includes('trò chơi') && rLower.includes('khởi động')) ||
+            (!isGranular && rIdx === 0);
+          const isKhoiDongChung =
+            !isWarmupGame &&
+            (cleaned.content.includes('1.2.') || (rLower.includes('khởi động') && !cleaned.content.includes('1.1.')));
+          const isMovement =
+            cleaned.content.includes('2.1') ||
+            rLower.includes('khám phá') ||
+            rLower.includes('kỹ thuật mới') ||
+            (!isGranular && rIdx === 1);
+          const isPracticeGame =
+            cleaned.content.includes('3.5') ||
+            (rLower.includes('trò chơi') && rLower.includes('vận động')) ||
+            (!isGranular && rIdx === 5);
+          const isPracticeSubRow =
+            !isPracticeGame &&
+            (cleaned.content.includes('3.1.') ||
+              cleaned.content.includes('3.2.') ||
+              cleaned.content.includes('3.3.') ||
+              cleaned.content.includes('3.4.'));
+          const isPureCooldown =
+            (cleaned.content.includes('4.1') || rLower.includes('hồi tĩnh')) &&
+            !cleaned.content.includes('4.2');
+          const isPureDismissal =
+            (cleaned.content.includes('4.3') || rLower.includes('nhận xét') || rLower.includes('xuống lớp')) &&
+            !cleaned.content.includes('4.2');
+          const isVanDung =
+            !isPureCooldown &&
+            !isPureDismissal &&
+            (cleaned.content.includes('4.2') || /vận dụng\s*:/.test(rLower));
+
+          if (isKhoiDongChung && slotAssets.khoiDongImg?.url) {
+            planChanged = true;
+            return {
+              ...cleaned,
+              contentImgUrl: slotAssets.khoiDongImg.url,
+              contentImgTitle: slotAssets.khoiDongImg.title,
+              contentImages: [{ id: `auto_kdc_${rIdx}`, url: slotAssets.khoiDongImg.url, title: slotAssets.khoiDongImg.title }]
+            };
+          }
+          if (isWarmupGame && slotAssets.warmupGameImg?.url) {
+            planChanged = true;
+            return {
+              ...cleaned,
+              contentImgUrl: slotAssets.warmupGameImg.url,
+              contentImgTitle: slotAssets.warmupGameImg.title,
+              contentImages: [{ id: `auto_wg_${rIdx}`, url: slotAssets.warmupGameImg.url, title: slotAssets.warmupGameImg.title }]
+            };
+          }
+          if (isMovement && !isAssessmentPlan && slotAssets.movementDetails?.imgUrl) {
+            planChanged = true;
+            const mov = slotAssets.movementDetails;
+            return {
+              ...cleaned,
+              contentImgUrl: mov.imgUrl,
+              contentImgTitle: mov.imgTitle,
+              contentImages:
+                mov.allImages && mov.allImages.length > 0
+                  ? mov.allImages
+                  : [{ id: `auto_mv_${rIdx}`, url: mov.imgUrl, title: mov.imgTitle }]
+            };
+          }
+          if (isPracticeSubRow) {
+            const targetLtImg = cleaned.content.includes('3.1.')
+              ? slotAssets.luyenTapBySlot.dongLoat || (!isGranular ? slotAssets.luyenTapImg : null)
+              : cleaned.content.includes('3.2.')
+              ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
+              : cleaned.content.includes('3.3.')
+              ? slotAssets.luyenTapBySlot.capDoi
+              : cleaned.content.includes('3.4.')
+              ? slotAssets.luyenTapBySlot.caNhan
+              : null;
+            if (targetLtImg?.url) {
+              planChanged = true;
+              return {
+                ...cleaned,
+                contentImgUrl: targetLtImg.url,
+                contentImgTitle: targetLtImg.title,
+                contentImages: [{ id: `auto_lt_${rIdx}`, url: targetLtImg.url, title: targetLtImg.title }]
+              };
+            }
+          }
+          if (isPracticeGame && slotAssets.practiceGameImg?.url) {
+            planChanged = true;
+            return {
+              ...cleaned,
+              contentImgUrl: slotAssets.practiceGameImg.url,
+              contentImgTitle: slotAssets.practiceGameImg.title,
+              contentImages: [{ id: `auto_pg_${rIdx}`, url: slotAssets.practiceGameImg.url, title: slotAssets.practiceGameImg.title }]
+            };
+          }
+          if (isVanDung && slotAssets.vanDungImg?.url) {
+            planChanged = true;
+            return {
+              ...cleaned,
+              contentImgUrl: slotAssets.vanDungImg.url,
+              contentImgTitle: slotAssets.vanDungImg.title,
+              contentImages: [{ id: `auto_vd_${rIdx}`, url: slotAssets.vanDungImg.url, title: slotAssets.vanDungImg.title }]
+            };
+          }
+
+          return cleaned;
+        });
+
+        if (planChanged) {
+          anyPlanChanged = true;
+          return { ...plan, rows: nextRows };
+        }
+        return plan;
+      });
+
+      if (!anyPlanChanged) return prevPlans;
+      latestPlansRef.current = updatedPlans;
+      return updatedPlans;
+    });
+  }, [images]);
 
   // Editable row handler
   const handlePlanRowChange = (planId: string, rowIndex: number, field: keyof LessonRow, value: any) => {
@@ -1741,9 +2115,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     searchQuery: string;
     grade?: number;
     lessonTitle?: string;
+    lessonTopic?: string;
     rowName?: string;
     category?: ImageClassificationCategory;
     gameName?: string;
+    suggestedKeywords?: string[];
   } | null>(null);
 
   const detectRowSlotMeta = (
@@ -1793,7 +2169,15 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         addBtnLabel: '+ Gắn ảnh trò chơi'
       };
     }
-    if (c.includes('4.2.') || c.includes('4.3.') || c.includes('vận dụng')) {
+    if ((c.includes('4.1.') || c.includes('4.1:') || c.includes('hồi tĩnh')) && !c.includes('4.2.')) {
+      return {
+        rowName: '4.1. Hồi tĩnh & Thả lỏng',
+        category: 'van_dung',
+        defaultQuery: 'hồi tĩnh',
+        addBtnLabel: '+ Gắn ảnh hồi tĩnh'
+      };
+    }
+    if (c.includes('4.2.') || c.includes('4.3.') || /vận dụng\s*:/.test(c)) {
       return {
         rowName: '4.2. Vận dụng thực tế SGK',
         category: 'van_dung',
@@ -1856,7 +2240,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     rowIndex: number,
     col: 'content' | 'gv' | 'hs',
     query: string,
-    forcedCategory?: ImageClassificationCategory
+    forcedCategory?: ImageClassificationCategory,
+    customKeywords?: string[]
   ) => {
     const targetPlan = getEditablePlansList().find((p) => p.id === planId);
     const targetRow = targetPlan?.rows?.[rowIndex];
@@ -1866,17 +2251,27 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       resolvedCategory === 'tro_choi_kd' || resolvedCategory === 'tro_choi_vd'
         ? extractGameNameFromRowText(targetRow?.content || '')
         : '';
+    const contextKeywords =
+      customKeywords && customKeywords.length > 0
+        ? customKeywords
+        : extractContextSearchKeywords(
+            targetPlan?.title || '',
+            targetPlan?.topic || '',
+            targetRow?.content || ''
+          );
 
     setPickerTarget({
       planId,
       rowIndex,
       col,
-      searchQuery: detectedGameName || query || detected.defaultQuery,
+      searchQuery: detectedGameName || query || contextKeywords[0] || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
+      lessonTopic: targetPlan?.topic,
       rowName: `${detected.rowName} - ${col === 'content' ? 'Cột 1 (Nội dung)' : col === 'gv' ? 'Cột 3 (GV)' : 'Cột 4 (HS)'}`,
       category: resolvedCategory,
-      gameName: detectedGameName || undefined
+      gameName: detectedGameName || undefined,
+      suggestedKeywords: contextKeywords
     });
     setPickerOpen(true);
   };
@@ -1897,6 +2292,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       detected.category === 'tro_choi_kd' || detected.category === 'tro_choi_vd'
         ? extractGameNameFromRowText(targetRow?.content || '')
         : '';
+    const contextKeywords = extractContextSearchKeywords(
+      targetPlan?.title || '',
+      targetPlan?.topic || '',
+      targetRow?.content || ''
+    );
 
     setPickerTarget({
       planId,
@@ -1904,12 +2304,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       col,
       cursorStart,
       cursorEnd,
-      searchQuery: detectedGameName || query || detected.defaultQuery,
+      searchQuery: detectedGameName || query || contextKeywords[0] || detected.defaultQuery,
       grade: targetPlan?.grade,
       lessonTitle: targetPlan?.title,
+      lessonTopic: targetPlan?.topic,
       rowName: `Chèn ảnh vào dòng văn bản - ${colName} (${detected.rowName})`,
       category: detected.category,
-      gameName: detectedGameName || undefined
+      gameName: detectedGameName || undefined,
+      suggestedKeywords: contextKeywords
     });
     setPickerOpen(true);
   };
@@ -4149,7 +4551,6 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 {!isEditMode && (
                   <div className="md:hidden print:hidden space-y-3 mt-2">
                     {plan.rows.map((row, rowIdx) => {
-                      const mMovementName = extractRowMovementName(row);
                       const mContentImgs: DiagramAttachment[] = (
                         row.contentImages && row.contentImages.length > 0
                           ? row.contentImages
@@ -4196,48 +4597,31 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
                           <div className="space-y-1.5">
                             <div className="text-[11px] font-bold text-slate-500">Nội dung / Kỹ thuật</div>
-                            <div className="text-[13px] font-semibold text-slate-900 leading-relaxed">
-                              <RichTextWithImages text={row.content} imageHeight={110} showCaptions={true} isEditMode={false} />
+                            <div className="space-y-1.5 text-[13px] font-semibold text-slate-900 leading-relaxed">
+                              {splitColumn1ContentForMedia(row.content, mContentImgs).map((seg, sIdx) =>
+                                seg.type === 'text' ? (
+                                  <RichTextWithImages
+                                    key={`m_txt_${sIdx}`}
+                                    text={seg.text}
+                                    imageHeight={110}
+                                    showCaptions={true}
+                                    isEditMode={false}
+                                  />
+                                ) : (
+                                  <div
+                                    key={`m_img_${sIdx}`}
+                                    className={`grid ${seg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 py-1`}
+                                  >
+                                    {seg.images.map((img, iIdx) => (
+                                      <div key={img.id || iIdx} className="p-1.5 bg-slate-50 rounded-lg border border-slate-200 text-center">
+                                        <img src={img.url} alt={img.title} className="max-h-40 w-auto mx-auto object-contain rounded" />
+                                        {img.title && <p className="text-[10.5px] text-slate-600 mt-1">{img.title}</p>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+                              )}
                             </div>
-                            {mContentImgs.length > 0 ? (
-                              <div className={`grid ${mContentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1`}>
-                                {mContentImgs.map((img, iIdx) => (
-                                  <div key={img.id || iIdx} className="p-1.5 bg-slate-50 rounded-lg border border-slate-200 text-center">
-                                    <img src={img.url} alt={img.title} className="max-h-40 w-auto mx-auto object-contain rounded" />
-                                    {img.title && <p className="text-[10.5px] text-slate-600 mt-1">{img.title}</p>}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (() => {
-                              if (hasInlineMedia(row.content)) return null;
-                              const mMissing = resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic);
-                              if (!mMissing) return null;
-                              return (
-                                <div className="mt-1.5 p-2 bg-amber-50 border border-dashed border-amber-300 rounded-lg text-[11px] leading-snug text-amber-950 flex items-start gap-1.5">
-                                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                                  <div className="flex-1">
-                                    <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
-                                    <p className="text-amber-800 mt-0.5">{mMissing.message}</p>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (isGuest && onRequireAuth) {
-                                          onRequireAuth('Chọn & gắn ảnh từ Thư viện vào giáo án');
-                                          return;
-                                        }
-                                        const slot = detectRowSlotMeta(row.content, rowIdx, 'content', mMovementName);
-                                        handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
-                                      }}
-                                      className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[11px] transition"
-                                    >
-                                      <FolderOpen className="w-3.5 h-3.5" />
-                                      <span>Tìm ảnh trong Thư viện</span>
-                                      {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })()}
                           </div>
 
                           <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80 space-y-1">
@@ -4528,9 +4912,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
                                 {displayedContentImages.length === 0 && (() => {
                                   const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
-                                  const missingNotice = !hasInlineMedia(row.content)
-                                    ? resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic)
-                                    : null;
+                                  const contextKws = extractContextSearchKeywords(plan.title, plan.topic, row.content);
                                   const btnTheme =
                                     slot.category === 'tro_choi_kd' || slot.category === 'khoi_dong'
                                       ? 'bg-amber-50 border-amber-200 hover:bg-amber-100 text-amber-800'
@@ -4541,18 +4923,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                       : 'bg-blue-50 border-blue-200 hover:bg-blue-100 text-blue-700';
                                   return (
                                     <div className="space-y-1.5 mt-1.5 no-print">
-                                      {missingNotice && (
-                                        <div className="p-2 bg-amber-50/90 border border-amber-300/90 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
-                                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                                          <div>
-                                            <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
-                                            <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
-                                          </div>
-                                        </div>
-                                      )}
                                       <div className="flex gap-1">
                                         <button
-                                          onClick={() => handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category)}
+                                          onClick={() =>
+                                            handleOpenPicker(
+                                              plan.id,
+                                              rowIdx,
+                                              'content',
+                                              contextKws[0] || slot.defaultQuery,
+                                              slot.category,
+                                              contextKws
+                                            )
+                                          }
                                           className={`flex-1 px-2 py-1 border rounded text-[10px] font-semibold flex items-center justify-center gap-1 transition ${btnTheme}`}
                                         >
                                           <FolderOpen className="w-3 h-3" />
@@ -4572,93 +4954,88 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                                 })()}
                               </div>
                             ) : (
-                              /* VIEW / PRINT MODE FOR COLUMN 1 */
-                              <div className="space-y-2">
-                                <RichTextWithImages
-                                  text={row.content}
-                                  imageHeight={imageHeight}
-                                  showCaptions={showImageCaptions}
-                                  isEditMode={false}
-                                />
+                              /* VIEW / PRINT MODE FOR COLUMN 1 — Clean preview: completely blank when no matching image is found (notices live exclusively in Tab 5) */
+                              (() => {
+                                const slotMeta = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
+                                const tooltipFolder =
+                                  slotMeta.category === 'khoi_dong'
+                                    ? 'khoiDong'
+                                    : slotMeta.category === 'tro_choi_kd'
+                                    ? 'troChoiKhoiDong'
+                                    : slotMeta.category === 'luyen_tap'
+                                    ? 'luyenTap'
+                                    : slotMeta.category === 'tro_choi_vd'
+                                    ? 'troChoi'
+                                    : slotMeta.category === 'van_dung'
+                                    ? 'vanDung'
+                                    : 'kyThuat';
+                                const col1Segments = splitColumn1ContentForMedia(row.content, displayedContentImages);
 
-                                {displayedContentImages.length > 0 ? (() => {
-                                  const slotMeta = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
-                                  const tooltipFolder =
-                                    slotMeta.category === 'khoi_dong'
-                                      ? 'khoiDong'
-                                      : slotMeta.category === 'tro_choi_kd'
-                                      ? 'troChoiKhoiDong'
-                                      : slotMeta.category === 'luyen_tap'
-                                      ? 'luyenTap'
-                                      : slotMeta.category === 'tro_choi_vd'
-                                      ? 'troChoi'
-                                      : slotMeta.category === 'van_dung'
-                                      ? 'vanDung'
-                                      : 'kyThuat';
-                                  return (
+                                return (
                                   <div className="space-y-1.5">
-                                    {displayedContentImages.map((cImg, cIdx) => (
-                                      <div
-                                        key={`print_c_${cIdx}`}
-                                        className="my-1.5 p-1 bg-slate-50/80 rounded border border-slate-200 text-center relative group/imgtip"
-                                      >
-                                        <img
-                                          src={cImg.url}
-                                          alt={cImg.title || 'Ảnh động tác'}
-                                          style={{ maxHeight: `${imageHeight}px` }}
-                                          className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                    {col1Segments.map((seg, sIdx) =>
+                                      seg.type === 'text' ? (
+                                        <RichTextWithImages
+                                          key={`print_txt_${sIdx}`}
+                                          text={seg.text}
+                                          imageHeight={imageHeight}
+                                          showCaptions={showImageCaptions}
+                                          isEditMode={false}
                                         />
-                                        {showImageCaptions && cImg.title && (
-                                          <p className="text-[10px] text-slate-600 italic mt-0.5">
-                                            {cImg.title}
-                                          </p>
-                                        )}
-                                        <ImageProvenanceTooltip
-                                          image={{
-                                            title: cImg.title || row.contentImgTitle || movementName,
-                                            grade: String(plan.grade),
-                                            lessonTitle: plan.title,
-                                            folder: tooltipFolder,
-                                            imgUrl: cImg.url
-                                          }}
-                                          position="bottom"
-                                          className="no-print"
-                                        />
-                                      </div>
-                                    ))}
+                                      ) : (
+                                        <div key={`print_imgs_${sIdx}`} className="space-y-1.5">
+                                          {seg.images.map((cImg, cIdx) => (
+                                            <div
+                                              key={`print_c_${sIdx}_${cIdx}`}
+                                              className="my-1 p-1 bg-slate-50/80 rounded border border-slate-200 text-center relative group/imgtip"
+                                            >
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleOpenPicker(
+                                                    plan.id,
+                                                    rowIdx,
+                                                    'content',
+                                                    slotMeta.defaultQuery,
+                                                    slotMeta.category
+                                                  )
+                                                }
+                                                className="no-print opacity-0 group-hover/imgtip:opacity-100 focus:opacity-100 absolute top-1 right-1 z-10 px-1.5 py-0.5 bg-white/95 hover:bg-blue-50 text-blue-700 border border-blue-200 rounded text-[9.5px] font-bold shadow-2xs transition flex items-center gap-0.5"
+                                                title="Tìm & đổi ảnh khác theo từ khóa trong Thư viện"
+                                              >
+                                                <FolderOpen className="w-2.5 h-2.5" />
+                                                <span>Đổi ảnh</span>
+                                              </button>
+                                              <img
+                                                src={cImg.url}
+                                                alt={cImg.title || 'Ảnh động tác'}
+                                                style={{ maxHeight: `${imageHeight}px` }}
+                                                className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                              />
+                                              {showImageCaptions && cImg.title && (
+                                                <p className="text-[10px] text-slate-600 italic mt-0.5">
+                                                  {cImg.title}
+                                                </p>
+                                              )}
+                                              <ImageProvenanceTooltip
+                                                image={{
+                                                  title: cImg.title || row.contentImgTitle || movementName,
+                                                  grade: String(plan.grade),
+                                                  lessonTitle: plan.title,
+                                                  folder: tooltipFolder,
+                                                  imgUrl: cImg.url
+                                                }}
+                                                position="bottom"
+                                                className="no-print"
+                                              />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )
+                                    )}
                                   </div>
-                                  );
-                                })() : (() => {
-                                  if (hasInlineMedia(row.content)) return null;
-                                  const missingNotice = resolveSlotMissingImageNotice(plan.grade, row.content, plan.title, plan.topic);
-                                  if (!missingNotice) return null;
-                                  return (
-                                    <div className="no-print mt-1.5 p-2 bg-amber-50/90 border border-dashed border-amber-300 rounded-md text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
-                                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                                      <div className="flex-1">
-                                        <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
-                                        <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            if (isGuest && onRequireAuth) {
-                                              onRequireAuth('Chọn & gắn ảnh từ Thư viện vào giáo án');
-                                              return;
-                                            }
-                                            const slot = detectRowSlotMeta(row.content, rowIdx, 'content', movementName);
-                                            handleOpenPicker(plan.id, rowIdx, 'content', slot.defaultQuery, slot.category);
-                                          }}
-                                          className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[10px] transition"
-                                        >
-                                          <FolderOpen className="w-3 h-3" />
-                                          <span>Tìm ảnh trong Thư viện</span>
-                                          {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-                              </div>
+                                );
+                              })()
                             )}
                           </td>
 
@@ -5577,9 +5954,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           images={images}
           initialGrade={pickerTarget.grade ? (String(pickerTarget.grade) as '1' | '2' | '3' | '4' | '5') : 'all'}
           initialCategory={pickerTarget.category || 'all'}
+          initialSearchQuery={pickerTarget.searchQuery}
+          suggestedKeywords={pickerTarget.suggestedKeywords}
           targetInfo={{
             grade: pickerTarget.grade,
             lessonTitle: pickerTarget.lessonTitle,
+            lessonTopic: pickerTarget.lessonTopic,
             rowName: pickerTarget.rowName,
             rowIndex: pickerTarget.rowIndex,
             gameName: pickerTarget.gameName

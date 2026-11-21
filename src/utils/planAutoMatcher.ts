@@ -16,9 +16,18 @@ import {
   findSgkLessonByTopicOrTitle,
   findSgkLessonForMovement,
   doesImageBelongToSgkLesson,
-  findSgkLessonByPage
+  findSgkLessonByPage,
+  isFabricatedLegacyGameName
 } from '../data/sgkCurriculumTree';
 import { applyOfficialIntegrationsToLessonRows } from '../data/integrationAddressesData';
+import { sortLibraryImages, detectPracticeSubSlotType } from './libraryImageOrder';
+import {
+  detectCompoundConceptId,
+  detectLessonContextDomain,
+  isCalisthenicsMovementLesson,
+  isNonCalisthenicsCoordinationText,
+  matchTechnicalImagesByContext
+} from './keywordImageMatcher';
 
 export interface AutoMatchResult {
   newRows: LessonRow[];
@@ -84,8 +93,10 @@ export function extractMovementNamesFromTitle(title: string): string[] {
     'Đi đều vòng trái'
   ];
 
+  const isNonBtdCoord = isNonCalisthenicsCoordinationText(cleanTitle);
   const matches: Array<{ name: string; index: number }> = [];
   for (const km of knownMovements) {
+    if (isNonBtdCoord && /phối hợp/i.test(km)) continue;
     const reg = new RegExp(km.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     const match = reg.exec(cleanTitle);
     if (match) {
@@ -400,8 +411,9 @@ export function isInvalidColumn1AttachmentForRow(
     cLower.includes('trò chơi vận động');
   const isGameRow = isWarmupGameRow || isPracticeGameRow;
 
-  // 2. For ALL non-game rows (1.2, 2.1, 3.2, 4.2): STRICTLY forbid any cross-grade image (both URL and title!)
-  if (!isGameRow) {
+  // 2. For movement, practice, and application rows (2.1, 3.1-3.4, 4.2): STRICTLY forbid any cross-grade image!
+  //    Warm-up general (1.2 Khởi động chung) and exact-name Games (1.3, 3.5) MAY share raster images across grades.
+  if (!isGameRow && !isKhoiDongChungRow) {
     if (hasConflictingGradeTag(uLower, grade) || hasConflictingGradeTag(tNorm, grade)) {
       return true;
     }
@@ -412,11 +424,32 @@ export function isInvalidColumn1AttachmentForRow(
     return true;
   }
 
-  // 4. 2.1 Khám phá kiến thức mới MUST NEVER hold game photos (or Bài thể dục in Assessment week)
+  // 4. 2.1 Khám phá kiến thức mới MUST NEVER hold game photos, Bài thể dục in Assessment, or cross-domain hijacked photos
   if (isKnowledgeRow) {
     if (gameTitlePattern.test(tNorm)) return true;
     const isAssessment = /kiểm tra|đánh giá|tổng kết|xếp loại|tiêu chuẩn rèn luyện/i.test(`${lessonTitle} ${rowContent}`);
     if (isAssessment && (tNorm.includes('vươn thở') || uLower.includes('vuon_tho'))) return true;
+
+    if (lessonTitle) {
+      const lessonDomain = detectLessonContextDomain(lessonTitle);
+      const isBtdPhotoTitle =
+        !isNonCalisthenicsCoordinationText(tNorm) &&
+        (/động\s*tác\s*(vươn\s*thở|tay|chân|lườn|bụng|vặn\s*mình|toàn\s*thân|phối\s*hợp|nhảy|điều\s*h[oò]a)\b/i.test(tNorm) ||
+          /\/k[1-5]_(vuon_tho|tay|chan|luon|bung|van_minh|toan_than|phoi_hop|dieu_hoa)/i.test(uLower));
+
+      // Reject Bài thể dục movement photos sitting inside non-BTD lessons (e.g. "Phối hợp di chuyển", "Vận động đầu, cổ", "Vận động của tay/chân")
+      if (
+        (lessonDomain === 'dhdn' || lessonDomain === 'tu_the_vdcb' || lessonDomain === 'tttc') &&
+        isBtdPhotoTitle
+      ) {
+        return true;
+      }
+
+      // Reject non-BTD coordination photos sitting inside Bài thể dục lessons
+      if (lessonDomain === 'bai_the_duc' && isNonCalisthenicsCoordinationText(tNorm)) {
+        return true;
+      }
+    }
   }
 
   // 5. 1.3 or 3.5 Game rows: cross-grade raster reuse is ALLOWED ONLY when the game name matches!
@@ -881,8 +914,9 @@ export function getSingleMovementProfile(
   // Locate exact SGK lesson folder for this specific movement (crucial when PPCT groups differ from SGK chapters)
   const movementLesson = findSgkLessonForMovement(grade, cleanName) || targetLesson;
 
-  // Strictly filter candidate images: raster only (NO .svg), NOT a game, strictly 'kyThuat' subfolder, strictly SAME grade (in metadata, URL, title, and caption)
-  const technicalOnlyImages = userImages.filter((img) => {
+  // Strictly filter candidate images (sorted by SGK tree & manual order): raster only (NO .svg), NOT a game, strictly 'kyThuat' subfolder, strictly SAME grade
+  const orderedUserImages = sortLibraryImages(userImages, 'sgk');
+  const technicalOnlyImages = orderedUserImages.filter((img) => {
     if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
     if (isGameImage(img)) return false;
     if (getImageEffectiveSubFolder(img) !== 'kyThuat') return false;
@@ -897,30 +931,33 @@ export function getSingleMovementProfile(
     return true;
   });
 
-  // Match movement strictly against img.title (never let lesson summaries in caption/lessonTitle cross-pollute!)
+  // Match movement strictly against img.title (never let lesson summaries or non-BTD coordination phrases cross-pollute!)
   const matchesMovementByTitle = (text: string, checkKey: string): boolean => {
     if (!text) return false;
+    const isNonBtd = isNonCalisthenicsCoordinationText(text);
+    const isLimbBasicTopic = /vận\s*động\s*(của\s*)?(đầu|cổ|tay|chân|cơ\s*thể)|bóng\s*rổ|tung\s*bắt|chuyền\s*bóng|dẫn\s*bóng|ném\s*rổ/i.test(text);
+
     if (checkKey === 'vuon_tho' || checkKey === 'k2_vuon_tho') return (text.includes('vươn thở') || text.includes('vuon tho')) && !text.includes('gậy') && !text.includes('vòng');
-    if (checkKey === 'tay' || checkKey === 'k2_tay') return (text.includes('động tác tay') || /\btay\b/i.test(text)) && !text.includes('cổ tay') && !text.includes('gậy') && !text.includes('vòng');
-    if (checkKey === 'chan' || checkKey === 'k2_chan') return (text.includes('động tác chân') || /\bchân\b/i.test(text)) && !text.includes('cổ chân') && !text.includes('vươn thở') && !text.includes('gậy') && !text.includes('vòng');
+    if (checkKey === 'tay' || checkKey === 'k2_tay') return !isNonBtd && !isLimbBasicTopic && (text.includes('động tác tay') || /\btay\b/i.test(text)) && !text.includes('cổ tay') && !text.includes('gậy') && !text.includes('vòng');
+    if (checkKey === 'chan' || checkKey === 'k2_chan') return !isNonBtd && !isLimbBasicTopic && (text.includes('động tác chân') || /\bchân\b/i.test(text)) && !text.includes('cổ chân') && !text.includes('vươn thở') && !text.includes('gậy') && !text.includes('vòng');
     if (checkKey === 'luon' || checkKey === 'k2_luon') return (text.includes('lườn') || text.includes('luon')) && !text.includes('gậy') && !text.includes('vòng');
     if (checkKey === 'bung' || checkKey === 'k2_bung') return (text.includes('bụng') || text.includes('bung')) && !text.includes('gậy') && !text.includes('vòng');
     if (checkKey === 'van_minh') return (text.includes('vặn mình') || text.includes('van minh')) && !text.includes('gậy');
-    if (checkKey === 'toan_than' || checkKey === 'k2_toan_than') return (text.includes('toàn thân') || text.includes('toan than') || text.includes('phối hợp') || text.includes('phoi hop')) && !text.includes('gậy') && !text.includes('vòng');
-    if (checkKey === 'phoi_hop') return (text.includes('phối hợp') || text.includes('phoi hop') || text.includes('k1_phoi_hop')) && !text.includes('gậy');
+    if (checkKey === 'toan_than' || checkKey === 'k2_toan_than') return !isNonBtd && (text.includes('toàn thân') || text.includes('toan than') || text.includes('động tác phối hợp')) && !text.includes('gậy') && !text.includes('vòng');
+    if (checkKey === 'phoi_hop') return !isNonBtd && (text.includes('động tác phối hợp') || text.includes('k1_phoi_hop') || (text.includes('phối hợp') && !isLimbBasicTopic)) && !text.includes('gậy');
     if (checkKey === 'dieu_hoa' || checkKey === 'k2_nhay_dieu_hoa') return (text.includes('điều hòa') || text.includes('điều hoà') || text.includes('dieu hoa') || text.includes('k1_dieu_hoa') || text.includes('nhảy')) && !text.includes('gậy') && !text.includes('vòng');
-    if (checkKey === 'nhay') return (text.includes('động tác nhảy') || /\bnhảy\b/i.test(text) || /\bnhay\b/i.test(text)) && !text.includes('gậy') && !text.includes('vòng') && !text.includes('lò cò');
+    if (checkKey === 'nhay') return !isNonBtd && (text.includes('động tác nhảy') || /\bnhảy\b/i.test(text) || /\bnhay\b/i.test(text)) && !text.includes('gậy') && !text.includes('vòng') && !text.includes('lò cò') && !text.includes('chướng ngại vật') && !text.includes('trong nước');
     if (checkKey === 'vuon_tho_vong') return (text.includes('vươn thở') || text.includes('vuon tho')) && text.includes('vòng');
-    if (checkKey === 'tay_vong') return (text.includes('tay')) && text.includes('vòng') && !text.includes('cổ tay');
-    if (checkKey === 'chan_vong') return (text.includes('chân') || text.includes('chan')) && text.includes('vòng') && !text.includes('cổ chân');
+    if (checkKey === 'tay_vong') return !isLimbBasicTopic && (text.includes('tay')) && text.includes('vòng') && !text.includes('cổ tay');
+    if (checkKey === 'chan_vong') return !isLimbBasicTopic && (text.includes('chân') || text.includes('chan')) && text.includes('vòng') && !text.includes('cổ chân');
     if (checkKey === 'luon_vong') return (text.includes('lườn') || text.includes('luon')) && text.includes('vòng');
     if (checkKey === 'bung_vong') return (text.includes('bụng') || text.includes('bung') || text.includes('lưng – bụng') || text.includes('lưng - bụng')) && text.includes('vòng');
-    if (checkKey === 'toan_than_vong') return (text.includes('toàn thân') || text.includes('toan than')) && text.includes('vòng');
+    if (checkKey === 'toan_than_vong') return !isNonBtd && (text.includes('toàn thân') || text.includes('toan than')) && text.includes('vòng');
     if (checkKey === 'nhay_dieu_hoa_vong') return (text.includes('nhảy') || text.includes('điều hòa') || text.includes('điều hoà')) && text.includes('vòng');
-    if (checkKey === 'chan_gay') return (text.includes('chân') || text.includes('chan')) && text.includes('gậy');
+    if (checkKey === 'chan_gay') return !isLimbBasicTopic && (text.includes('chân') || text.includes('chan')) && text.includes('gậy');
     if (checkKey === 'bung_gay') return (text.includes('bụng') || text.includes('bung')) && text.includes('gậy');
     if (checkKey === 'van_minh_gay') return (text.includes('vặn mình') || text.includes('van minh')) && text.includes('gậy');
-    if (checkKey === 'toan_than_gay') return (text.includes('toàn thân') || text.includes('toan than')) && text.includes('gậy');
+    if (checkKey === 'toan_than_gay') return !isNonBtd && (text.includes('toàn thân') || text.includes('toan than')) && text.includes('gậy');
     if (checkKey === 'vuon_tho_tay_gay') return (text.includes('vươn thở') || text.includes('tay')) && text.includes('gậy');
     if (checkKey === 'nhay_gay') return (text.includes('nhảy') || text.includes('nhay')) && text.includes('gậy');
     if (checkKey === 'dieu_hoa_gay') return (text.includes('điều hòa') || text.includes('điều hoà') || text.includes('dieu hoa')) && text.includes('gậy');
@@ -945,8 +982,16 @@ export function getSingleMovementProfile(
     { k: 'di_deu', pat: /đi\s*đều/i }
   ];
 
+  const isSeekingCalisthenics = key !== 'di_deu' && key !== 'on_di_deu';
   const baseKey = key.replace(/_gay$/, '').replace(/_vong$/, '').replace(/^k2_/, '');
   const scoreTechnicalCandidate = (img: SgkImageItem): number => {
+    // Reject non-Bài-thể-dục folder images (cd1 / cd3 / tttc) when looking for a Bài thể dục movement!
+    if (isSeekingCalisthenics) {
+      const tid = (img.topicId || '').toLowerCase();
+      if (tid.includes('cd1') || tid.includes('cd3') || tid.includes('tttc')) return -1;
+      if (isNonCalisthenicsCoordinationText(`${img.title || ''} ${img.lessonTitle || ''}`)) return -1;
+    }
+
     const rawTitle = (img.title || '').toLowerCase();
     // Strip embedded lesson summary clauses after "- SGK" or "•" to focus purely on subject name
     const cleanSubjectTitle = rawTitle.split(/\s+-\s+sgk/i)[0] || rawTitle;
@@ -1272,9 +1317,12 @@ export function resolveAccurateMovement(
   content: string = '',
   title: string = '',
   grade: number = 1,
-  userImages: SgkImageItem[] = []
+  userImages: SgkImageItem[] = [],
+  topic: string = ''
 ): AccurateMovementDetails {
-  const targetLesson = title ? findSgkLessonByTopicOrTitle(grade, title) : undefined;
+  const targetLesson = title ? findSgkLessonByTopicOrTitle(grade, title, topic) : undefined;
+  const lessonDomain = detectLessonContextDomain(title, topic, targetLesson);
+  const isBtdLesson = isCalisthenicsMovementLesson(title, topic, targetLesson);
   const contentLower = (content || '').toLowerCase();
   const titleLower = (title || '').toLowerCase();
 
@@ -1375,10 +1423,11 @@ export function resolveAccurateMovement(
     };
   }
 
-  // 1. Check if multiple movements are specified in the title (ONLY for Bài thể dục / ĐHĐN lessons)
-  const extracted = extractMovementNamesFromTitle(title);
+  // 1. Multi-movement partition — STRICTLY limited to Bài thể dục (Chủ đề 2) lessons!
+  //    Never split non-exercise titles like "Vận động của đầu, cổ" or "Tung - bắt bóng bằng hai tay" into Bài thể dục movements.
+  const extracted = isBtdLesson ? extractMovementNamesFromTitle(title) : [];
 
-  if (extracted.length >= 2) {
+  if (isBtdLesson && extracted.length >= 2) {
     const partition = partitionLessonMovements(extracted, isPeriod2);
     const { newMovements, reviewMovements } = partition;
 
@@ -1501,27 +1550,38 @@ export function resolveAccurateMovement(
     }
   }
 
-  // 2. Fallback: single movement detection (STRICTLY separated from Bài thể dục so non-exercise topics don't fall back to Vươn thở!)
+  // 2. Single movement detection — STRICTLY gated to Bài thể dục (Chủ đề 2) + explicit Đi đều (ĐHĐN)!
+  //    NEVER hijack "Phối hợp di chuyển", "Vận động của đầu, cổ", "Vận động của tay", "Vận động của chân",
+  //    "Vận động phối hợp của cơ thể", or "Bài tập phối hợp đội hình" into Bài thể dục!
   let targetName = '';
-  if (titleLower.includes('phối hợp') && !titleLower.includes('chạy') && !titleLower.includes('bóng') && !titleLower.includes('nhảy xa')) {
-    targetName = 'Động tác Phối hợp';
-  } else if (titleLower.includes('điều hòa') || titleLower.includes('điều hoà') || isPeriod22) {
-    targetName = grade === 4 ? 'Động tác Điều hòa với vòng thể dục' : 'Động tác Điều hòa';
-  } else if (titleLower.includes('chân') && !titleLower.includes('chạy')) {
-    targetName = grade === 5 ? 'Động tác Chân với gậy' : grade === 4 ? 'Động tác Chân với vòng thể dục' : 'Động tác Chân';
-  } else if (titleLower.includes('lườn')) {
-    targetName = grade === 4 ? 'Động tác Lườn với vòng thể dục' : 'Động tác Lườn';
-  } else if (titleLower.includes('bụng')) {
-    targetName = grade === 5 ? 'Động tác Bụng với gậy' : grade === 4 ? 'Động tác Bụng với vòng thể dục' : 'Động tác Bụng';
-  } else if (titleLower.includes('vặn mình')) {
-    targetName = grade === 5 ? 'Động tác Vặn mình với gậy' : 'Động tác Vặn mình';
-  } else if (titleLower.includes('toàn thân')) {
-    targetName = grade === 5 ? 'Động tác Toàn thân với gậy' : grade === 4 ? 'Động tác Toàn thân với vòng thể dục' : 'Động tác Toàn thân';
-  } else if (titleLower.includes('tay') && !titleLower.includes('đầu, cổ') && !titleLower.includes('bóng')) {
-    targetName = grade === 5 ? 'Động tác Tay với gậy' : grade === 4 ? 'Động tác Tay với vòng thể dục' : 'Động tác Tay';
-  } else if (titleLower.includes('vươn thở')) {
-    targetName = grade === 5 ? 'Động tác Vươn thở với gậy' : grade === 4 ? 'Động tác Vươn thở với vòng thể dục' : 'Động tác Vươn thở';
-  } else if (titleLower.includes('đi đều')) {
+  if (isBtdLesson && !isNonCalisthenicsCoordinationText(titleLower)) {
+    if (titleLower.includes('phối hợp')) {
+      targetName = 'Động tác Phối hợp';
+    } else if (titleLower.includes('điều hòa') || titleLower.includes('điều hoà')) {
+      targetName = grade === 4 ? 'Động tác Điều hòa với vòng thể dục' : 'Động tác Điều hòa';
+    } else if (titleLower.includes('chân')) {
+      targetName = grade === 5 ? 'Động tác Chân với gậy' : grade === 4 ? 'Động tác Chân với vòng thể dục' : 'Động tác Chân';
+    } else if (titleLower.includes('lườn')) {
+      targetName = grade === 4 ? 'Động tác Lườn với vòng thể dục' : 'Động tác Lườn';
+    } else if (titleLower.includes('bụng')) {
+      targetName = grade === 5 ? 'Động tác Bụng với gậy' : grade === 4 ? 'Động tác Bụng với vòng thể dục' : 'Động tác Bụng';
+    } else if (titleLower.includes('vặn mình')) {
+      targetName = grade === 5 ? 'Động tác Vặn mình với gậy' : 'Động tác Vặn mình';
+    } else if (titleLower.includes('toàn thân')) {
+      targetName = grade === 5 ? 'Động tác Toàn thân với gậy' : grade === 4 ? 'Động tác Toàn thân với vòng thể dục' : 'Động tác Toàn thân';
+    } else if (titleLower.includes('tay')) {
+      targetName = grade === 5 ? 'Động tác Tay với gậy' : grade === 4 ? 'Động tác Tay với vòng thể dục' : 'Động tác Tay';
+    } else if (titleLower.includes('vươn thở')) {
+      targetName = grade === 5 ? 'Động tác Vươn thở với gậy' : grade === 4 ? 'Động tác Vươn thở với vòng thể dục' : 'Động tác Vươn thở';
+    } else if (titleLower.includes('nhảy')) {
+      targetName = grade === 5 ? 'Động tác Nhảy với gậy' : grade === 4 ? 'Động tác Nhảy với vòng thể dục' : 'Động tác Nhảy';
+    }
+  } else if (
+    lessonDomain === 'dhdn' &&
+    titleLower.includes('đi đều') &&
+    !titleLower.includes('vòng các hướng') &&
+    !titleLower.includes('phối hợp đi đều')
+  ) {
     targetName = isPeriod2 ? 'Ôn Đi đều, Đứng lại & Đổi chân khi sai nhịp' : 'Động tác Đi đều, Đứng lại';
   }
 
@@ -1541,40 +1601,74 @@ export function resolveAccurateMovement(
     };
   }
 
-  // 3. Generic Authentic Domain Profile (ĐHĐN / Tư thế VĐ cơ bản / Thể thao tự chọn) — NEVER leaks Động tác Vươn thở!
+  // 3. Authentic SGK Domain Profile (ĐHĐN / Tư thế VĐ cơ bản / Thể thao tự chọn / Ôn tập BTD)
+  //    Strictly grounded in SGK textbook tree + contextual compound-keyword matching (NEVER hijacked by Bài thể dục!)
   const cleanSkillTitle = title.replace(/\s*\([^)]*\)/g, '').replace(/^bài\s*\d+\s*[:\-]?\s*/i, '').trim() || 'Kỹ năng vận động bài học';
-  const matchedTreeItem = targetLesson?.subFolders?.kyThuat?.items?.[0];
-  const libraryCandidates = userImages.filter((img) => {
-    if (!img.imgUrl || isSvgImageUrl(img.imgUrl) || String(img.grade) !== String(grade)) return false;
-    if (
-      hasConflictingGradeTag(img.imgUrl, grade) ||
-      hasConflictingGradeTag(img.title, grade) ||
-      hasConflictingGradeTag((img.caption || '').split('•')[0], grade)
-    ) {
-      return false;
+  const sgkTechItems = targetLesson?.subFolders?.kyThuat?.items || [];
+  const selectedLibraryImgs = matchTechnicalImagesByContext(
+    grade,
+    title,
+    topic,
+    content,
+    targetLesson,
+    userImages,
+    isPeriod2,
+    {
+      isSvgImageUrl,
+      isGameImage,
+      hasConflictingGradeTag,
+      getImageEffectiveSubFolder
     }
-    if (targetLesson && doesImageBelongToSgkLesson(img, targetLesson)) {
-      return getImageEffectiveSubFolder(img) === 'kyThuat';
-    }
-    return false;
-  });
-  const matchedLibImg = libraryCandidates[0];
-  const resolvedUrl = matchedLibImg?.imgUrl || '';
-  const resolvedTitle = matchedLibImg?.title || matchedTreeItem?.name || cleanSkillTitle;
+  );
 
-  const domainSteps = matchedTreeItem
-    ? `* Kỹ thuật trọng tâm (${matchedTreeItem.name}):\n- ${matchedTreeItem.desc}\n- Thực hiện đúng tư thế ban đầu, biên độ chuyển động và giữ thăng bằng ổn định theo khẩu lệnh.`
-    : `* Thực hành kỹ năng trọng tâm (${cleanSkillTitle}):\n- Chuẩn bị tư thế xuất phát chuẩn xác, mắt nhìn hướng di chuyển.\n- Thực hiện từng giai đoạn động tác nhịp nhàng, đúng luật và phối hợp nhịp thở tự nhiên.`;
+  // Select authentic SGK items for this period (max 2 items per period to keep layout concise and faithful to SGK)
+  const activeSgkItems =
+    sgkTechItems.length > 1
+      ? isPeriod2
+        ? sgkTechItems.slice(Math.ceil(sgkTechItems.length / 2))
+        : sgkTechItems.slice(0, Math.ceil(sgkTechItems.length / 2))
+      : sgkTechItems;
+
+  const primaryLibImg = selectedLibraryImgs[0];
+  const resolvedUrl = primaryLibImg?.imgUrl || '';
+  const resolvedTitle = primaryLibImg?.title || activeSgkItems[0]?.name || cleanSkillTitle;
+
+  let domainSteps = '';
+  if (activeSgkItems.length > 0) {
+    domainSteps = activeSgkItems
+      .map(
+        (item) =>
+          `* Học ${item.name} (SGK GDTC Lớp ${grade}):\n- ${item.desc}`
+      )
+      .join('\n');
+    if (isPeriod2 && sgkTechItems.length > activeSgkItems.length) {
+      const prevNames = sgkTechItems
+        .slice(0, Math.ceil(sgkTechItems.length / 2))
+        .map((it) => it.name)
+        .join(', ');
+      domainSteps += `\n* Ôn tập nhanh & phối hợp (${prevNames}):\n- Ôn nhanh nội dung Tiết 1 và phối hợp liên hoàn theo đúng yêu cầu SGK.`;
+    }
+  } else {
+    domainSteps = `* Học ${cleanSkillTitle} (SGK GDTC Lớp ${grade}):\n- Thực hiện đúng tư thế chuẩn bị, kỹ thuật động tác và cự ly an toàn theo tranh minh họa SGK.`;
+  }
 
   const domainGv =
     `- GV giới thiệu mục tiêu và yêu cầu kỹ thuật của nội dung "${cleanSkillTitle}" (SGK GDTC Lớp ${grade}).\n` +
-    `- Làm mẫu chuẩn xác 2 - 3 lần từ chậm đến nhanh kết hợp phân tích những điểm cốt lõi và lỗi sai thường gặp.\n` +
-    `- Hướng dẫn học sinh quan sát tranh minh họa SGK, chia nhịp/bước tập thử và trực tiếp sửa sai tư thế cho từng em.`;
+    `- Làm mẫu chuẩn xác 2 - 3 lần từ chậm đến nhanh kết hợp cho HS quan sát tranh minh họa SGK; phân tích những điểm cốt lõi và lỗi sai thường gặp.\n` +
+    `- Hô nhịp chậm cho học sinh tập thử theo đúng trình tự SGK và trực tiếp sửa sai tư thế cho từng em.`;
 
   const domainHs =
     `- Đội hình quan sát: 4 hàng ngang đứng so le giữ cự ly an toàn.\n` +
     `- Chăm chú quan sát GV thị phạm và tranh ảnh SGK; thực hiện mô phỏng chậm theo hướng dẫn.\n` +
     `- Chủ động phối hợp nhịp nhàng, giữ an toàn cho bản thân và bạn cùng tập.`;
+
+  const domainAttachments = (selectedLibraryImgs.length > 0 ? selectedLibraryImgs : primaryLibImg ? [primaryLibImg] : []).map(
+    (img, idx) => ({
+      id: `img_domain_${idx + 1}`,
+      url: img.imgUrl,
+      title: img.title || resolvedTitle
+    })
+  );
 
   return {
     movementName: cleanSkillTitle,
@@ -1583,10 +1677,10 @@ export function resolveAccurateMovement(
     movementSteps: domainSteps,
     gvExplanation: domainGv,
     hsTask: domainHs,
-    practiceFocus: `tư thế chuẩn xác và thực hiện nhịp nhàng kỹ năng ${cleanSkillTitle.toLowerCase()}`,
-    newMovements: [cleanSkillTitle],
+    practiceFocus: `tư thế chuẩn xác và thực hiện đúng kỹ thuật ${cleanSkillTitle.toLowerCase()} theo SGK`,
+    newMovements: activeSgkItems.length > 0 ? activeSgkItems.map((it) => it.name) : [cleanSkillTitle],
     reviewMovements: [],
-    allImages: resolvedUrl ? [{ id: 'img_domain_1', url: resolvedUrl, title: resolvedTitle }] : []
+    allImages: domainAttachments
   };
 }
 
@@ -1954,7 +2048,8 @@ export function resolveAccurateGameImage(
   // 1. Search user library across ALL grades for raster game images matching this exact game name
   //    (Same-grade + same-lesson images receive a strong priority bonus; cross-grade exact matches are reused automatically!)
   if (userImages && userImages.length > 0 && cleanName.length >= 2) {
-    const candidates = userImages.filter((img) => {
+    const orderedCandidates = sortLibraryImages(userImages, 'sgk');
+    const candidates = orderedCandidates.filter((img) => {
       if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
       const effFolder = getImageEffectiveSubFolder(img);
       return effFolder === 'troChoiKhoiDong' || effFolder === 'troChoi' || isGameImage(img);
@@ -2157,9 +2252,18 @@ export function autoSyncSharedGameImagesAcrossPlans(
   return { updatedPlans, insertedCount, details };
 }
 
+export interface PracticeSlotImagesMap {
+  dongLoat: { url: string; title: string } | null;
+  toNhom: { url: string; title: string } | null;
+  capDoi: { url: string; title: string } | null;
+  caNhan: { url: string; title: string } | null;
+  primary: { url: string; title: string } | null;
+}
+
 /**
- * Resolves an authentic non-movement raster library image for a specific SGK subFolder slot
- * ('khoiDong' | 'luyenTap' | 'vanDung') strictly scoped by grade, excluding games and SVG formation diagrams.
+ * Resolves an authentic non-movement raster library image for a specific SGK subFolder slot:
+ * - 'khoiDong': prioritizes same-grade & same-lesson warm-up images, and ALLOWS sharing warm-up images across grades/lessons!
+ * - 'luyenTap' & 'vanDung': STRICTLY scoped to same grade AND exact targetLesson (NEVER arbitrarily substitutes images from another grade or another lesson!).
  */
 export function resolveLessonSlotImage(
   grade: number,
@@ -2169,8 +2273,70 @@ export function resolveLessonSlotImage(
 ): { url: string; title: string } | null {
   if (!userImages || userImages.length === 0) return null;
 
-  const candidates = userImages.filter((img) => {
+  const orderedImages = sortLibraryImages(userImages, 'sgk');
+
+  // 1. Warm-up general (1.2 Khởi động chung): CAN be shared across grades & lessons, prioritizing same grade/lesson first
+  if (targetSubFolder === 'khoiDong') {
+    const kdCandidates = orderedImages.filter((img) => {
+      if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
+      if (isGameImage(img)) return false;
+      if (!isWarmupGeneralImage(img)) return false;
+      return getImageEffectiveSubFolder(img) === 'khoiDong';
+    });
+
+    if (kdCandidates.length === 0) return null;
+
+    let best: SgkImageItem | null = null;
+    let bestScore = -1;
+
+    for (const img of kdCandidates) {
+      const sameGrade =
+        String(img.grade) === String(grade) &&
+        !hasConflictingGradeTag(img.imgUrl, grade) &&
+        !hasConflictingGradeTag(img.title, grade);
+
+      let score = 0;
+      if (sameGrade && targetLesson && doesImageBelongToSgkLesson(img, targetLesson)) {
+        score += 400;
+      } else if (
+        sameGrade &&
+        targetLesson &&
+        img.page &&
+        img.page >= targetLesson.startPage &&
+        img.page <= targetLesson.endPage
+      ) {
+        score += 360;
+      } else if (sameGrade) {
+        score += 260;
+      } else {
+        // Shared warm-up image from another grade in library
+        score += 160;
+      }
+
+      if (img.folder === 'khoiDong') score += 25;
+      if (!img.id.startsWith('img_sgk_')) score += 40;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = img;
+      }
+    }
+
+    return best ? { url: best.imgUrl, title: best.title } : null;
+  }
+
+  // 2. 'luyenTap' & 'vanDung': STRICTLY exact grade + exact SGK lesson (or exact same compound concept within same grade/subfolder)
+  if (!targetLesson) return null;
+
+  const lessonDomain = detectLessonContextDomain(targetLesson.lessonName, targetLesson.topicName, targetLesson);
+  const targetConcept = detectCompoundConceptId(
+    `${targetLesson.lessonName} ${targetLesson.movements.join(' ')}`,
+    lessonDomain
+  );
+
+  const strictCandidates = orderedImages.filter((img) => {
     if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
+    if (isGameImage(img)) return false;
     if (String(img.grade) !== String(grade)) return false;
     if (
       hasConflictingGradeTag(img.imgUrl, grade) ||
@@ -2179,37 +2345,40 @@ export function resolveLessonSlotImage(
     ) {
       return false;
     }
-    if (targetSubFolder === 'khoiDong' && !isWarmupGeneralImage(img)) return false;
-    return getImageEffectiveSubFolder(img) === targetSubFolder;
+    if (getImageEffectiveSubFolder(img) !== targetSubFolder) return false;
+    const belongsExact =
+      doesImageBelongToSgkLesson(img, targetLesson) ||
+      Boolean(img.page && img.page >= targetLesson.startPage && img.page <= targetLesson.endPage);
+    if (belongsExact) return true;
+
+    // Only allow keyword-based concept match if image is unassigned to a different lesson and matches exact compound concept
+    if (targetConcept !== 'generic' && !img.lessonId) {
+      const imgConcept = detectCompoundConceptId(
+        `${img.title || ''} ${(img.caption || '').split('•')[0] || ''} ${img.lessonTitle || ''}`,
+        lessonDomain
+      );
+      if (imgConcept === targetConcept) return true;
+    }
+    return false;
   });
 
-  if (candidates.length === 0) return null;
+  if (strictCandidates.length === 0) return null;
 
   let best: SgkImageItem | null = null;
   let bestScore = -1;
 
-  for (const img of candidates) {
-    let score = 0;
-    if (targetLesson && doesImageBelongToSgkLesson(img, targetLesson)) {
-      score += 120;
-    } else if (
-      targetLesson &&
-      img.page &&
-      img.page >= targetLesson.startPage &&
-      img.page <= targetLesson.endPage
+  for (const img of strictCandidates) {
+    let score = 100;
+    if (
+      img.lessonId === targetLesson.id ||
+      (img.topicId === targetLesson.topicId && img.lessonId === targetLesson.lessonId)
     ) {
+      score += 140;
+    } else if (img.page && img.page >= targetLesson.startPage && img.page <= targetLesson.endPage) {
       score += 100;
-    } else if (targetLesson?.topicId && img.topicId === targetLesson.topicId) {
-      score += 60;
-    } else if (!targetLesson) {
-      score += 40;
-    } else {
-      // Do NOT leak images from unrelated topics
-      continue;
     }
-
-    if (img.folder === targetSubFolder) score += 20;
-    if (!img.id.startsWith('img_sgk_')) score += 50;
+    if (img.folder === targetSubFolder) score += 25;
+    if (!img.id.startsWith('img_sgk_')) score += 45;
 
     if (score > bestScore) {
       bestScore = score;
@@ -2220,6 +2389,80 @@ export function resolveLessonSlotImage(
   return best ? { url: best.imgUrl, title: best.title } : null;
 }
 
+/**
+ * Resolves exact-lesson practice images into their specific practice rows:
+ * 3.1 Đồng loạt, 3.2 Tổ/Nhóm, 3.3 Cặp đôi, 3.4 Cá nhân / Thi đua.
+ * Strictly uses only same-grade, exact-lesson 'luyenTap' images from the library (never duplicates or borrows from other lessons).
+ */
+export function resolvePracticeSlotImages(
+  grade: number,
+  targetLesson: SgkLessonFolder | undefined,
+  userImages: SgkImageItem[] = []
+): PracticeSlotImagesMap {
+  const empty: PracticeSlotImagesMap = {
+    dongLoat: null,
+    toNhom: null,
+    capDoi: null,
+    caNhan: null,
+    primary: null
+  };
+  if (!targetLesson || !userImages || userImages.length === 0) return empty;
+
+  const ordered = sortLibraryImages(userImages, 'sgk');
+  const lessonPracticeImgs = ordered.filter((img) => {
+    if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
+    if (isGameImage(img)) return false;
+    if (String(img.grade) !== String(grade)) return false;
+    if (
+      hasConflictingGradeTag(img.imgUrl, grade) ||
+      hasConflictingGradeTag(img.title, grade) ||
+      hasConflictingGradeTag((img.caption || '').split('•')[0], grade)
+    ) {
+      return false;
+    }
+    if (getImageEffectiveSubFolder(img) !== 'luyenTap') return false;
+    return (
+      doesImageBelongToSgkLesson(img, targetLesson) ||
+      Boolean(img.page && img.page >= targetLesson.startPage && img.page <= targetLesson.endPage)
+    );
+  });
+
+  if (lessonPracticeImgs.length === 0) return empty;
+
+  const result: PracticeSlotImagesMap = { ...empty };
+  const generalPool: SgkImageItem[] = [];
+
+  for (const img of lessonPracticeImgs) {
+    const subType = detectPracticeSubSlotType(img);
+    const entry = { url: img.imgUrl, title: img.title };
+    if (subType === 'dong_loat' && !result.dongLoat) {
+      result.dongLoat = entry;
+    } else if (subType === 'to_nhom' && !result.toNhom) {
+      result.toNhom = entry;
+    } else if (subType === 'cap_doi' && !result.capDoi) {
+      result.capDoi = entry;
+    } else if (subType === 'ca_nhan' && !result.caNhan) {
+      result.caNhan = entry;
+    } else {
+      generalPool.push(img);
+    }
+  }
+
+  // If the lesson has a general Luyện tập image without a sub-type tag, attach it cleanly to 3.2 Tổ/Nhóm if empty
+  if (!result.toNhom && generalPool.length > 0) {
+    result.toNhom = { url: generalPool[0].imgUrl, title: generalPool[0].title };
+  }
+
+  result.primary =
+    result.toNhom ||
+    result.dongLoat ||
+    result.capDoi ||
+    result.caNhan ||
+    (lessonPracticeImgs[0] ? { url: lessonPracticeImgs[0].imgUrl, title: lessonPracticeImgs[0].title } : null);
+
+  return result;
+}
+
 export interface ResolvedLessonSlotAssets {
   effectiveLesson?: SgkLessonFolder;
   khoiDongImg: { url: string; title: string } | null;
@@ -2227,6 +2470,7 @@ export interface ResolvedLessonSlotAssets {
   warmupGameImg: { url: string; title: string };
   movementDetails: AccurateMovementDetails;
   luyenTapImg: { url: string; title: string } | null;
+  luyenTapBySlot: PracticeSlotImagesMap;
   practiceGameName: string;
   practiceGameImg: { url: string; title: string };
   vanDungQuestion: string;
@@ -2247,42 +2491,61 @@ export function resolveLessonSlotAssets(
   customPracticeGame?: string
 ): ResolvedLessonSlotAssets {
   const effectiveLesson = findSgkLessonByTopicOrTitle(grade, title, topic);
-  const movementDetails = resolveAccurateMovement('', title, grade, userImages);
+  const movementDetails = resolveAccurateMovement('', title, grade, userImages, topic);
 
-  const treeWarmup = effectiveLesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName;
-  const treePractice = effectiveLesson?.subFolders?.troChoi?.items?.[0]?.gameName;
+  const treeWarmup = (effectiveLesson?.subFolders?.troChoiKhoiDong?.items?.[0]?.gameName || '').trim();
+  const treePractice = (effectiveLesson?.subFolders?.troChoi?.items?.[0]?.gameName || '').trim();
 
-  const fallbackWarmup =
-    grade === 1
-      ? 'Làm theo hiệu lệnh'
-      : grade === 2
-      ? 'Đèn xanh đèn đỏ'
-      : grade === 3
-      ? 'Chui qua hầm'
-      : grade === 4
-      ? 'Làm theo hiệu lệnh'
-      : 'Ai kéo khoẻ hơn';
-  const fallbackPractice =
-    grade === 1
-      ? 'Lò cò tiếp sức'
-      : grade === 2
-      ? 'Ném trúng đích'
-      : grade === 3
-      ? 'Đua ô tô'
-      : grade === 4
-      ? 'Chuyền vòng tiếp sức'
-      : 'Trao gậy tiếp sức';
+  // Only accept non-fabricated custom or tree games; NEVER invent fallback games outside PPCT/SGK
+  const cleanCustomWarmup =
+    customWarmupGame && !isFabricatedLegacyGameName(customWarmupGame) ? customWarmupGame.trim() : '';
+  const cleanCustomPractice =
+    customPracticeGame && !isFabricatedLegacyGameName(customPracticeGame) ? customPracticeGame.trim() : '';
+  const cleanTreeWarmup = treeWarmup && !isFabricatedLegacyGameName(treeWarmup) ? treeWarmup : '';
+  const cleanTreePractice = treePractice && !isFabricatedLegacyGameName(treePractice) ? treePractice : '';
+
+  // If the teacher uploaded an authentic SGK game image explicitly belonging to this exact lesson, derive its real game title
+  const detectAuthenticLessonLibraryGame = (targetFolder: 'troChoiKhoiDong' | 'troChoi'): string => {
+    if (!effectiveLesson || !userImages || userImages.length === 0) return '';
+    const ordered = sortLibraryImages(userImages, 'sgk');
+    const found = ordered.find((img) => {
+      if (!img.imgUrl || isSvgImageUrl(img.imgUrl)) return false;
+      if (String(img.grade) !== String(grade)) return false;
+      if (getImageEffectiveSubFolder(img) !== targetFolder) return false;
+      return doesImageBelongToSgkLesson(img, effectiveLesson);
+    });
+    if (!found) return '';
+    const derived = normalizeGameNameForMatch(found.title || '').trim();
+    if (!derived || derived.length < 3 || isFabricatedLegacyGameName(derived)) return '';
+    return derived.charAt(0).toUpperCase() + derived.slice(1);
+  };
 
   const manualOverride = effectiveLesson ? getSgkTreeOverrides()[effectiveLesson.id] : undefined;
+  const overrideWarmup = manualOverride?.warmupGameName?.trim() || '';
+  const overridePractice = manualOverride?.practiceGameName?.trim() || '';
+
   const warmupGameName =
-    manualOverride?.warmupGameName?.trim() || customWarmupGame || treeWarmup || fallbackWarmup;
+    overrideWarmup ||
+    cleanCustomWarmup ||
+    cleanTreeWarmup ||
+    detectAuthenticLessonLibraryGame('troChoiKhoiDong') ||
+    '';
   const practiceGameName =
-    manualOverride?.practiceGameName?.trim() || customPracticeGame || treePractice || fallbackPractice;
+    overridePractice ||
+    cleanCustomPractice ||
+    cleanTreePractice ||
+    detectAuthenticLessonLibraryGame('troChoi') ||
+    '';
 
   const khoiDongImg = resolveLessonSlotImage(grade, 'khoiDong', effectiveLesson, userImages);
-  const warmupGameImg = resolveAccurateGameImage(warmupGameName, grade, 'tro_choi_kd', userImages, effectiveLesson);
-  const luyenTapImg = resolveLessonSlotImage(grade, 'luyenTap', effectiveLesson, userImages);
-  const practiceGameImg = resolveAccurateGameImage(practiceGameName, grade, 'tro_choi_vd', userImages, effectiveLesson);
+  const warmupGameImg = warmupGameName
+    ? resolveAccurateGameImage(warmupGameName, grade, 'tro_choi_kd', userImages, effectiveLesson)
+    : { url: '', title: '' };
+  const luyenTapBySlot = resolvePracticeSlotImages(grade, effectiveLesson, userImages);
+  const luyenTapImg = luyenTapBySlot.primary || resolveLessonSlotImage(grade, 'luyenTap', effectiveLesson, userImages);
+  const practiceGameImg = practiceGameName
+    ? resolveAccurateGameImage(practiceGameName, grade, 'tro_choi_vd', userImages, effectiveLesson)
+    : { url: '', title: '' };
   const vanDungImg = resolveLessonSlotImage(grade, 'vanDung', effectiveLesson, userImages);
 
   const appDetails = getLessonSpecificApplication(movementDetails.movementName, title, grade, effectiveLesson);
@@ -2294,6 +2557,7 @@ export function resolveLessonSlotAssets(
     warmupGameImg,
     movementDetails,
     luyenTapImg,
+    luyenTapBySlot,
     practiceGameName,
     practiceGameImg,
     vanDungQuestion: appDetails.question,
@@ -2340,16 +2604,25 @@ export function createBalanced7LessonRows(
   const diagDongLoat = getFormationDiagramForPhaseAndGrade('dong_loat', grade);
   const diagToNhom = getFormationDiagramForPhaseAndGrade('to_nhom', grade);
   const diagCapDoi = getFormationDiagramForPhaseAndGrade('cap_doi', grade);
-  const diagTroChoi = getFormationDiagramByKeyword(resolvedPractice, 'tro_choi', grade);
+  const diagThiDua = getFormationDiagramForPhaseAndGrade('thi_dua', grade);
+  const diagTroChoi = resolvedPractice
+    ? getFormationDiagramByKeyword(resolvedPractice, 'tro_choi', grade)
+    : diagThiDua;
   const diagHoiTinh = getFormationDiagramForPhaseAndGrade('hoi_tinh', grade);
 
   return [
-    // HÀNG 1: MỞ ĐẦU & KHỞI ĐỘNG (Gắn ảnh Trò chơi khởi động chuẩn SGK)
+    // HÀNG 1: MỞ ĐẦU & KHỞI ĐỘNG (Chỉ chèn 1.3 nếu SGK có trò chơi khởi động)
     {
-      content: `1. HOẠT ĐỘNG MỞ ĐẦU\n1.1. Nhận lớp:\n- Kiểm tra vệ sinh sân tập, trang phục, sức khỏe học sinh.\n- Phổ biến mục tiêu, nội dung bài học.\n1.2. Khởi động:\n- Xoay kỹ các khớp: cổ tay, cổ chân, khớp vai, cánh tay, hông, đầu gối, ép dọc, ép ngang (theo nhạc).\n1.3. Trò chơi bổ trợ khởi động: "${resolvedWarmup}".`,
+      content: resolvedWarmup
+        ? `1. HOẠT ĐỘNG MỞ ĐẦU\n1.1. Nhận lớp:\n- Kiểm tra vệ sinh sân tập, trang phục, sức khỏe học sinh.\n- Phổ biến mục tiêu, nội dung bài học.\n1.2. Khởi động:\n- Xoay kỹ các khớp: cổ tay, cổ chân, khớp vai, cánh tay, hông, đầu gối, ép dọc, ép ngang (theo nhạc).\n1.3. Trò chơi bổ trợ khởi động: "${resolvedWarmup}".`
+        : `1. HOẠT ĐỘNG MỞ ĐẦU\n1.1. Nhận lớp:\n- Kiểm tra vệ sinh sân tập, trang phục, sức khỏe học sinh.\n- Phổ biến mục tiêu, nội dung bài học.\n1.2. Khởi động:\n- Xoay kỹ các khớp: cổ tay, cổ chân, khớp vai, cánh tay, hông, đầu gối, ép dọc, ép ngang (theo nhạc).`,
       lvd: `5 - 7 phút\n2L x 8N`,
-      gv: `- GV tập trung lớp, thăm hỏi tình hình sức khỏe học sinh (nhắc em nào mệt, đau ốm báo ngay để nghỉ tập hoặc tập nhẹ); kiểm tra sân bãi sạch sẽ, trang phục giày thể thao đúng quy định.\n- Phổ biến mục tiêu, yêu cầu cần đạt của bài học một cách ngắn gọn, truyền cảm hứng.\n- Hướng dẫn cán sự điều khiển lớp khởi động xoay kỹ các khớp theo nhạc hoặc nhịp hô dứt khoát; nhắc nhở học sinh xoay đúng biên độ, không làm vội vàng để phòng tránh chấn thương.\n- Tổ chức trò chơi bổ trợ khởi động "${resolvedWarmup}" tạo không khí vui tươi, hào hứng trước khi vào bài mới; quan sát bao quát và nhắc nhở tinh thần tập trung, trật tự.`,
-      hs: `- Cán sự tập hợp lớp thành 4 hàng ngang, điểm số, chỉnh đốn hàng ngũ và báo cáo sĩ số cho GV.\n- Học sinh lắng nghe phổ biến, ghi nhớ yêu cầu tiết học.\n- Thực hiện xoay kỹ các khớp theo nhịp đếm của cán sự lớp, khởi động tích cực, đúng biên độ.\n- Hào hứng tham gia trò chơi khởi động "${resolvedWarmup}", chấp hành nghiêm túc hiệu lệnh của giáo viên.`,
+      gv: resolvedWarmup
+        ? `- GV tập trung lớp, thăm hỏi tình hình sức khỏe học sinh (nhắc em nào mệt, đau ốm báo ngay để nghỉ tập hoặc tập nhẹ); kiểm tra sân bãi sạch sẽ, trang phục giày thể thao đúng quy định.\n- Phổ biến mục tiêu, yêu cầu cần đạt của bài học một cách ngắn gọn, truyền cảm hứng.\n- Hướng dẫn cán sự điều khiển lớp khởi động xoay kỹ các khớp theo nhạc hoặc nhịp hô dứt khoát; nhắc nhở học sinh xoay đúng biên độ, không làm vội vàng để phòng tránh chấn thương.\n- Tổ chức trò chơi bổ trợ khởi động "${resolvedWarmup}" tạo không khí vui tươi, hào hứng trước khi vào bài mới; quan sát bao quát và nhắc nhở tinh thần tập trung, trật tự.`
+        : `- GV tập trung lớp, thăm hỏi tình hình sức khỏe học sinh (nhắc em nào mệt, đau ốm báo ngay để nghỉ tập hoặc tập nhẹ); kiểm tra sân bãi sạch sẽ, trang phục giày thể thao đúng quy định.\n- Phổ biến mục tiêu, yêu cầu cần đạt của bài học một cách ngắn gọn, truyền cảm hứng.\n- Hướng dẫn cán sự điều khiển lớp khởi động xoay kỹ các khớp theo nhạc hoặc nhịp hô dứt khoát; nhắc nhở học sinh xoay đúng biên độ, không làm vội vàng để phòng tránh chấn thương.`,
+      hs: resolvedWarmup
+        ? `- Cán sự tập hợp lớp thành 4 hàng ngang, điểm số, chỉnh đốn hàng ngũ và báo cáo sĩ số cho GV.\n- Học sinh lắng nghe phổ biến, ghi nhớ yêu cầu tiết học.\n- Thực hiện xoay kỹ các khớp theo nhịp đếm của cán sự lớp, khởi động tích cực, đúng biên độ.\n- Hào hứng tham gia trò chơi khởi động "${resolvedWarmup}", chấp hành nghiêm túc hiệu lệnh của giáo viên.`
+        : `- Cán sự tập hợp lớp thành 4 hàng ngang, điểm số, chỉnh đốn hàng ngũ và báo cáo sĩ số cho GV.\n- Học sinh lắng nghe phổ biến, ghi nhớ yêu cầu tiết học.\n- Thực hiện xoay kỹ các khớp theo nhịp đếm của cán sự lớp, khởi động tích cực, đúng biên độ.`,
       contentImgUrl: undefined,
       contentImgTitle: undefined,
       hsImgUrl: diagNhanLop.svgDataUrl,
@@ -2436,15 +2709,24 @@ export function createBalanced7LessonRows(
         }
       ]
     },
-    // HÀNG 6: 3.4. THI ĐUA TRÌNH DIỄN & TRÒ CHƠI VẬN ĐỘNG (Ô RIÊNG - Sơ đồ sân bãi trò chơi ở Cột 4)
+    // HÀNG 6: 3.4. THI ĐUA TRÌNH DIỄN (& TRÒ CHƠI VẬN ĐỘNG NẾU SGK CÓ)
     {
-      content: `3.4. Thi đua trình diễn giữa các tổ & Trò chơi vận động:\n* Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.\n* Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`,
-      lvd: `5 - 7 phút\n2 - 3 lượt`,
-      gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- Phổ biến ngắn gọn tên trò chơi vận động "${resolvedPractice}", mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm làm mẫu thao tác tham gia trò chơi; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.`,
-      hs: `- Đội hình thi đua & trò chơi: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Khi vào trò chơi "${resolvedPractice}": 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn vượt qua thử thách và tiếp sức an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.`,
-      contentImgUrl: practiceImg?.url,
-      contentImgTitle: practiceImg?.title,
-      contentImages: practiceImg?.url ? [{ id: 'img_tc_7r_1', url: practiceImg.url, title: practiceImg.title }] : [],
+      content: resolvedPractice
+        ? `3.4. Thi đua trình diễn giữa các tổ & Trò chơi vận động:\n* Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.\n* Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`
+        : `3.4. Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.`,
+      lvd: resolvedPractice ? `5 - 7 phút\n2 - 3 lượt` : `4 - 5 phút\n1 lượt / tổ`,
+      gv: resolvedPractice
+        ? `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- Phổ biến ngắn gọn tên trò chơi vận động "${resolvedPractice}", mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm làm mẫu thao tác tham gia trò chơi; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.`
+        : `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.`,
+      hs: resolvedPractice
+        ? `- Đội hình thi đua & trò chơi: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Khi vào trò chơi "${resolvedPractice}": 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn vượt qua thử thách và tiếp sức an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.`
+        : `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
+      contentImgUrl: resolvedPractice ? practiceImg?.url : undefined,
+      contentImgTitle: resolvedPractice ? practiceImg?.title : undefined,
+      contentImages:
+        resolvedPractice && practiceImg?.url
+          ? [{ id: 'img_tc_7r_1', url: practiceImg.url, title: practiceImg.title }]
+          : [],
       hsImgUrl: diagTroChoi.svgDataUrl,
       hsImgTitle: diagTroChoi.name,
       hsImages: [
@@ -2643,6 +2925,99 @@ export function sanitizePlanRowsVanDung(rows: LessonRow[], grade: number = 1): L
 }
 
 /**
+ * Removes stale auto-generated 1.3 / 3.5 game rows (or fabricated game lines in merged rows)
+ * whose game name is a legacy fabricated name outside the official SGK/PPCT curriculum,
+ * while preserving authentic SGK games and any custom games manually added by the teacher.
+ * Also fixes stale legacy movement headings (e.g. "Kỹ thuật lăn nghiêng sang phải / trái trên đệm").
+ */
+export function stripFabricatedGameRows(rows: LessonRow[]): LessonRow[] {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+
+  const result: LessonRow[] = [];
+  for (const row of rows) {
+    const content = row.content || '';
+    const cLower = content.toLowerCase();
+
+    const isDedicatedWarmupGame =
+      (cLower.includes('1.3.') || (cLower.includes('trò chơi') && cLower.includes('khởi động'))) &&
+      !cLower.includes('1.1.') &&
+      !cLower.includes('1.2.');
+    const isDedicatedPracticeGame =
+      cLower.includes('3.5.') && !cLower.includes('3.4.');
+
+    if (isDedicatedWarmupGame || isDedicatedPracticeGame) {
+      const gName = extractGameNameFromRowText(content);
+      // Drop dedicated game row if game name is empty or matches legacy fabricated list
+      if (!gName || isFabricatedLegacyGameName(gName)) {
+        continue;
+      }
+    }
+
+    // Handle merged Row 0 (1.1 + 1.2 + 1.3) containing a fabricated warmup game line
+    if ((cLower.includes('1.1.') || cLower.includes('1.2.')) && cLower.includes('1.3.')) {
+      const gameLineMatch = content.match(/1\.3\.\s*Trò chơi[^\n]*/i);
+      if (gameLineMatch) {
+        const gName = extractGameNameFromRowText(gameLineMatch[0]);
+        if (!gName || isFabricatedLegacyGameName(gName)) {
+          const cleanedContent = content
+            .replace(/\n?1\.3\.\s*Trò chơi[^\n]*/gi, '')
+            .trim();
+          const cleanedGv = (row.gv || '')
+            .replace(/\n?-\s*(?:Tổ chức|GV nêu tên)\s+trò chơi[^\n]*/gi, '')
+            .trim();
+          const cleanedHs = (row.hs || '')
+            .replace(/\n?-\s*(?:Hào hứng tham gia|Học sinh chăm chú lắng nghe hướng dẫn luật chơi)[^\n]*/gi, '')
+            .trim();
+          result.push({
+            ...row,
+            content: cleanedContent,
+            gv: cleanedGv,
+            hs: cleanedHs
+          });
+          continue;
+        }
+      }
+    }
+
+    // Handle merged Row 3.4 + * Trò chơi vận động containing a fabricated game
+    if (cLower.includes('3.4.') && cLower.includes('trò chơi vận động')) {
+      const gName = extractGameNameFromRowText(content);
+      if (!gName || isFabricatedLegacyGameName(gName)) {
+        const cleanedContent = content
+          .replace(/\s*&\s*Trò chơi vận động/gi, '')
+          .replace(/\n?\*\s*Trò chơi vận động:[\s\S]*$/i, '')
+          .trim();
+        result.push({
+          ...row,
+          content: cleanedContent,
+          contentImgUrl: undefined,
+          contentImgTitle: undefined,
+          contentImages: []
+        });
+        continue;
+      }
+    }
+
+    // Replace stale fabricated K5 Cd3 B1 movement heading from cached drafts with authentic SGK heading
+    if (/kỹ thuật lăn nghiêng sang phải\s*\/\s*trái trên đệm/i.test(content)) {
+      result.push({
+        ...row,
+        content: content.replace(
+          /Kỹ thuật lăn nghiêng sang phải\s*\/\s*trái trên đệm/gi,
+          'Lăn nửa vòng, Lăn trọn vòng'
+        )
+      });
+      continue;
+    }
+
+    result.push(row);
+  }
+
+  return result;
+}
+
+
+/**
  * Creates 11 granular, 1:1 horizontally aligned lesson rows where each sub-activity
  * (Nhận lớp, Khởi động, Trò chơi khởi động, Động tác mới, Tập đồng loạt, Tập tổ, Tập cặp đôi, Thi đua, Trò chơi vận động, Hồi tĩnh, Vận dụng & Dặn dò)
  * has its OWN ROW, with Col 1 (Nội dung & Ảnh), Col 2 (LVĐ), Col 3 (GV), and Col 4 (HS & Sơ đồ) perfectly aligned horizontally.
@@ -2697,13 +3072,13 @@ export function createBalancedGranularLessonRows(
 
   const diagNhanLop = getFormationDiagramForPhaseAndGrade('nhan_lop', grade);
   const diagKhoiDong = getFormationDiagramForPhaseAndGrade('khoi_dong', grade);
-  const diagWarmupGame = getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong', grade);
+  const diagWarmupGame = resolvedWarmup ? getFormationDiagramByKeyword(resolvedWarmup, 'khoi_dong', grade) : diagKhoiDong;
   const diagTapMau = getFormationDiagramForPhaseAndGrade('tap_mau', grade);
   const diagDongLoat = getFormationDiagramForPhaseAndGrade('dong_loat', grade);
   const diagToNhom = getFormationDiagramForPhaseAndGrade('to_nhom', grade);
   const diagCapDoi = getFormationDiagramForPhaseAndGrade('cap_doi', grade);
   const diagThiDua = getFormationDiagramForPhaseAndGrade('thi_dua', grade);
-  const diagTroChoi = getFormationDiagramByKeyword(resolvedPractice, 'tro_choi', grade);
+  const diagTroChoi = resolvedPractice ? getFormationDiagramByKeyword(resolvedPractice, 'tro_choi', grade) : diagThiDua;
   const diagHoiTinh = getFormationDiagramForPhaseAndGrade('hoi_tinh', grade);
   const diagXuongLop = getFormationDiagramForPhaseAndGrade('xuong_lop', grade);
 
@@ -2747,27 +3122,31 @@ export function createBalancedGranularLessonRows(
       ]
     },
 
-    // 3. TRÒ CHƠI BỔ TRỢ KHỞI ĐỘNG
-    {
-      content: `1.3. Trò chơi bổ trợ khởi động: "${resolvedWarmup}":\n- Mục đích: Tạo phản xạ nhanh nhẹn, tinh thần sảng khoái và hưng phấn trước khi vào nội dung chính.\n- Luật chơi: Học sinh thực hiện nhanh theo hiệu lệnh của GV, ai làm sai sẽ thực hiện động tác phạt vui nhộn.`,
-      lvd: `2 - 3 phút\n1 - 2 lượt`,
-      gv: `- GV nêu tên trò chơi khởi động "${resolvedWarmup}", phổ biến ngắn gọn luật chơi và cách chơi.\n- Hô hiệu lệnh điều hành học sinh tham gia trò chơi tạo không khí sôi nổi, vui tươi trước khi vào phần trọng tâm.`,
-      hs: `- Học sinh chăm chú lắng nghe hướng dẫn luật chơi, hào hứng tham gia trò chơi theo khẩu lệnh của giáo viên.\n- Chấp hành nghiêm túc hiệu lệnh, di chuyển nhanh nhẹn, vui tươi, trật tự.`,
-      contentImgUrl: warmupImg?.url,
-      contentImgTitle: warmupImg?.title,
-      contentImages: warmupImg?.url
-        ? [{ id: 'img_tc_kd_1', url: warmupImg.url, title: warmupImg.title }]
-        : [],
-      hsImgUrl: diagWarmupGame.svgDataUrl,
-      hsImgTitle: diagWarmupGame.name,
-      hsImages: [
-        {
-          id: 'diag_3_tc_kd',
-          url: diagWarmupGame.svgDataUrl,
-          title: diagWarmupGame.name
-        }
-      ]
-    },
+    // 3. TRÒ CHƠI BỔ TRỢ KHỞI ĐỘNG (Chỉ thêm khi SGK có trò chơi khởi động hoặc GV tự bổ sung)
+    ...(resolvedWarmup
+      ? [
+          {
+            content: `1.3. Trò chơi bổ trợ khởi động: "${resolvedWarmup}":\n- Mục đích: Tạo phản xạ nhanh nhẹn, tinh thần sảng khoái và hưng phấn trước khi vào nội dung chính.\n- Luật chơi: Học sinh thực hiện nhanh theo hiệu lệnh của GV, ai làm sai sẽ thực hiện động tác phạt vui nhộn.`,
+            lvd: `2 - 3 phút\n1 - 2 lượt`,
+            gv: `- GV nêu tên trò chơi khởi động "${resolvedWarmup}", phổ biến ngắn gọn luật chơi và cách chơi.\n- Hô hiệu lệnh điều hành học sinh tham gia trò chơi tạo không khí sôi nổi, vui tươi trước khi vào phần trọng tâm.`,
+            hs: `- Học sinh chăm chú lắng nghe hướng dẫn luật chơi, hào hứng tham gia trò chơi theo khẩu lệnh của giáo viên.\n- Chấp hành nghiêm túc hiệu lệnh, di chuyển nhanh nhẹn, vui tươi, trật tự.`,
+            contentImgUrl: warmupImg?.url || undefined,
+            contentImgTitle: warmupImg?.title || undefined,
+            contentImages: warmupImg?.url
+              ? [{ id: 'img_tc_kd_1', url: warmupImg.url, title: warmupImg.title }]
+              : [],
+            hsImgUrl: diagWarmupGame.svgDataUrl,
+            hsImgTitle: diagWarmupGame.name,
+            hsImages: [
+              {
+                id: 'diag_3_tc_kd',
+                url: diagWarmupGame.svgDataUrl,
+                title: diagWarmupGame.name
+              }
+            ]
+          }
+        ]
+      : []),
 
     // 4. HÌNH THÀNH KIẾN THỨC MỚI / HƯỚNG DẪN KIỂM TRA ĐÁNH GIÁ
     {
@@ -2800,6 +3179,11 @@ export function createBalancedGranularLessonRows(
       lvd: `3 - 4 phút\n2 - 3 lần\n(2x8 nhịp)`,
       gv: `- GV đứng ở vị trí trung tâm phía trước lớp, hô nhịp to, rõ ràng, dứt khoát để cả lớp cùng thực hiện động tác đồng loạt lần 1.\n- Quan sát bao quát toàn thể học sinh, chú ý điều chỉnh nhịp đếm phù hợp với nhịp hít thở và biên độ vận động của các em.\n- Mời cán sự lớp lên điều hành hô nhịp lần 2 và 3; GV di chuyển linh hoạt dọc các hàng ngang để quan sát góc độ tay, chân và tư thế thân người của từng học sinh.\n- Nhắc nhở các lỗi sai còn tồn tại ở nhiều em; yêu cầu cả lớp giữ cự ly thẳng hàng và chú trọng ${accurate.practiceFocus}.\n- Nhận xét nhanh và biểu dương tinh thần tập luyện nghiêm túc của toàn lớp.`,
       hs: `- Đội hình tập luyện đồng loạt: 4 hàng ngang so le, cự ly giãn cách 1 sải tay.\n- Toàn lớp tập trung cao độ, thực hiện động tác chuẩn xác, nhịp nhàng theo khẩu lệnh của GV và cán sự lớp.\n- Chú ý giữ đúng biên độ kỹ thuật và tư thế thân người, không nói chuyện riêng.\n- Chỉnh đốn tư thế theo nhắc nhở của thầy cô.`,
+      contentImgUrl: resolved.luyenTapBySlot.dongLoat?.url,
+      contentImgTitle: resolved.luyenTapBySlot.dongLoat?.title,
+      contentImages: resolved.luyenTapBySlot.dongLoat?.url
+        ? [{ id: 'img_lt_dl_1', url: resolved.luyenTapBySlot.dongLoat.url, title: resolved.luyenTapBySlot.dongLoat.title }]
+        : [],
       hsImgUrl: diagDongLoat.svgDataUrl,
       hsImgTitle: diagDongLoat.name,
       hsImages: [
@@ -2821,10 +3205,10 @@ export function createBalancedGranularLessonRows(
       hs: isAssessmentLesson
         ? `- Xếp hàng ngay ngắn chờ đến lượt tổ mình vào kiểm tra.\n- Thực hiện nghiêm túc, đúng quy trình và trung thực khi kiểm tra đánh giá.`
         : `- Đội hình tập luyện theo tổ: 4 tổ di chuyển trật tự về 4 góc sân quy định, xếp thành hàng ngang hoặc vòng tròn.\n- Học sinh chấp hành sự chỉ huy của tổ trưởng, luân phiên nhau hô nhịp để cùng luyện tập.\n- Chăm chú theo dõi tư thế của bạn bên cạnh, góp ý thân thiện giúp bạn sửa sai nhịp thở và biên độ tay.\n- Chủ động xin phép thầy cô nghỉ ngơi nếu thấy mệt trong người.`,
-      contentImgUrl: resolved.luyenTapImg?.url,
-      contentImgTitle: resolved.luyenTapImg?.title,
-      contentImages: resolved.luyenTapImg?.url
-        ? [{ id: 'img_lt_1', url: resolved.luyenTapImg.url, title: resolved.luyenTapImg.title }]
+      contentImgUrl: (resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg)?.url,
+      contentImgTitle: (resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg)?.title,
+      contentImages: (resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg)?.url
+        ? [{ id: 'img_lt_1', url: (resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg)!.url, title: (resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg)!.title }]
         : [],
       hsImgUrl: diagToNhom.svgDataUrl,
       hsImgTitle: diagToNhom.name,
@@ -2847,6 +3231,11 @@ export function createBalancedGranularLessonRows(
       hs: isAssessmentLesson
         ? `- Các bạn kiểm tra lại tập trung thực hiện tốt hơn ở lượt 2; các bạn khác thả lỏng nhẹ và cổ vũ bạn.`
         : `- Đội hình cặp đôi: Đứng đối diện nhau theo từng đôi một cách nghiêm túc.\n- Bạn A thực hiện động tác 2 lần 8 nhịp, bạn B chăm chú quan sát và góp ý chân thành về tư thế, biên độ và nhịp thở; sau đó hai bạn đổi vai cho nhau.\n- Tiếp thu ý kiến đóng góp của bạn với thái độ cầu thị, tự điều chỉnh động tác cho thuần thục, đẹp mắt.\n- Báo cáo với giáo viên khi cả hai đã thực hiện tốt.`,
+      contentImgUrl: resolved.luyenTapBySlot.capDoi?.url,
+      contentImgTitle: resolved.luyenTapBySlot.capDoi?.title,
+      contentImages: resolved.luyenTapBySlot.capDoi?.url
+        ? [{ id: 'img_lt_cd_1', url: resolved.luyenTapBySlot.capDoi.url, title: resolved.luyenTapBySlot.capDoi.title }]
+        : [],
       hsImgUrl: diagCapDoi.svgDataUrl,
       hsImgTitle: diagCapDoi.name,
       hsImages: [
@@ -2864,6 +3253,11 @@ export function createBalancedGranularLessonRows(
       lvd: `3 - 4 phút\n1 lượt / tổ`,
       gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng nhịp.`,
       hs: `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
+      contentImgUrl: resolved.luyenTapBySlot.caNhan?.url,
+      contentImgTitle: resolved.luyenTapBySlot.caNhan?.title,
+      contentImages: resolved.luyenTapBySlot.caNhan?.url
+        ? [{ id: 'img_lt_cn_1', url: resolved.luyenTapBySlot.caNhan.url, title: resolved.luyenTapBySlot.caNhan.title }]
+        : [],
       hsImgUrl: diagThiDua.svgDataUrl,
       hsImgTitle: diagThiDua.name,
       hsImages: [
@@ -2875,25 +3269,29 @@ export function createBalancedGranularLessonRows(
       ]
     },
 
-    // 9. LUYỆN TẬP: 3.5. TRÒ CHƠI VẬN ĐỘNG (HÀNG RIÊNG TƯƠNG XỨNG 1:1)
-    {
-      content: `3.5. Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đoàn kết.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`,
-      lvd: `4 - 5 phút\n2 - 3 lượt`,
-      gv: `- GV giới thiệu tên trò chơi vận động "${resolvedPractice}", giải thích mục đích, phổ biến luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm học sinh làm mẫu thao tác tham gia trò chơi để cả lớp nắm rõ quy trình.\n- Điều hành 4 đội thi đấu chính thức 2 - 3 lượt sôi nổi; nhắc nhở học sinh giữ cự ly an toàn tuyệt đối khi tiếp sức.\n- Nhận xét tinh thần thi đấu, tuyên dương đội chiến thắng và khích lệ các đội còn lại.`,
-      hs: `- Học sinh chú ý lắng nghe GV giới thiệu tên trò chơi và phổ biến luật chơi; quan sát nhóm bạn chơi mẫu.\n- Đội hình trò chơi: 4 hàng dọc đứng sau vạch xuất phát, hướng về cọc tiêu.\n- Tham gia thi đấu hào hứng, nhanh nhẹn, đoàn kết, chấp hành nghiêm chỉnh luật chơi và tiếp sức an toàn cho bạn.\n- Cổ vũ nhiệt tình, thể hiện tinh thần thể thao trung thực, chúc mừng đội bạn khi giành chiến thắng.`,
-      contentImgUrl: practiceImg?.url,
-      contentImgTitle: practiceImg?.title,
-      contentImages: practiceImg?.url ? [{ id: 'img_tc_1', url: practiceImg.url, title: practiceImg.title }] : [],
-      hsImgUrl: diagTroChoi.svgDataUrl,
-      hsImgTitle: diagTroChoi.name,
-      hsImages: [
-        {
-          id: 'diag_9_tro_choi',
-          url: diagTroChoi.svgDataUrl,
-          title: diagTroChoi.name
-        }
-      ]
-    },
+    // 9. LUYỆN TẬP: 3.5. TRÒ CHƠI VẬN ĐỘNG (Chỉ thêm khi SGK có trò chơi vận động hoặc GV tự bổ sung)
+    ...(resolvedPractice
+      ? [
+          {
+            content: `3.5. Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đoàn kết.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`,
+            lvd: `4 - 5 phút\n2 - 3 lượt`,
+            gv: `- GV giới thiệu tên trò chơi vận động "${resolvedPractice}", giải thích mục đích, phổ biến luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm học sinh làm mẫu thao tác tham gia trò chơi để cả lớp nắm rõ quy trình.\n- Điều hành 4 đội thi đấu chính thức 2 - 3 lượt sôi nổi; nhắc nhở học sinh giữ cự ly an toàn tuyệt đối khi tiếp sức.\n- Nhận xét tinh thần thi đấu, tuyên dương đội chiến thắng và khích lệ các đội còn lại.`,
+            hs: `- Học sinh chú ý lắng nghe GV giới thiệu tên trò chơi và phổ biến luật chơi; quan sát nhóm bạn chơi mẫu.\n- Đội hình trò chơi: 4 hàng dọc đứng sau vạch xuất phát, hướng về cọc tiêu.\n- Tham gia thi đấu hào hứng, nhanh nhẹn, đoàn kết, chấp hành nghiêm chỉnh luật chơi và tiếp sức an toàn cho bạn.\n- Cổ vũ nhiệt tình, thể hiện tinh thần thể thao trung thực, chúc mừng đội bạn khi giành chiến thắng.`,
+            contentImgUrl: practiceImg?.url || undefined,
+            contentImgTitle: practiceImg?.title || undefined,
+            contentImages: practiceImg?.url ? [{ id: 'img_tc_1', url: practiceImg.url, title: practiceImg.title }] : [],
+            hsImgUrl: diagTroChoi.svgDataUrl,
+            hsImgTitle: diagTroChoi.name,
+            hsImages: [
+              {
+                id: 'diag_9_tro_choi',
+                url: diagTroChoi.svgDataUrl,
+                title: diagTroChoi.name
+              }
+            ]
+          }
+        ]
+      : []),
 
     // 10. HỒI TĨNH (HÀNG RIÊNG)
     {
@@ -2955,10 +3353,11 @@ export function splitAndAlignRows1to1(
   customWarmupGame?: string,
   customPracticeGame?: string
 ): LessonRow[] {
-  // If already 10 or more rows, sanitize any misplaced SVG/cross-grade/game attachments in Column 1, compact overlong 2.1 rows, and clean Vận dụng 4.2 text
-  if (rows && rows.length >= 10) {
+  // If already 9 or more rows (granular 1:1 layout with or without optional 1.3/3.5 game rows),
+  // strip any legacy fabricated game rows, sanitize misplaced attachments, compact overlong 2.1 rows, and clean Vận dụng 4.2 text
+  if (rows && rows.length >= 9) {
     return sanitizePlanRowsVanDung(
-      rows.map((r) => compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, grade, title))),
+      stripFabricatedGameRows(rows).map((r) => compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, grade, title))),
       grade
     );
   }
@@ -2980,33 +3379,43 @@ export function splitAndAlignRows1to1(
   const isTitleGame = (t?: string) =>
     /trò\s*chơi|chui\s*qua|hiệu\s*lệnh|kết\s*bạn|lò\s*cò|mèo\s*đuổi|chim\s*về\s*tổ|đua\s*ô\s*tô/i.test((t || '').toLowerCase());
 
-  // Slot 1.2 (Khởi động chung -> idx 1)
+  const findTargetRow = (pred: (cLower: string) => boolean) =>
+    granular11.find((r) => pred((r.content || '').toLowerCase()));
+
+  const rowKhoiDong = findTargetRow((c) => c.includes('1.2.') && !c.includes('1.3.'));
+  const rowWarmupGame = findTargetRow((c) => c.includes('1.3.'));
+  const rowMovement = findTargetRow((c) => c.includes('2.1.') || c.includes('2. hoạt động'));
+  const rowPractice = findTargetRow((c) => c.includes('3.2.'));
+  const rowPracticeGame = findTargetRow((c) => c.includes('3.5.'));
+  const rowVanDung = findTargetRow((c) => c.includes('4.2.') && !c.includes('4.1.'));
+
+  // Slot 1.2 (Khởi động chung)
   const srcKhoiDong = rows.find((r) => {
     const c = (r.content || '').toLowerCase();
-    return c.includes('1.2.') && !c.includes('1.3.') && granular11[1] && isValidCarryOver(granular11[1], r.contentImgUrl, r.contentImgTitle) && !isTitleGame(r.contentImgTitle);
+    return c.includes('1.2.') && !c.includes('1.3.') && rowKhoiDong && isValidCarryOver(rowKhoiDong, r.contentImgUrl, r.contentImgTitle) && !isTitleGame(r.contentImgTitle);
   });
-  if (srcKhoiDong?.contentImgUrl && granular11[1] && !granular11[1].contentImgUrl) {
-    granular11[1].contentImgUrl = srcKhoiDong.contentImgUrl;
-    granular11[1].contentImgTitle = srcKhoiDong.contentImgTitle;
-    granular11[1].contentImages = (srcKhoiDong.contentImages || [
+  if (srcKhoiDong?.contentImgUrl && rowKhoiDong && !rowKhoiDong.contentImgUrl) {
+    rowKhoiDong.contentImgUrl = srcKhoiDong.contentImgUrl;
+    rowKhoiDong.contentImgTitle = srcKhoiDong.contentImgTitle;
+    rowKhoiDong.contentImages = (srcKhoiDong.contentImages || [
       { id: 'custom_kd_chung', url: srcKhoiDong.contentImgUrl, title: srcKhoiDong.contentImgTitle || 'Ảnh khởi động' }
-    ]).filter((it) => isValidCarryOver(granular11[1], it.url, it.title));
+    ]).filter((it) => isValidCarryOver(rowKhoiDong, it.url, it.title));
   }
 
-  // Slot 1.3 (Trò chơi khởi động -> idx 2)
+  // Slot 1.3 (Trò chơi khởi động — only if target lesson has 1.3)
   const srcWarmupGame = rows.find((r, i) => {
     const c = (r.content || '').toLowerCase();
-    return (c.includes('1.3.') || (i === 0 && c.includes('trò chơi') && c.includes('khởi động'))) && granular11[2] && isValidCarryOver(granular11[2], r.contentImgUrl, r.contentImgTitle);
+    return (c.includes('1.3.') || (i === 0 && c.includes('trò chơi') && c.includes('khởi động'))) && rowWarmupGame && isValidCarryOver(rowWarmupGame, r.contentImgUrl, r.contentImgTitle);
   });
-  if (srcWarmupGame?.contentImgUrl && granular11[2] && !granular11[2].contentImgUrl) {
-    granular11[2].contentImgUrl = srcWarmupGame.contentImgUrl;
-    granular11[2].contentImgTitle = srcWarmupGame.contentImgTitle;
-    granular11[2].contentImages = (srcWarmupGame.contentImages || [
+  if (srcWarmupGame?.contentImgUrl && rowWarmupGame && !rowWarmupGame.contentImgUrl) {
+    rowWarmupGame.contentImgUrl = srcWarmupGame.contentImgUrl;
+    rowWarmupGame.contentImgTitle = srcWarmupGame.contentImgTitle;
+    rowWarmupGame.contentImages = (srcWarmupGame.contentImages || [
       { id: 'custom_tckd', url: srcWarmupGame.contentImgUrl, title: srcWarmupGame.contentImgTitle || 'Ảnh trò chơi khởi động' }
-    ]).filter((it) => isValidCarryOver(granular11[2], it.url, it.title));
+    ]).filter((it) => isValidCarryOver(rowWarmupGame, it.url, it.title));
   }
 
-  // Slot 2.1 (Kỹ thuật động tác mới -> idx 3) — strictly reject warmup/game/practice/cooldown/cross-grade/.svg rows
+  // Slot 2.1 (Kỹ thuật động tác mới) — strictly reject warmup/game/practice/cooldown/cross-grade/.svg rows
   const srcMovement = rows.find((r, i) => {
     const c = (r.content || '').toLowerCase();
     const isMovRow =
@@ -3015,61 +3424,61 @@ export function splitAndAlignRows1to1(
       c.includes('khám phá') ||
       c.includes('kiến thức mới') ||
       (rows.length <= 7 && i === 1);
-    return isMovRow && granular11[3] && isValidCarryOver(granular11[3], r.contentImgUrl, r.contentImgTitle) && !isTitleGame(r.contentImgTitle);
+    return isMovRow && rowMovement && isValidCarryOver(rowMovement, r.contentImgUrl, r.contentImgTitle) && !isTitleGame(r.contentImgTitle);
   });
-  if (srcMovement?.contentImgUrl && granular11[3] && !granular11[3].contentImgUrl) {
+  if (srcMovement?.contentImgUrl && rowMovement && !rowMovement.contentImgUrl) {
     const validMovImgs = (srcMovement.contentImages || [
       { id: 'custom_mov', url: srcMovement.contentImgUrl, title: srcMovement.contentImgTitle || 'Ảnh động tác' }
-    ]).filter((it) => isValidCarryOver(granular11[3], it.url, it.title) && !/^ôn\s*tập\s*:/i.test((it.title || '').trim()));
+    ]).filter((it) => isValidCarryOver(rowMovement, it.url, it.title) && !/^ôn\s*tập\s*:/i.test((it.title || '').trim()));
     if (validMovImgs.length > 0) {
-      granular11[3].contentImgUrl = validMovImgs[0].url;
-      granular11[3].contentImgTitle = validMovImgs[0].title;
-      granular11[3].contentImages = validMovImgs;
+      rowMovement.contentImgUrl = validMovImgs[0].url;
+      rowMovement.contentImgTitle = validMovImgs[0].title;
+      rowMovement.contentImages = validMovImgs;
     }
   }
 
-  // Slot 3.2 (Luyện tập -> idx 5)
+  // Slot 3.2 (Luyện tập)
   const srcPractice = rows.find((r) => {
     const c = (r.content || '').toLowerCase();
-    return (c.includes('3.2.') || c.includes('3.1.') || c.includes('3.3.')) && !c.includes('trò chơi') && granular11[5] && isValidCarryOver(granular11[5], r.contentImgUrl, r.contentImgTitle);
+    return (c.includes('3.2.') || c.includes('3.1.') || c.includes('3.3.')) && !c.includes('trò chơi') && rowPractice && isValidCarryOver(rowPractice, r.contentImgUrl, r.contentImgTitle);
   });
-  if (srcPractice?.contentImgUrl && granular11[5] && !granular11[5].contentImgUrl) {
-    granular11[5].contentImgUrl = srcPractice.contentImgUrl;
-    granular11[5].contentImgTitle = srcPractice.contentImgTitle;
-    granular11[5].contentImages = (srcPractice.contentImages || [
+  if (srcPractice?.contentImgUrl && rowPractice && !rowPractice.contentImgUrl) {
+    rowPractice.contentImgUrl = srcPractice.contentImgUrl;
+    rowPractice.contentImgTitle = srcPractice.contentImgTitle;
+    rowPractice.contentImages = (srcPractice.contentImages || [
       { id: 'custom_lt', url: srcPractice.contentImgUrl, title: srcPractice.contentImgTitle || 'Ảnh luyện tập' }
-    ]).filter((it) => isValidCarryOver(granular11[5], it.url, it.title));
+    ]).filter((it) => isValidCarryOver(rowPractice, it.url, it.title));
   }
 
-  // Slot 3.5 (Trò chơi vận động -> idx 8)
+  // Slot 3.5 (Trò chơi vận động — only if target lesson has 3.5)
   const srcPracticeGame = rows.find((r) => {
     const c = (r.content || '').toLowerCase();
     const isGameRow =
       c.includes('3.5.') ||
       (c.includes('trò chơi') && (c.includes('vận động') || c.includes('3.4'))) ||
       r.contentImgTitle?.toLowerCase().includes('trò chơi');
-    return isGameRow && granular11[8] && isValidCarryOver(granular11[8], r.contentImgUrl, r.contentImgTitle);
+    return isGameRow && rowPracticeGame && isValidCarryOver(rowPracticeGame, r.contentImgUrl, r.contentImgTitle);
   });
-  if (srcPracticeGame?.contentImgUrl && granular11[8] && !granular11[8].contentImgUrl) {
-    granular11[8].contentImgUrl = srcPracticeGame.contentImgUrl;
-    granular11[8].contentImgTitle = srcPracticeGame.contentImgTitle;
-    granular11[8].contentImages = (srcPracticeGame.contentImages || [
+  if (srcPracticeGame?.contentImgUrl && rowPracticeGame && !rowPracticeGame.contentImgUrl) {
+    rowPracticeGame.contentImgUrl = srcPracticeGame.contentImgUrl;
+    rowPracticeGame.contentImgTitle = srcPracticeGame.contentImgTitle;
+    rowPracticeGame.contentImages = (srcPracticeGame.contentImages || [
       { id: 'custom_game', url: srcPracticeGame.contentImgUrl, title: srcPracticeGame.contentImgTitle || 'Ảnh trò chơi vận động' }
-    ]).filter((it) => isValidCarryOver(granular11[8], it.url, it.title));
+    ]).filter((it) => isValidCarryOver(rowPracticeGame, it.url, it.title));
   }
 
-  // Slot 4.2 (Vận dụng -> idx 10)
+  // Slot 4.2 (Vận dụng)
   const srcVanDung = rows.find((r) => {
     const c = (r.content || '').toLowerCase();
     const isCooldownOnly = (c.includes('4.1') || c.includes('hồi tĩnh')) && !c.includes('4.2');
-    return !isCooldownOnly && (c.includes('4.2.') || c.includes('vận dụng')) && granular11[10] && isValidCarryOver(granular11[10], r.contentImgUrl, r.contentImgTitle);
+    return !isCooldownOnly && (c.includes('4.2.') || c.includes('vận dụng')) && rowVanDung && isValidCarryOver(rowVanDung, r.contentImgUrl, r.contentImgTitle);
   });
-  if (srcVanDung?.contentImgUrl && granular11[10] && !granular11[10].contentImgUrl) {
-    granular11[10].contentImgUrl = srcVanDung.contentImgUrl;
-    granular11[10].contentImgTitle = srcVanDung.contentImgTitle;
-    granular11[10].contentImages = (srcVanDung.contentImages || [
+  if (srcVanDung?.contentImgUrl && rowVanDung && !rowVanDung.contentImgUrl) {
+    rowVanDung.contentImgUrl = srcVanDung.contentImgUrl;
+    rowVanDung.contentImgTitle = srcVanDung.contentImgTitle;
+    rowVanDung.contentImages = (srcVanDung.contentImages || [
       { id: 'custom_vd', url: srcVanDung.contentImgUrl, title: srcVanDung.contentImgTitle || 'Ảnh vận dụng' }
-    ]).filter((it) => isValidCarryOver(granular11[10], it.url, it.title));
+    ]).filter((it) => isValidCarryOver(rowVanDung, it.url, it.title));
   }
 
   return granular11.map((r) => compactOverlongKnowledgeRow(sanitizeRowColumn1Media(r, grade, title)));
@@ -3134,7 +3543,7 @@ export function autoScanLibraryAndAttachToRows(
   const messages: string[] = [];
   const resolved = resolveLessonSlotAssets(grade, lessonTitle, '', userImages);
   const effectiveLesson = resolved.effectiveLesson;
-  const updatedRows = rows.map((r) => ({ ...r }));
+  const updatedRows = stripFabricatedGameRows(rows).map((r) => ({ ...r }));
 
   updatedRows.forEach((row, idx) => {
     const c = (row.content || '').toLowerCase();
@@ -3205,7 +3614,8 @@ export function autoScanLibraryAndAttachToRows(
 
     if (isWarmupGame) {
       const gameMatch = row.content.match(/"([^"]+)"/);
-      const gName = gameMatch ? gameMatch[1] : resolved.warmupGameName;
+      const gName = (gameMatch ? gameMatch[1] : resolved.warmupGameName || '').trim();
+      if (!gName || isFabricatedLegacyGameName(gName)) return;
       const gImg = resolveAccurateGameImage(gName, grade, 'tro_choi_kd', userImages, effectiveLesson);
       if (gImg.url) {
         row.contentImgUrl = gImg.url;
@@ -3260,17 +3670,28 @@ export function autoScanLibraryAndAttachToRows(
     }
 
     if (isPracticeTextRow) {
-      // Attach classified Luyện tập image to 3.2 (or merged practice row), preserve valid Luyện tập raster image
+      // Attach classified exact-lesson Luyện tập image matching each sub-slot (3.1 đồng loạt, 3.2 tổ nhóm, 3.3 cặp đôi, 3.4 cá nhân)
       const sanitizedLt = sanitizeRowColumn1Media(row, grade, lessonTitle);
       row.contentImgUrl = sanitizedLt.contentImgUrl;
       row.contentImgTitle = sanitizedLt.contentImgTitle;
       row.contentImages = sanitizedLt.contentImages;
-      if ((c.includes('3.2.') || c.includes('3.1.')) && resolved.luyenTapImg?.url && !row.contentImgUrl) {
-        row.contentImgUrl = resolved.luyenTapImg.url;
-        row.contentImgTitle = resolved.luyenTapImg.title;
-        row.contentImages = [{ id: `img_lt_${idx}`, url: resolved.luyenTapImg.url, title: resolved.luyenTapImg.title }];
+
+      const matchedPracticeSubImg = c.includes('3.1.')
+        ? resolved.luyenTapBySlot.dongLoat
+        : c.includes('3.2.')
+        ? resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg
+        : c.includes('3.3.')
+        ? resolved.luyenTapBySlot.capDoi
+        : c.includes('3.4.')
+        ? resolved.luyenTapBySlot.caNhan
+        : null;
+
+      if (matchedPracticeSubImg?.url && !row.contentImgUrl) {
+        row.contentImgUrl = matchedPracticeSubImg.url;
+        row.contentImgTitle = matchedPracticeSubImg.title;
+        row.contentImages = [{ id: `img_lt_${idx}`, url: matchedPracticeSubImg.url, title: matchedPracticeSubImg.title }];
         attachedCount++;
-        messages.push(`Dòng ${idx + 1} (Luyện tập): Gắn "${resolved.luyenTapImg.title}"`);
+        messages.push(`Dòng ${idx + 1} (Luyện tập): Gắn "${matchedPracticeSubImg.title}"`);
       }
       if (!row.hsImgUrl || isLegacySharedStandardFormationUrl(row.hsImgUrl)) {
         const ltPhase = c.includes('3.1.')
@@ -3291,7 +3712,8 @@ export function autoScanLibraryAndAttachToRows(
 
     if (isPracticeGameRow) {
       const gameMatch = row.content.match(/"([^"]+)"/);
-      const gName = gameMatch ? gameMatch[1] : resolved.practiceGameName;
+      const gName = (gameMatch ? gameMatch[1] : resolved.practiceGameName || '').trim();
+      if (!gName || isFabricatedLegacyGameName(gName)) return;
       const gImg = resolveAccurateGameImage(gName, grade, 'tro_choi_vd', userImages, effectiveLesson);
       if (gImg.url) {
         row.contentImgUrl = gImg.url;

@@ -53,7 +53,8 @@ import {
   splitAndAlignRows1to1,
   splitAndBalanceExistingRows,
   resolveAccurateMovement,
-  isInvalidColumn1AttachmentForRow
+  isInvalidColumn1AttachmentForRow,
+  extractGameNameFromRowText
 } from '../utils/planAutoMatcher';
 import { auditPlanAgainstCurriculum, ComplianceAuditReport } from '../utils/curriculumAuditSync';
 import {
@@ -71,12 +72,15 @@ import {
 } from '../utils/inlineImageHelper';
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
+import { ImageClassificationCategory } from './ClassifiedImagePickerModal';
 import { FormationStudioModal } from './FormationStudioModal';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveSlotMissingImageNotice } from '../utils/imageProvenance';
+import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { getSgkPageForLesson } from '../data/sgkCurriculumTree';
+import { getPpctWeekItems } from '../data/defaultPpctData';
 
 interface TabGeneratorProps {
   week: number;
@@ -228,12 +232,50 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     rowIndex: number;
     col: 'content' | 'gv' | 'hs';
     type: 'image' | 'formation';
+    initialCategory?: 'all' | ImageClassificationCategory;
+    initialSearchQuery?: string;
+    suggestedKeywords?: string[];
+    gameName?: string;
   } | null>(null);
 
-  // Filter syllabus presets for current grade and week
-  const relevantPresets = nextWeeksSyllabusPresets.filter(
-    (p) => p.grade === grade
-  );
+  const mapSubFolderToPickerCategory = (subFolder?: string): ImageClassificationCategory => {
+    switch (subFolder) {
+      case 'khoiDong':
+        return 'khoi_dong';
+      case 'troChoiKhoiDong':
+        return 'tro_choi_kd';
+      case 'luyenTap':
+        return 'luyen_tap';
+      case 'troChoi':
+        return 'tro_choi_vd';
+      case 'vanDung':
+        return 'van_dung';
+      default:
+        return 'dong_tac';
+    }
+  };
+
+  // Dynamically build 1-click syllabus presets for current week (and adjacent weeks) directly from the official 35-week PPCT plan
+  const relevantPresets = useMemo(() => {
+    const targetWeeks = Array.from(
+      new Set([Math.max(1, week - 1), week, Math.min(35, week + 1)])
+    ).sort((a, b) => a - b);
+
+    const ppctPresets = targetWeeks.flatMap((w) =>
+      getPpctWeekItems(grade as GradeLevel, w).map((item) => ({
+        week: item.week,
+        grade: item.grade,
+        lessonNum: item.period,
+        topic: item.topic,
+        title: item.lessonTitle,
+        movementNames: [item.lessonTitle],
+        suggestedGame: ''
+      }))
+    );
+
+    if (ppctPresets.length > 0) return ppctPresets;
+    return nextWeeksSyllabusPresets.filter((p) => p.grade === grade);
+  }, [grade, week]);
 
   const handleSelectPresetLesson = (preset: typeof nextWeeksSyllabusPresets[0]) => {
     setWeek(preset.week);
@@ -252,11 +294,19 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       images
     );
 
-    setLessonRows(match.newRows);
+    const rowsWithOfficialInteg = applyOfficialIntegrationsToLessonRows(
+      match.newRows,
+      preset.grade,
+      preset.week,
+      preset.lessonNum,
+      preset.title
+    );
+
+    setLessonRows(rowsWithOfficialInteg);
     setLastAutoMatch(match);
 
     showToast(
-      `✨ Đã tự động sinh giáo án Tuần ${preset.week} - Tiết ${preset.lessonNum} và gắn đúng ảnh kỹ thuật & sơ đồ đội hình!`
+      `✨ Đã tự động sinh giáo án Tuần ${preset.week} - Tiết ${preset.lessonNum} (Khối ${preset.grade}) theo Kế hoạch dạy học tích hợp!`
     );
   };
 
@@ -272,11 +322,19 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       images
     );
 
-    setLessonRows(match.newRows);
+    const rowsWithOfficialInteg = applyOfficialIntegrationsToLessonRows(
+      match.newRows,
+      grade,
+      week,
+      lessonNum,
+      title
+    );
+
+    setLessonRows(rowsWithOfficialInteg);
     setLastAutoMatch(match);
 
     showToast(
-      `⚡ Đã áp dụng mẫu Nghĩa Hiệp: Nhận diện ${match.detectedMovements.length} động tác, tự gắn ${match.matchedImages.length} ảnh kỹ thuật và ${match.matchedFormations.length} sơ đồ đội hình!`
+      `⚡ Đã áp dụng mẫu Nghĩa Hiệp & Kế hoạch tích hợp: Nhận diện ${match.detectedMovements.length} động tác, tự gắn ${match.matchedImages.length} ảnh kỹ thuật và ${match.matchedFormations.length} sơ đồ đội hình!`
     );
   };
 
@@ -1032,24 +1090,28 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           </div>
         </div>
 
-        {/* Quick Syllabus Presets for current grade */}
+        {/* Quick Syllabus Presets for current grade & week from official 35-week PPCT */}
         {relevantPresets.length > 0 && (
           <div className="pt-2 border-t border-slate-100">
             <p className="text-[11px] text-slate-500 font-medium mb-2">
-              💡 Gợi ý nhanh bài học phân phối chương trình tiếp theo (Khối {grade}):
+              💡 Chọn nhanh bài học theo Kế hoạch dạy học tích hợp 35 tuần (Khối {grade} · quanh Tuần {week}):
             </p>
             <div className="flex flex-wrap gap-2">
               {relevantPresets.map((preset, idx) => (
                 <button
-                  key={idx}
+                  key={`${preset.week}_${preset.lessonNum}_${idx}`}
                   onClick={() => handleSelectPresetLesson(preset)}
-                  className="bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border border-slate-200 text-slate-700 text-[11px] font-semibold px-3 py-1.5 rounded-lg transition text-left flex items-center gap-1.5"
+                  className={`border text-[11px] font-semibold px-3 py-1.5 rounded-lg transition text-left flex items-center gap-1.5 ${
+                    preset.week === week && preset.lessonNum === lessonNum
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 shadow-2xs'
+                      : 'bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 border-slate-200 text-slate-700'
+                  }`}
                 >
                   <span className="bg-white text-slate-800 font-bold px-1.5 py-0.5 rounded text-[10px] border border-slate-200">
-                    Tuần {preset.week}
+                    T{preset.week} · Tiết {preset.lessonNum}
                   </span>
-                  <span>{preset.title.replace(/^bài\s*\d+\s*[:\-]?\s*/i, '')}</span>
-                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                  <span>{preset.title}</span>
+                  <ChevronRight className="w-3 h-3 text-slate-400 shrink-0" />
                 </button>
               ))}
             </div>
@@ -1501,17 +1563,40 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-[13px] font-semibold text-slate-900 leading-relaxed">
-                      <RichTextWithImages
-                        text={row.content}
-                        imageHeight={120}
-                        showCaptions={true}
-                        isEditMode={false}
-                      />
+                    <div className="space-y-1.5 text-[13px] font-semibold text-slate-900 leading-relaxed">
+                      {splitColumn1ContentForMedia(row.content, contentImgs).map((seg, sIdx) =>
+                        seg.type === 'text' ? (
+                          <RichTextWithImages
+                            key={`gm_txt_${sIdx}`}
+                            text={seg.text}
+                            imageHeight={120}
+                            showCaptions={true}
+                            isEditMode={false}
+                          />
+                        ) : (
+                          <div
+                            key={`gm_img_${sIdx}`}
+                            className={`grid ${seg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 py-1`}
+                          >
+                            {seg.images.map((cImg, cIdx) => (
+                              <div key={cImg.id || cIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
+                                <img
+                                  src={cImg.url}
+                                  alt={cImg.title}
+                                  className="max-h-44 w-auto mx-auto object-contain rounded bg-white"
+                                />
+                                <p className="text-[11px] text-slate-600 font-medium mt-1.5 leading-snug">
+                                  {cImg.title}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
 
-                  {contentImgs.length > 0 ? (
+                  {effectiveEditMode && contentImgs.length > 0 ? (
                     <div className={`grid ${contentImgs.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
                       {contentImgs.map((cImg, cIdx) => (
                         <div key={cImg.id || cIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
@@ -1523,41 +1608,74 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                           <p className="text-[11px] text-slate-600 font-medium mt-1.5 leading-snug">
                             {cImg.title}
                           </p>
-                          {effectiveEditMode && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setLessonRows((prev) => {
-                                  const updated = [...prev];
-                                  const cur = updated[idx]?.contentImages || [];
-                                  const next = cur.filter((_, i) => i !== cIdx);
-                                  updated[idx] = {
-                                    ...updated[idx],
-                                    contentImages: next,
-                                    contentImgUrl: next[0]?.url,
-                                    contentImgTitle: next[0]?.title
-                                  };
-                                  return updated;
-                                });
-                              }}
-                              className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
-                              title="Xóa ảnh"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLessonRows((prev) => {
+                                const updated = [...prev];
+                                const cur = updated[idx]?.contentImages || [];
+                                const next = cur.filter((_, i) => i !== cIdx);
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  contentImages: next,
+                                  contentImgUrl: next[0]?.url,
+                                  contentImgTitle: next[0]?.title
+                                };
+                                return updated;
+                              });
+                            }}
+                            className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                            title="Xóa ảnh"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ))}
                     </div>
-                  ) : !hasInlineMedia(row.content) && (() => {
+                  ) : contentImgs.length === 0 && !hasInlineMedia(row.content) && (() => {
                     const mMissing = resolveSlotMissingImageNotice(grade, row.content, title, topic);
                     if (!mMissing) return null;
+                    const pickerCat = mapSubFolderToPickerCategory(mMissing.subFolder);
+                    const extractedGame =
+                      mMissing.subFolder === 'troChoiKhoiDong' || mMissing.subFolder === 'troChoi'
+                        ? extractGameNameFromRowText(row.content)
+                        : '';
                     return (
                       <div className="p-2.5 bg-amber-50 border border-dashed border-amber-300 rounded-xl text-[11px] leading-snug text-amber-950 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
-                          <p className="text-amber-800 mt-0.5">{mMissing.message}</p>
+                        <div className="flex-1 space-y-1.5">
+                          <div>
+                            <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
+                            <p className="text-amber-800 mt-0.5">{mMissing.message}</p>
+                          </div>
+                          {mMissing.suggestedKeywords && mMissing.suggestedKeywords.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {mMissing.suggestedKeywords.slice(0, 3).map((kw) => (
+                                <button
+                                  key={kw}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isGuest && onRequireAuth) {
+                                      onRequireAuth('Tìm & chọn ảnh trong Thư viện');
+                                      return;
+                                    }
+                                    setTargetColAttachment({
+                                      rowIndex: idx,
+                                      col: 'content',
+                                      type: 'image',
+                                      initialCategory: pickerCat,
+                                      initialSearchQuery: kw,
+                                      suggestedKeywords: mMissing.suggestedKeywords,
+                                      gameName: extractedGame || undefined
+                                    });
+                                  }}
+                                  className="px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-md font-semibold text-[10.5px] transition"
+                                >
+                                  Tìm: {kw}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
@@ -1565,12 +1683,20 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                 onRequireAuth('Tìm & chọn ảnh trong Thư viện');
                                 return;
                               }
-                              setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'image' });
+                              setTargetColAttachment({
+                                rowIndex: idx,
+                                col: 'content',
+                                type: 'image',
+                                initialCategory: pickerCat,
+                                initialSearchQuery: mMissing.suggestedKeywords?.[0] || '',
+                                suggestedKeywords: mMissing.suggestedKeywords,
+                                gameName: extractedGame || undefined
+                              });
                             }}
-                            className="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-lg font-bold text-[11px] transition"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded-lg font-bold text-[11px] transition"
                           >
                             <ImageIcon className="w-3.5 h-3.5" />
-                            <span>Tìm ảnh trong Thư viện</span>
+                            <span>Tìm &amp; gán ảnh theo từ khóa</span>
                             {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                           </button>
                         </div>
@@ -1883,18 +2009,69 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                           )}
                         </>
                       ) : (
-                        <div className="text-xs font-semibold text-slate-900 leading-relaxed">
-                          <RichTextWithImages
-                            text={row.content}
-                            imageHeight={80}
-                            showCaptions={true}
-                            isEditMode={false}
-                          />
-                        </div>
+                        (() => {
+                          const rLower = (row.content || '').toLowerCase();
+                          const inferredFolder: 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung' =
+                            rLower.includes('1.3') || (rLower.includes('trò chơi') && rLower.includes('khởi động'))
+                              ? 'troChoiKhoiDong'
+                              : rLower.includes('1.2') || (rLower.includes('khởi động') && !rLower.includes('1.1'))
+                              ? 'khoiDong'
+                              : rLower.includes('3.5') || rLower.includes('trò chơi vận động')
+                              ? 'troChoi'
+                              : rLower.includes('3.1') || rLower.includes('3.2') || rLower.includes('3.3') || rLower.includes('3.4') || rLower.includes('luyện tập')
+                              ? 'luyenTap'
+                              : rLower.includes('4.2') || rLower.includes('vận dụng')
+                              ? 'vanDung'
+                              : 'kyThuat';
+                          const validImgs = contentImgs.filter((cImg) => Boolean(cImg?.url && cImg.url.trim()));
+                          return (
+                            <div className="space-y-1.5 text-xs font-semibold text-slate-900 leading-relaxed">
+                              {splitColumn1ContentForMedia(row.content, validImgs).map((seg, sIdx) =>
+                                seg.type === 'text' ? (
+                                  <RichTextWithImages
+                                    key={`gd_txt_${sIdx}`}
+                                    text={seg.text}
+                                    imageHeight={80}
+                                    showCaptions={true}
+                                    isEditMode={false}
+                                  />
+                                ) : (
+                                  <div
+                                    key={`gd_img_${sIdx}`}
+                                    className={`grid ${seg.images.length > 1 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 py-1`}
+                                  >
+                                    {seg.images.map((cImg, cIdx) => (
+                                      <div key={cImg.id || cIdx} className="p-1.5 bg-slate-50 rounded-xl border border-slate-200 relative group group/imgtip text-center">
+                                        <img
+                                          src={cImg.url}
+                                          alt={cImg.title}
+                                          className="max-h-32 w-auto mx-auto object-contain rounded bg-white"
+                                        />
+                                        <p className="text-[10px] text-slate-600 font-medium text-center mt-1 truncate" title={cImg.title}>
+                                          {cImg.title}
+                                        </p>
+                                        <ImageProvenanceTooltip
+                                          image={{
+                                            title: cImg.title || row.contentImgTitle,
+                                            grade: String(grade),
+                                            lessonTitle: title,
+                                            folder: inferredFolder,
+                                            imgUrl: cImg.url
+                                          }}
+                                          position="bottom"
+                                        />
+                                      </div>
+                                    ))}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          );
+                        })()
                       )}
 
-                      {/* Column 1 Image Gallery */}
-                      {contentImgs.length > 0 && (() => {
+                      {/* Column 1 Image Gallery (Edit Mode Only — View Mode renders images immediately under headings above) */}
+                      {effectiveEditMode && contentImgs.length > 0 && (() => {
                         const rLower = (row.content || '').toLowerCase();
                         const inferredFolder: 'khoiDong' | 'troChoiKhoiDong' | 'kyThuat' | 'luyenTap' | 'troChoi' | 'vanDung' =
                           rLower.includes('1.3') || (rLower.includes('trò chơi') && rLower.includes('khởi động'))
@@ -1903,7 +2080,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                             ? 'khoiDong'
                             : rLower.includes('3.5') || rLower.includes('trò chơi vận động')
                             ? 'troChoi'
-                            : rLower.includes('3.1') || rLower.includes('3.2') || rLower.includes('3.3') || rLower.includes('luyện tập')
+                            : rLower.includes('3.1') || rLower.includes('3.2') || rLower.includes('3.3') || rLower.includes('3.4') || rLower.includes('luyện tập')
                             ? 'luyenTap'
                             : rLower.includes('4.2') || rLower.includes('vận dụng')
                             ? 'vanDung'
@@ -1931,41 +2108,37 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                   }}
                                   position="bottom"
                                 />
-                                {effectiveEditMode && (
-                                  <>
-                                    <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => downloadSvgAsPng(cImg.url, `anh_cot1_dong_${idx + 1}.png`)}
-                                        className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
-                                        title="Tải ảnh PNG xuống máy"
-                                      >
-                                        <Download className="w-3 h-3 text-emerald-400" /> PNG
-                                      </button>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setLessonRows((prev) => {
-                                          const updated = [...prev];
-                                          const cur = updated[idx]?.contentImages || [];
-                                          const next = cur.filter((_, i) => i !== cIdx);
-                                          updated[idx] = {
-                                            ...updated[idx],
-                                            contentImages: next,
-                                            contentImgUrl: next[0]?.url,
-                                            contentImgTitle: next[0]?.title
-                                          };
-                                          return updated;
-                                        });
-                                      }}
-                                      className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
-                                      title="Xóa ảnh"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </>
-                                )}
+                                <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadSvgAsPng(cImg.url, `anh_cot1_dong_${idx + 1}.png`)}
+                                    className="bg-slate-900/85 hover:bg-slate-900 text-white px-1.5 py-0.5 rounded text-[9.5px] font-bold flex items-center gap-0.5 shadow"
+                                    title="Tải ảnh PNG xuống máy"
+                                  >
+                                    <Download className="w-3 h-3 text-emerald-400" /> PNG
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setLessonRows((prev) => {
+                                      const updated = [...prev];
+                                      const cur = updated[idx]?.contentImages || [];
+                                      const next = cur.filter((_, i) => i !== cIdx);
+                                      updated[idx] = {
+                                        ...updated[idx],
+                                        contentImages: next,
+                                        contentImgUrl: next[0]?.url,
+                                        contentImgTitle: next[0]?.title
+                                      };
+                                      return updated;
+                                    });
+                                  }}
+                                  className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition shadow"
+                                  title="Xóa ảnh"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -1991,13 +2164,49 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       {contentImgs.length === 0 && !hasInlineMedia(row.content) && (() => {
                         const missingNotice = resolveSlotMissingImageNotice(grade, row.content, title, topic);
                         if (!missingNotice) return null;
+                        const pickerCat = mapSubFolderToPickerCategory(missingNotice.subFolder);
+                        const extractedGame =
+                          missingNotice.subFolder === 'troChoiKhoiDong' || missingNotice.subFolder === 'troChoi'
+                            ? extractGameNameFromRowText(row.content)
+                            : '';
                         return (
-                          <div className="p-2 bg-amber-50 border border-amber-300 rounded-lg text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
+                          <div className="p-2 bg-amber-50 border border-dashed border-amber-300 rounded-lg text-[10.5px] leading-snug text-amber-950 flex items-start gap-1.5">
                             <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                            <div className="flex-1">
-                              <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
-                              <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
-                              <div className="mt-1 flex flex-wrap gap-1.5">
+                            <div className="flex-1 space-y-1.5">
+                              <div>
+                                <p className="font-bold text-amber-900">Chưa xác định được ảnh phù hợp — Cần tìm trong Thư viện</p>
+                                <p className="text-amber-800 mt-0.5">{missingNotice.message}</p>
+                              </div>
+                              {missingNotice.suggestedKeywords && missingNotice.suggestedKeywords.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {missingNotice.suggestedKeywords.slice(0, 3).map((kw) => (
+                                    <button
+                                      key={kw}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isGuest && onRequireAuth) {
+                                          onRequireAuth('Tìm & chọn ảnh trong Thư viện');
+                                          return;
+                                        }
+                                        setTargetColAttachment({
+                                          rowIndex: idx,
+                                          col: 'content',
+                                          type: 'image',
+                                          initialCategory: pickerCat,
+                                          initialSearchQuery: kw,
+                                          suggestedKeywords: missingNotice.suggestedKeywords,
+                                          gameName: extractedGame || undefined
+                                        });
+                                      }}
+                                      className="px-1.5 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-semibold text-[9.5px] transition"
+                                      title={`Tìm ảnh theo từ khóa "${kw}"`}
+                                    >
+                                      Tìm: {kw}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              <div className="flex flex-wrap gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -2005,12 +2214,20 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                       onRequireAuth('Tìm & chọn ảnh trong Thư viện');
                                       return;
                                     }
-                                    setTargetColAttachment({ rowIndex: idx, col: 'content', type: 'image' });
+                                    setTargetColAttachment({
+                                      rowIndex: idx,
+                                      col: 'content',
+                                      type: 'image',
+                                      initialCategory: pickerCat,
+                                      initialSearchQuery: missingNotice.suggestedKeywords?.[0] || '',
+                                      suggestedKeywords: missingNotice.suggestedKeywords,
+                                      gameName: extractedGame || undefined
+                                    });
                                   }}
                                   className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-900 rounded font-bold text-[10px] transition"
                                 >
                                   <ImageIcon className="w-3 h-3" />
-                                  <span>Tìm ảnh trong Thư viện</span>
+                                  <span>Tìm &amp; gán ảnh theo từ khóa</span>
                                   {isGuest && <Lock className="w-3 h-3 text-amber-600" />}
                                 </button>
                                 {onNavigateToScan && missingNotice.suggestedPage && (
@@ -2475,6 +2692,13 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           }}
           targetRowIndex={targetRowForImage ?? targetColAttachment?.rowIndex ?? targetInlinePicker?.rowIndex ?? 0}
           userImages={images}
+          grade={grade}
+          lessonTitle={title}
+          lessonTopic={topic}
+          initialCategory={targetColAttachment?.initialCategory || 'all'}
+          initialSearchQuery={targetColAttachment?.initialSearchQuery || ''}
+          suggestedKeywords={targetColAttachment?.suggestedKeywords || []}
+          gameName={targetColAttachment?.gameName}
           onSelectImage={onConfirmImageSelection}
         />
       )}

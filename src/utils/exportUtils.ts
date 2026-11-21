@@ -8,6 +8,7 @@ import {
   GENERAL_KNOWLEDGE_THREAD_NOTE
 } from '../data/integrationAddressesData';
 import { compactOverlongKnowledgeRow, sanitizeRowColumn1Media } from './planAutoMatcher';
+import { splitColumn1ContentForMedia } from './column1MediaLayout';
 
 export function downloadZipOfImages(images: SgkImageItem[], filename = 'Thu_Vien_Hinh_Anh_SGK_GDTC.zip') {
   const zip = new JSZip();
@@ -584,14 +585,33 @@ export async function buildWordExportPackage(
                 }).join('');
               };
 
-              // Column 1 Content
-              const col1TextHtml = renderWordTextWithInline(row.content);
-              const col1AttachedHtml = (row.contentImagesProcessed || []).map((c: any) => `
+              // Column 1 Content: place attached images immediately AFTER content/movement/practice/game/Vận dụng headings (never dumped at cell bottom!)
+              const col1Segments = splitColumn1ContentForMedia(
+                row.content || '',
+                (row.contentImagesProcessed || []) as Array<{
+                  title?: string;
+                  pngBase64: string;
+                  widthPt: number;
+                  heightPt: number;
+                }>
+              );
+              const col1FlowHtml = col1Segments
+                .map((seg) => {
+                  if (seg.type === 'text') {
+                    return `<div>${renderWordTextWithInline(seg.text)}</div>`;
+                  }
+                  return seg.images
+                    .map(
+                      (c) => `
                 <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
                   <img src="${registerImage(c.pngBase64)}" width="${c.widthPt || 98}" height="${c.heightPt || 65}" style="width: ${c.widthPt || 98}pt; height: ${c.heightPt || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
                   ${c.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(c.title)}</p>` : ''}
                 </div>
-              `).join('');
+              `
+                    )
+                    .join('');
+                })
+                .join('');
 
               // Column 3 GV
               const col3TextHtml = renderWordTextWithInline(row.gv);
@@ -621,10 +641,9 @@ export async function buildWordExportPackage(
 
               return `
                 <tr style="font-size: 11pt; vertical-align: top;">
-                  <!-- Cột 1: Nội dung & Ảnh kỹ thuật chèn đúng vị trí -->
+                  <!-- Cột 1: Nội dung & Ảnh kỹ thuật chèn ngay sau tiêu đề động tác / trò chơi / luyện tập / vận dụng -->
                   <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
-                    <div>${col1TextHtml}</div>
-                    ${col1AttachedHtml}
+                    ${col1FlowHtml}
                   </td>
 
                   <!-- Cột 2: LVĐ -->

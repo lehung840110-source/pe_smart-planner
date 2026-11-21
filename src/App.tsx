@@ -68,7 +68,9 @@ import {
   deleteVersionFromStore
 } from './utils/planVersionHistory';
 import { getGradePpctInfo } from './utils/academicCalendar';
-import { createBalancedGranularLessonRows } from './utils/planAutoMatcher';
+import { getPpctPeriodItem } from './data/defaultPpctData';
+import { cleanLessonTitleForHeader } from './utils/curriculumAuditSync';
+import { createBalancedGranularLessonRows, stripFabricatedGameRows } from './utils/planAutoMatcher';
 import { User as FirebaseGoogleUser } from 'firebase/auth';
 import {
   initAuth,
@@ -1219,6 +1221,24 @@ export default function App() {
     setGrade(nextGrade);
     setLessonNum(nextLessonNum);
 
+    const ppctPeriod = getPpctPeriodItem(nextGrade as GradeLevel, nextLessonNum);
+    const ppct = getGradePpctInfo(nextGrade as GradeLevel, nextWeek);
+    const expectedPpctTitle = ppctPeriod?.lessonTitle || '';
+    const isPdfIntegratedGrade = nextGrade === 1 || nextGrade === 3 || nextGrade === 5;
+    const normTitle = (s: string) =>
+      cleanLessonTitleForHeader(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệđìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const isDraftStaleAgainstPpct = (snapTitle: string): boolean => {
+      if (!isPdfIntegratedGrade || !expectedPpctTitle) return false;
+      const a = normTitle(snapTitle);
+      const b = normTitle(expectedPpctTitle);
+      if (!a || !b) return false;
+      return a !== b && !a.includes(b.slice(0, 14)) && !b.includes(a.slice(0, 14));
+    };
+
     const existingVer = getPreferredVersionForPlan(
       planVersionStoreRef.current,
       nextWeek,
@@ -1227,45 +1247,60 @@ export default function App() {
     );
     if (existingVer?.snapshot) {
       const snap = normalizeMasterPlan(existingVer.snapshot);
-      if (!snap.integrations?.addressLabel || !snap.integrations?.addressContent) {
+      const isUnpinnedDraft = existingVer.status === 'draft' && !existingVer.isStarredBest;
+      if (!(isUnpinnedDraft && isDraftStaleAgainstPpct(snap.title))) {
         const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, snap.title);
-        snap.integrations = { ...officialInteg, ...(snap.integrations || {}), ...officialInteg };
+        const shouldRefreshInteg =
+          !snap.integrations?.addressLabel ||
+          !snap.integrations?.addressContent ||
+          (isUnpinnedDraft && isPdfIntegratedGrade && snap.integrations.addressContent !== officialInteg.addressContent);
+        if (shouldRefreshInteg) {
+          snap.integrations = { ...officialInteg };
+        }
+        const cleanedSnapRows = stripFabricatedGameRows(snap.rows);
+        const hydratedRows =
+          hasActivityIntegrationMarkers(cleanedSnapRows) && !shouldRefreshInteg
+            ? cleanedSnapRows
+            : applyOfficialIntegrationsToLessonRows(cleanedSnapRows, nextGrade, nextWeek, nextLessonNum, snap.title);
+        snap.rows = hydratedRows;
+        setCurrentMasterPlan(snap);
+        setTopic(snap.topic);
+        setTitle(snap.title);
+        setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
+        showToast(
+          `📂 Đã mở phiên bản chỉnh sửa gần nhất (#${existingVer.versionNumber}) cho Tuần ${nextWeek} · Khối ${nextGrade} · Tiết ${nextLessonNum}!`
+        );
+        return;
       }
-      const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
-        ? snap.rows
-        : applyOfficialIntegrationsToLessonRows(snap.rows, nextGrade, nextWeek, nextLessonNum, snap.title);
-      snap.rows = hydratedRows;
-      setCurrentMasterPlan(snap);
-      setTopic(snap.topic);
-      setTitle(snap.title);
-      setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
-      showToast(
-        `📂 Đã mở phiên bản chỉnh sửa gần nhất (#${existingVer.versionNumber}) cho Tuần ${nextWeek} · Khối ${nextGrade} · Tiết ${nextLessonNum}!`
-      );
-      return;
     }
 
     const weekSpecific = allMasterPlans[`k${nextGrade}_t${nextLessonNum}_w${nextWeek}`];
     if (weekSpecific) {
       const snap = normalizeMasterPlan(weekSpecific);
-      if (!snap.integrations?.addressLabel || !snap.integrations?.addressContent) {
+      if (!isDraftStaleAgainstPpct(snap.title)) {
         const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, snap.title);
-        snap.integrations = { ...officialInteg, ...(snap.integrations || {}), ...officialInteg };
+        if (!snap.integrations?.addressLabel || !snap.integrations?.addressContent) {
+          snap.integrations = { ...officialInteg, ...(snap.integrations || {}), ...officialInteg };
+        }
+        const cleanedSnapRows = stripFabricatedGameRows(snap.rows);
+        const hydratedRows = hasActivityIntegrationMarkers(cleanedSnapRows)
+          ? cleanedSnapRows
+          : applyOfficialIntegrationsToLessonRows(cleanedSnapRows, nextGrade, nextWeek, nextLessonNum, snap.title);
+        snap.rows = hydratedRows;
+        setCurrentMasterPlan(snap);
+        setTopic(snap.topic);
+        setTitle(snap.title);
+        setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
+        return;
       }
-      const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
-        ? snap.rows
-        : applyOfficialIntegrationsToLessonRows(snap.rows, nextGrade, nextWeek, nextLessonNum, snap.title);
-      snap.rows = hydratedRows;
-      setCurrentMasterPlan(snap);
-      setTopic(snap.topic);
-      setTitle(snap.title);
-      setLessonRows(JSON.parse(JSON.stringify(hydratedRows)));
-      return;
     }
 
-    const ppct = getGradePpctInfo(nextGrade as GradeLevel, nextWeek);
     const isSecondPeriod = ppct.periods[1] === nextLessonNum;
-    const nextTitle = `${ppct.defaultTitle} (${isSecondPeriod ? 'Tiết 2' : 'Tiết 1'})`;
+    const nextTopic = ppctPeriod?.topic || (isSecondPeriod ? ppct.period2Topic : ppct.period1Topic) || ppct.defaultTopic;
+    const nextTitle =
+      ppctPeriod?.lessonTitle ||
+      (isSecondPeriod ? ppct.period2Title : ppct.period1Title) ||
+      `${ppct.defaultTitle} (${isSecondPeriod ? 'Tiết 2' : 'Tiết 1'})`;
     const freshRows = createBalancedGranularLessonRows(nextGrade, nextTitle, images, undefined, undefined, nextWeek, nextLessonNum);
     const officialInteg = buildMasterPlanIntegrationsFromAddress(nextGrade, nextWeek, nextLessonNum, nextTitle);
     setCurrentMasterPlan((prev) =>
@@ -1275,13 +1310,13 @@ export default function App() {
         grade: nextGrade as GradeLevel,
         week: nextWeek,
         lessonNum: nextLessonNum,
-        topic: ppct.defaultTopic,
+        topic: nextTopic,
         title: nextTitle,
         integrations: officialInteg,
         rows: freshRows
       })
     );
-    setTopic(ppct.defaultTopic);
+    setTopic(nextTopic);
     setTitle(nextTitle);
     setLessonRows(freshRows);
   };
@@ -1299,6 +1334,7 @@ export default function App() {
       if (existingVer?.snapshot) {
         skipNextAutoDraftRef.current = true;
         const snap = normalizeMasterPlan(existingVer.snapshot);
+        snap.rows = stripFabricatedGameRows(snap.rows);
         setCurrentMasterPlan(snap);
         setTopic(snap.topic);
         setTitle(snap.title);

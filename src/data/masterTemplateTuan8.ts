@@ -1122,25 +1122,25 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     lessonNum: 19,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
     title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 3)',
-    movementNames: ['Học động tác Vặn mình và Động tác Bụng'],
-    suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
+    movementNames: ['Ôn động tác Chân, Vặn mình, Bụng'],
+    suggestedGame: 'Trò chơi: Lò cò tiếp sức'
   },
   {
     week: 10,
     grade: 1,
     lessonNum: 20,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC BỤNG (Tiết 4)',
-    movementNames: ['Ôn động tác Chân, Vặn mình, Bụng'],
-    suggestedGame: 'Trò chơi: Nhảy lò cò tiếp sức'
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP VÀ ĐỘNG TÁC ĐIỀU HÒA (Tiết 1)',
+    movementNames: ['Học động tác Phối hợp'],
+    suggestedGame: 'Trò chơi: Mèo đuổi chuột'
   },
   {
     week: 11,
     grade: 1,
     lessonNum: 21,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA (Tiết 1)',
-    movementNames: ['Học động tác Phối hợp'],
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP VÀ ĐỘNG TÁC ĐIỀU HÒA (Tiết 2)',
+    movementNames: ['Học động tác Điều hòa', 'Ôn động tác Phối hợp'],
     suggestedGame: 'Trò chơi: Mèo đuổi chuột'
   },
   {
@@ -1148,8 +1148,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 1,
     lessonNum: 22,
     topic: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
-    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC ĐIỀU HÒA (Tiết 2)',
-    movementNames: ['Học động tác Điều hòa', 'Ôn động tác Phối hợp'],
+    title: 'ÔN TẬP BÀI THỂ DỤC',
+    movementNames: ['Ôn tập hoàn thiện Bài thể dục'],
     suggestedGame: 'Trò chơi: Chạy tiếp sức ném bóng'
   },
 
@@ -1215,7 +1215,7 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 17,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 1)',
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY (Tiết 1)',
     movementNames: ['Học động tác Vươn thở', 'Học động tác Tay'],
     suggestedGame: 'Trò chơi: Đua ô tô'
   },
@@ -1224,8 +1224,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 18,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 2)',
-    movementNames: ['Học động tác Chân', 'Ôn động tác Vươn thở và Động tác Tay'],
+    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY (Tiết 2)',
+    movementNames: ['Ôn động tác Vươn thở', 'Ôn động tác Tay'],
     suggestedGame: 'Trò chơi: Đua ô tô'
   },
   {
@@ -1233,8 +1233,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 19,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 3)',
-    movementNames: ['Học động tác Chân', 'Ôn Vươn thở và Tay'],
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG (Tiết 1)',
+    movementNames: ['Học động tác Chân', 'Học động tác Lườn'],
     suggestedGame: 'Trò chơi: Đua ô tô'
   },
   {
@@ -1242,8 +1242,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 20,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 1: ĐỘNG TÁC VƯƠN THỞ, ĐỘNG TÁC TAY, ĐỘNG TÁC CHÂN (Tiết 4)',
-    movementNames: ['Ôn động tác Vươn thở, Tay, Chân'],
+    title: 'Bài 2: ĐỘNG TÁC CHÂN, ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG (Tiết 2)',
+    movementNames: ['Học động tác Bụng', 'Ôn động tác Chân và Lườn'],
     suggestedGame: 'Trò chơi: Chạy nhanh tiếp sức'
   },
   {
@@ -1251,8 +1251,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 21,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG, ĐỘNG TÁC PHỐI HỢP (Tiết 1)',
-    movementNames: ['Học động tác Lườn', 'Học động tác Bụng'],
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA (Tiết 1)',
+    movementNames: ['Học động tác Phối hợp'],
     suggestedGame: 'Trò chơi: Đua ô tô'
   },
   {
@@ -1260,9 +1260,27 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 3,
     lessonNum: 22,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
-    title: 'Bài 2: ĐỘNG TÁC LƯỜN, ĐỘNG TÁC BỤNG, ĐỘNG TÁC PHỐI HỢP (Tiết 2)',
-    movementNames: ['Học động tác Phối hợp', 'Ôn động tác Lườn và Động tác Bụng'],
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA (Tiết 2)',
+    movementNames: ['Học động tác Nhảy', 'Ôn động tác Phối hợp'],
     suggestedGame: 'Trò chơi: Nhanh lên bạn ơi'
+  },
+  {
+    week: 12,
+    grade: 3,
+    lessonNum: 23,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'Bài 3: ĐỘNG TÁC PHỐI HỢP, ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA (Tiết 3)',
+    movementNames: ['Học động tác Điều hòa', 'Ôn động tác Phối hợp và Nhảy'],
+    suggestedGame: 'Trò chơi: Nhanh lên bạn ơi'
+  },
+  {
+    week: 12,
+    grade: 3,
+    lessonNum: 24,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC',
+    title: 'ÔN TẬP BÀI TẬP THỂ DỤC',
+    movementNames: ['Ôn tập hoàn thiện Bài tập thể dục'],
+    suggestedGame: 'Trò chơi: Chạy nhanh tiếp sức'
   },
 
   // Khối 4
@@ -1346,7 +1364,7 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     lessonNum: 19,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
     title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 3)',
-    movementNames: ['Học động tác Toàn thân với gậy'],
+    movementNames: ['Học động tác Toàn thân với gậy', 'Ôn Bụng và Vặn mình với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
@@ -1354,17 +1372,17 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 5,
     lessonNum: 20,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    title: 'Bài 2: ĐỘNG TÁC BỤNG, ĐỘNG TÁC VẶN MÌNH, ĐỘNG TÁC TOÀN THÂN VỚI GẬY (Tiết 4)',
-    movementNames: ['Ôn động tác Bụng, Vặn mình, Toàn thân với gậy'],
-    suggestedGame: 'Trò chơi: Chuyển bóng tiếp sức'
+    title: 'Bài 3: ĐỘNG TÁC NHẢY VÀ ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
+    movementNames: ['Học động tác Nhảy với gậy'],
+    suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
     week: 11,
     grade: 5,
     lessonNum: 21,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 1)',
-    movementNames: ['Học động tác Nhảy với gậy'],
+    title: 'Bài 3: ĐỘNG TÁC NHẢY VÀ ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 2)',
+    movementNames: ['Học động tác Điều hòa với gậy', 'Ôn động tác Nhảy với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
@@ -1372,8 +1390,8 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 5,
     lessonNum: 22,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 2)',
-    movementNames: ['Học động tác Điều hòa với gậy', 'Ôn động tác Nhảy với gậy'],
+    title: 'HOÀN THIỆN BÀI THỂ DỤC PHÁT TRIỂN CHUNG VỚI GẬY (Tiết 1)',
+    movementNames: ['Hoàn thiện bài thể dục phát triển chung với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
   },
   {
@@ -1381,9 +1399,18 @@ export const nextWeeksSyllabusPresets: NextWeekLessonPreset[] = [
     grade: 5,
     lessonNum: 23,
     topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
-    title: 'Bài 3: ĐỘNG TÁC NHẢY, ĐỘNG TÁC ĐIỀU HÒA VỚI GẬY (Tiết 3)',
-    movementNames: ['Ôn động tác Nhảy và Điều hòa với gậy'],
+    title: 'HOÀN THIỆN BÀI THỂ DỤC PHÁT TRIỂN CHUNG VỚI GẬY (Tiết 2)',
+    movementNames: ['Hoàn thiện bài thể dục phát triển chung với gậy'],
     suggestedGame: 'Trò chơi: Trao gậy tiếp sức'
+  },
+  {
+    week: 12,
+    grade: 5,
+    lessonNum: 24,
+    topic: 'CHỦ ĐỀ 2: BÀI TẬP THỂ DỤC VỚI GẬY',
+    title: 'ÔN BÀI THỂ DỤC PHÁT TRIỂN CHUNG VỚI GẬY',
+    movementNames: ['Ôn hoàn chỉnh bài thể dục phát triển chung với gậy'],
+    suggestedGame: 'Trò chơi: Chuyền gậy tiếp sức'
   }
 ];
 

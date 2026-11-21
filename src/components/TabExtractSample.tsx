@@ -25,6 +25,7 @@ import { customTemplateToMasterPlan } from '../utils/documentParser';
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationDiagram } from '../data/formationDiagrams';
+import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
 
 interface TabExtractSampleProps {
   currentMasterPlan: MasterPlanItem;
@@ -730,27 +731,48 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                     </button>
                   </div>
                 ) : (
-                  <div className="whitespace-pre-line text-[13px] leading-relaxed font-semibold text-slate-900">
-                    {row.content}
+                  <div className="space-y-2 text-[13px] leading-relaxed font-semibold text-slate-900">
+                    {splitColumn1ContentForMedia(
+                      row.content,
+                      row.contentImgUrl
+                        ? [{ id: `smp_m_${idx}`, url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh kỹ thuật động tác' }]
+                        : []
+                    ).map((seg, sIdx) =>
+                      seg.type === 'text' ? (
+                        <div key={`sm_txt_${sIdx}`} className="whitespace-pre-line">
+                          {seg.text}
+                        </div>
+                      ) : (
+                        <div key={`sm_img_${sIdx}`} className="space-y-1.5">
+                          {seg.images.map((im, iIdx) => (
+                            <div key={im.id || iIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                              <img
+                                src={im.url}
+                                alt={im.title || 'Ảnh kỹ thuật động tác'}
+                                className="max-h-44 w-auto mx-auto object-contain rounded"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    )}
                   </div>
                 )}
 
-                {row.contentImgUrl && (
+                {isEditMode && row.contentImgUrl && (
                   <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 relative text-center">
                     <img
                       src={row.contentImgUrl}
                       alt={row.contentImgTitle || 'Ảnh kỹ thuật động tác'}
                       className="max-h-44 w-auto mx-auto object-contain rounded"
                     />
-                    {isEditMode && (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveImage(idx, 'content')}
-                        className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx, 'content')}
+                      className="absolute top-1.5 right-1.5 bg-red-600 text-white p-1.5 rounded-lg shadow"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
               </div>
@@ -866,28 +888,49 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                         </button>
                       </div>
                     ) : (
-                      <div className="whitespace-pre-line leading-relaxed font-semibold text-slate-900">
-                        {row.content}
+                      <div className="space-y-2 leading-relaxed font-semibold text-slate-900">
+                        {splitColumn1ContentForMedia(
+                          row.content,
+                          row.contentImgUrl
+                            ? [{ id: `smp_d_${idx}`, url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh kỹ thuật động tác' }]
+                            : []
+                        ).map((seg, sIdx) =>
+                          seg.type === 'text' ? (
+                            <div key={`sd_txt_${sIdx}`} className="whitespace-pre-line">
+                              {seg.text}
+                            </div>
+                          ) : (
+                            <div key={`sd_img_${sIdx}`} className="space-y-1.5">
+                              {seg.images.map((im, iIdx) => (
+                                <div key={im.id || iIdx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                                  <img
+                                    src={im.url}
+                                    alt={im.title || 'Ảnh kỹ thuật động tác'}
+                                    className="max-h-36 w-full object-contain rounded"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        )}
                       </div>
                     )}
 
-                    {/* Image preview in Column 1 */}
-                    {row.contentImgUrl && (
+                    {/* Image preview in Column 1 (Edit Mode Only — View Mode renders immediately under heading above) */}
+                    {isEditMode && row.contentImgUrl && (
                       <div className="mt-2.5 p-2 bg-slate-50 rounded-xl border border-slate-200 relative group">
                         <img
                           src={row.contentImgUrl}
                           alt={row.contentImgTitle || 'Ảnh kỹ thuật động tác'}
                           className="max-h-36 w-full object-contain rounded"
                         />
-                        {isEditMode && (
-                          <button
-                            onClick={() => handleRemoveImage(idx, 'content')}
-                            className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition shadow"
-                            title="Xóa ảnh khỏi cột"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleRemoveImage(idx, 'content')}
+                          className="absolute top-1 right-1 bg-red-600 text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition shadow"
+                          title="Xóa ảnh khỏi cột"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     )}
                   </td>

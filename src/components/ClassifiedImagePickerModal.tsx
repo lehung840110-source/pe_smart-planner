@@ -20,6 +20,13 @@ import {
   doGameNamesMatch,
   normalizeGameNameForMatch
 } from '../utils/planAutoMatcher';
+import {
+  detectLessonContextDomain,
+  extractContextSearchKeywords,
+  normalizeViSearch,
+  scoreImageByKeywordQuery
+} from '../utils/keywordImageMatcher';
+import { sortLibraryImages } from '../utils/libraryImageOrder';
 
 export type ImageClassificationCategory =
   | 'dong_tac'
@@ -182,9 +189,12 @@ export interface ClassifiedImagePickerModalProps {
   images: SgkImageItem[];
   initialGrade?: 'all' | '1' | '2' | '3' | '4' | '5';
   initialCategory?: 'all' | ImageClassificationCategory;
+  initialSearchQuery?: string;
+  suggestedKeywords?: string[];
   targetInfo?: {
     grade?: number;
     lessonTitle?: string;
+    lessonTopic?: string;
     rowName?: string;
     rowIndex?: number;
     gameName?: string;
@@ -200,6 +210,8 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
   images,
   initialGrade = 'all',
   initialCategory = 'all',
+  initialSearchQuery = '',
+  suggestedKeywords = [],
   targetInfo,
   matchingGameTargets = [],
   onSelectImage,
@@ -223,44 +235,41 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
     [targetInfo?.gameName]
   );
 
-  // Sync filters whenever target changes
-  useEffect(() => {
-    if (isOpen) {
-      const openingForGame =
-        initialCategory === 'tro_choi_kd' ||
-        initialCategory === 'tro_choi_vd' ||
-        Boolean(targetInfo?.gameName);
+  const expectedDomain = useMemo(
+    () => detectLessonContextDomain(targetInfo?.lessonTitle || '', targetInfo?.lessonTopic || ''),
+    [targetInfo?.lessonTitle, targetInfo?.lessonTopic]
+  );
 
-      // For games, automatically search across ALL 5 grades so shared games are found immediately!
-      if (openingForGame) {
-        setGradeFilter('all');
-        setIncludeBothGameTypes(true);
-        setApplyToAllMatchingGrades(Boolean(onSelectImageForAllMatchingGrades));
-      } else if (initialGrade && initialGrade !== 'all') {
-        setGradeFilter(initialGrade);
-      } else if (targetInfo?.grade) {
-        setGradeFilter(String(targetInfo.grade) as '1' | '2' | '3' | '4' | '5');
-      } else {
-        setGradeFilter('all');
-      }
+  const effectiveSuggestedKeywords = useMemo(() => {
+    const result: string[] = [];
+    const seen = new Set<string>();
+    const pushKw = (raw?: string) => {
+      const clean = (raw || '').replace(/\s+/g, ' ').trim();
+      if (!clean || clean.length < 3) return;
+      const norm = normalizeViSearch(clean);
+      if (!norm || norm === 'phoi hop' || norm === 'dong tac' || seen.has(norm)) return;
+      seen.add(norm);
+      result.push(clean);
+    };
 
-      if (initialCategory && initialCategory !== 'all') {
-        setCategoryFilter(initialCategory);
-      } else if (targetInfo?.rowIndex !== undefined) {
-        if (targetInfo.rowIndex === 0) setCategoryFilter('tro_choi_kd');
-        else if (targetInfo.rowIndex === 1) setCategoryFilter('dong_tac');
-        else if (targetInfo.rowIndex >= 2 && targetInfo.rowIndex <= 4) setCategoryFilter('luyen_tap');
-        else setCategoryFilter('tro_choi_vd');
-      } else {
-        setCategoryFilter('all');
+    if (targetGameCanonical) pushKw(targetGameCanonical);
+    for (const kw of suggestedKeywords || []) pushKw(kw);
+    if (targetInfo?.lessonTitle) {
+      for (const kw of extractContextSearchKeywords(
+        targetInfo.lessonTitle,
+        targetInfo.lessonTopic || '',
+        targetInfo.rowName || ''
+      )) {
+        pushKw(kw);
       }
-      setSearchQuery('');
     }
-  }, [isOpen, initialGrade, initialCategory, targetInfo, onSelectImageForAllMatchingGrades]);
+    return result.slice(0, 6);
+  }, [suggestedKeywords, targetGameCanonical, targetInfo?.lessonTitle, targetInfo?.lessonTopic, targetInfo?.rowName]);
 
-  // Classify all images once
+  // Classify all images once in clean SGK order
   const classifiedImages = useMemo(() => {
-    return images.map((img) => ({
+    const ordered = sortLibraryImages(images, 'sgk');
+    return ordered.map((img) => ({
       ...img,
       meta: classifyImageItem(img),
       isSameGameName: Boolean(
@@ -270,6 +279,92 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
       )
     }));
   }, [images, targetGameCanonical]);
+
+  // Sync filters whenever target changes
+  useEffect(() => {
+    if (isOpen) {
+      const openingForGame =
+        initialCategory === 'tro_choi_kd' ||
+        initialCategory === 'tro_choi_vd' ||
+        Boolean(targetInfo?.gameName);
+      const openingForWarmup = initialCategory === 'khoi_dong';
+
+      let nextGrade: 'all' | '1' | '2' | '3' | '4' | '5' = 'all';
+      // For games AND general warm-up (khởi động chung), search across ALL 5 grades so shared photos appear immediately!
+      if (openingForGame || openingForWarmup) {
+        nextGrade = 'all';
+        if (openingForGame) {
+          setIncludeBothGameTypes(true);
+          setApplyToAllMatchingGrades(Boolean(onSelectImageForAllMatchingGrades));
+        }
+      } else if (initialGrade && initialGrade !== 'all') {
+        nextGrade = initialGrade;
+      } else if (targetInfo?.grade) {
+        nextGrade = String(targetInfo.grade) as '1' | '2' | '3' | '4' | '5';
+      }
+      setGradeFilter(nextGrade);
+
+      let nextCat: 'all' | ImageClassificationCategory = 'all';
+      if (initialCategory && initialCategory !== 'all') {
+        nextCat = initialCategory;
+      } else if (targetInfo?.rowIndex !== undefined) {
+        if (targetInfo.rowIndex === 0) nextCat = 'tro_choi_kd';
+        else if (targetInfo.rowIndex === 1) nextCat = 'dong_tac';
+        else if (targetInfo.rowIndex >= 2 && targetInfo.rowIndex <= 4) nextCat = 'luyen_tap';
+        else nextCat = 'tro_choi_vd';
+      }
+      setCategoryFilter(nextCat);
+
+      // Only pre-fill searchQuery if the initial keyword actually matches >= 1 photo in the current grade/category pool;
+      // otherwise show the full context-ranked pool with 1-click keyword chips so the modal never opens blank!
+      const candidateSeed = (initialSearchQuery || '').trim();
+      const genericSeedNorm = normalizeViSearch(candidateSeed);
+      const isGenericSeed =
+        !candidateSeed ||
+        genericSeedNorm === 'dong tac' ||
+        genericSeedNorm === 'luyen tap' ||
+        genericSeedNorm === 'van dung' ||
+        genericSeedNorm === 'khoi dong' ||
+        genericSeedNorm === 'tro choi' ||
+        genericSeedNorm === 'tro choi khoi dong' ||
+        genericSeedNorm === 'tro choi van dong' ||
+        genericSeedNorm === 'phoi hop';
+
+      if (!isGenericSeed) {
+        const hasMatchInPool = classifiedImages.some((img) => {
+          if (nextGrade !== 'all' && img.meta.grade !== nextGrade && img.meta.grade !== 'chung') return false;
+          if (nextCat !== 'all') {
+            const isGameCat = nextCat === 'tro_choi_kd' || nextCat === 'tro_choi_vd';
+            if (isGameCat) {
+              if (img.meta.category !== 'tro_choi_kd' && img.meta.category !== 'tro_choi_vd' && !img.isSameGameName) {
+                return false;
+              }
+            } else if (img.meta.category !== nextCat) {
+              return false;
+            }
+          }
+          return (
+            scoreImageByKeywordQuery(img, candidateSeed, expectedDomain) > 0 ||
+            doGameNamesMatch(img.title || '', candidateSeed)
+          );
+        });
+        setSearchQuery(hasMatchInPool ? candidateSeed : '');
+      } else {
+        setSearchQuery('');
+      }
+    }
+  }, [
+    isOpen,
+    initialGrade,
+    initialCategory,
+    initialSearchQuery,
+    targetInfo,
+    onSelectImageForAllMatchingGrades,
+    classifiedImages,
+    expectedDomain
+  ]);
+
+  // Category counts (classifiedImages already computed above in SGK order)
 
   // Category counts
   const counts = useMemo(() => {
@@ -302,13 +397,18 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
     [classifiedImages]
   );
 
-  // Filtered images list (sorted with same-name game matches floating to the top)
+  // Filtered images list (disambiguated compound-keyword search + contextual relevance ranking)
   const filteredImages = useMemo(() => {
-    const list = classifiedImages.filter((img) => {
+    const trimmedQuery = searchQuery.trim();
+    const softContextQuery = effectiveSuggestedKeywords[0] || targetInfo?.lessonTitle || '';
+
+    const scoredList: Array<(typeof classifiedImages)[number] & { keywordScore: number; contextScore: number }> = [];
+
+    for (const img of classifiedImages) {
       // 1. Grade Filter
       if (gradeFilter !== 'all') {
         if (img.meta.grade !== gradeFilter && img.meta.grade !== 'chung') {
-          return false;
+          continue;
         }
       }
 
@@ -321,50 +421,53 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
             img.meta.category !== 'tro_choi_vd' &&
             !img.isSameGameName
           ) {
-            return false;
+            continue;
           }
         } else if (img.meta.category !== categoryFilter) {
-          return false;
+          continue;
         }
       }
 
-      // 3. Search Query (supports both plain substring & canonical game name matching)
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const t = (img.title || '').toLowerCase();
-        const c = (img.caption || '').toLowerCase();
-        const l = (img.lessonTitle || '').toLowerCase();
-        return (
-          t.includes(q) ||
-          c.includes(q) ||
-          l.includes(q) ||
-          doGameNamesMatch(img.title || '', q)
-        );
+      // 3. Disambiguated Compound-Keyword Search Query
+      let keywordScore = 0;
+      if (trimmedQuery) {
+        const gameHit = doGameNamesMatch(img.title || '', trimmedQuery);
+        const kwScore = scoreImageByKeywordQuery(img, trimmedQuery, expectedDomain);
+        if (!gameHit && kwScore < 0) {
+          continue;
+        }
+        keywordScore = Math.max(kwScore, gameHit ? 280 : 0);
       }
 
-      return true;
-    });
+      // 4. Soft contextual relevance score (ranks most relevant images for this lesson to the top)
+      const contextScore =
+        softContextQuery && !isGameContext
+          ? Math.max(0, scoreImageByKeywordQuery(img, softContextQuery, expectedDomain))
+          : 0;
 
-    if (targetGameCanonical || isGameContext) {
-      return [...list].sort((a, b) => {
-        if (a.isSameGameName !== b.isSameGameName) return a.isSameGameName ? -1 : 1;
-        const aSameGrade = targetInfo?.grade && a.meta.grade === String(targetInfo.grade) ? 1 : 0;
-        const bSameGrade = targetInfo?.grade && b.meta.grade === String(targetInfo.grade) ? 1 : 0;
-        if (aSameGrade !== bSameGrade) return bSameGrade - aSameGrade;
-        return 0;
-      });
+      scoredList.push({ ...img, keywordScore, contextScore });
     }
 
-    return list;
+    return scoredList.sort((a, b) => {
+      if (a.isSameGameName !== b.isSameGameName) return a.isSameGameName ? -1 : 1;
+      if (trimmedQuery && a.keywordScore !== b.keywordScore) return b.keywordScore - a.keywordScore;
+      const aSameGrade = targetInfo?.grade && a.meta.grade === String(targetInfo.grade) ? 1 : 0;
+      const bSameGrade = targetInfo?.grade && b.meta.grade === String(targetInfo.grade) ? 1 : 0;
+      if (aSameGrade !== bSameGrade) return bSameGrade - aSameGrade;
+      if (!trimmedQuery && a.contextScore !== b.contextScore) return b.contextScore - a.contextScore;
+      return 0;
+    });
   }, [
     classifiedImages,
     gradeFilter,
     categoryFilter,
     includeBothGameTypes,
     searchQuery,
-    targetGameCanonical,
+    effectiveSuggestedKeywords,
+    expectedDomain,
     isGameContext,
-    targetInfo?.grade
+    targetInfo?.grade,
+    targetInfo?.lessonTitle
   ]);
 
   const matchingGradesSummary = useMemo(() => {
@@ -486,13 +589,13 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
             </div>
 
             {/* Search Input */}
-            <div className="relative min-w-[220px]">
+            <div className="relative min-w-[260px] flex-1 max-w-sm">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm tên động tác, trò chơi..."
+                placeholder="Tìm từ khóa (vd: phối hợp di chuyển, đầu cổ, động tác phối hợp...)"
                 className="w-full pl-8 pr-7 py-1 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"
               />
               {searchQuery && (
@@ -620,6 +723,42 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
               </span>
             </button>
           </div>
+
+          {/* Row 3: Contextual Compound-Keyword Quick Filter Bar (disambiguates overlapping terms like "phối hợp") */}
+          {effectiveSuggestedKeywords.length > 0 && !isGameContext && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-slate-200">
+              <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1 mr-0.5">
+                <Search className="w-3 h-3 text-blue-600" /> Từ khóa gợi ý theo bài:
+              </span>
+              {effectiveSuggestedKeywords.map((kw) => {
+                const isActive = normalizeViSearch(searchQuery) === normalizeViSearch(kw);
+                return (
+                  <button
+                    key={kw}
+                    type="button"
+                    onClick={() => setSearchQuery(isActive ? '' : kw)}
+                    className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition ${
+                      isActive
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-white text-blue-800 border-blue-200 hover:bg-blue-50'
+                    }`}
+                  >
+                    {kw}
+                  </button>
+                );
+              })}
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-2 py-0.5 rounded-md text-[11px] font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-200/70 transition"
+                >
+                  Hiện tất cả
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Cross-Grade Same-Name Game Search & Multi-Grade Auto-Insert Bar */}
           {isGameContext && (
             <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-purple-50/70 -mx-3 -mb-3 px-3 py-2.5 rounded-b-xl">
@@ -786,7 +925,7 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                         </span>
                       </div>
 
-                      {img.isSameGameName && (
+                      {img.isSameGameName ? (
                         <div className="mb-1.5 text-[10px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 rounded-md px-1.5 py-0.5 flex items-center gap-1 truncate">
                           <Sparkles className="w-3 h-3 text-emerald-600 shrink-0" />
                           <span className="truncate">
@@ -796,7 +935,14 @@ export const ClassifiedImagePickerModal: React.FC<ClassifiedImagePickerModalProp
                               : ''}
                           </span>
                         </div>
-                      )}
+                      ) : (img.keywordScore >= 180 || (!searchQuery.trim() && img.contextScore >= 180)) ? (
+                        <div className="mb-1.5 text-[10px] font-bold text-blue-800 bg-blue-50 border border-blue-200 rounded-md px-1.5 py-0.5 flex items-center gap-1 truncate">
+                          <Sparkles className="w-3 h-3 text-blue-600 shrink-0" />
+                          <span className="truncate">
+                            {searchQuery.trim() ? 'Khớp đúng từ khóa ngữ cảnh' : 'Gợi ý đúng bài học này'}
+                          </span>
+                        </div>
+                      ) : null}
 
                       {/* Image Thumbnail + Hover Provenance Tooltip */}
                       <div className="relative group/imgtip h-32 w-full bg-slate-50 rounded-lg p-1.5 flex items-center justify-center border border-slate-100 group-hover:border-blue-200 transition">
