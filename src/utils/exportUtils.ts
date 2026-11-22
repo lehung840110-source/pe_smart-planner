@@ -1,5 +1,5 @@
 import JSZip from 'jszip';
-import { SgkImageItem, WeeklyMasterScheduleRow, SchoolSettings } from '../types/gdtc';
+import { SgkImageItem, WeeklyMasterScheduleRow, SchoolSettings, CustomLayoutBlueprint } from '../types/gdtc';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { cleanTopicForDisplay, cleanLessonTitleForHeader } from './curriculumAuditSync';
 import { parseInlineTextSegments, extractAllInlineImages } from './inlineImageHelper';
@@ -14,6 +14,12 @@ import {
   getSavedWeeklyScheduleColWidths,
   normalizeColumnWidths
 } from './tableColumnWidths';
+import {
+  COLUMN_MODE_SPECS,
+  getActiveLayoutBlueprint,
+  normalizeBlueprintWidths,
+  projectRowForBlueprint
+} from './customLayoutBlueprint';
 
 export function downloadZipOfImages(images: SgkImageItem[], filename = 'Thu_Vien_Hinh_Anh_SGK_GDTC.zip') {
   const zip = new JSZip();
@@ -190,6 +196,8 @@ export interface ExportWordDataOptions {
   imageMaxHeightPt?: number;
   lessonPlanColWidths?: number[];
   scheduleColWidths?: number[];
+  /** Optional custom template blueprint. Leave undefined to auto-use active blueprint; pass null to force default 4-col layout. */
+  layoutBlueprint?: CustomLayoutBlueprint | null;
 }
 
 interface EmbeddedImageMime {
@@ -237,8 +245,12 @@ export async function buildWordExportPackage(
     dateRange: customDateRangeOption,
     imageMaxHeightPt = 105,
     lessonPlanColWidths,
-    scheduleColWidths
+    scheduleColWidths,
+    layoutBlueprint
   } = options;
+
+  const activeBlueprint: CustomLayoutBlueprint | null =
+    layoutBlueprint === undefined ? getActiveLayoutBlueprint() : layoutBlueprint;
 
   const resolvedLessonColWidths = lessonPlanColWidths
     ? normalizeColumnWidths(lessonPlanColWidths, 'lessonPlan')
@@ -247,23 +259,55 @@ export async function buildWordExportPackage(
     ? normalizeColumnWidths(scheduleColWidths, 'weeklySchedule')
     : getSavedWeeklyScheduleColWidths();
 
+  const bpSpec = activeBlueprint ? COLUMN_MODE_SPECS[activeBlueprint.columnMode] : null;
+  const bpWidths =
+    activeBlueprint && bpSpec
+      ? normalizeBlueprintWidths(activeBlueprint.columnWidths, bpSpec.colCount)
+      : null;
+  const bpHeaders =
+    activeBlueprint && bpSpec
+      ? bpSpec.defaultHeaders.map((def, idx) => activeBlueprint.columnHeaders[idx]?.trim() || def)
+      : null;
+
+  // Compute column percentage used by c1 / c3 / c4 depending on active blueprint
+  const c1Pct = activeBlueprint && bpWidths
+    ? activeBlueprint.columnMode === '5col_stt'
+      ? bpWidths[1]
+      : bpWidths[0]
+    : resolvedLessonColWidths[0];
+  const c3Pct = activeBlueprint && bpWidths
+    ? activeBlueprint.columnMode === '2col_gv_hs'
+      ? bpWidths[0]
+      : activeBlueprint.columnMode === '2col_nd_tc'
+      ? bpWidths[1]
+      : activeBlueprint.columnMode === '3col_nd_lvd_tc'
+      ? bpWidths[2]
+      : activeBlueprint.columnMode === '3col_nd_gv_hs'
+      ? bpWidths[1]
+      : activeBlueprint.columnMode === '5col_stt'
+      ? bpWidths[3]
+      : bpWidths[2]
+    : resolvedLessonColWidths[2];
+  const c4Pct = activeBlueprint && bpWidths
+    ? bpWidths[bpWidths.length - 1]
+    : resolvedLessonColWidths[3];
+
   // Calibrated A4 printable table width: 595.3pt - 62.4pt (left 2.2cm) - 28.3pt (right 1.0cm) = ~505pt
   const PRINTABLE_TABLE_WIDTH_PT = 505;
   const effectiveBaseHeightPt = Math.max(82, Math.min(130, imageMaxHeightPt));
 
-  // Compute column-aware target image bounds (matching teacher's calibrated Word/PDF layout:
-  // Col 1 ~154pt wide x up to 128pt tall for portrait/square; Col 4 ~134pt wide x up to 104pt tall)
-  const col1InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[0]) / 100) - 12);
-  const col1ImgMaxW = Math.min(168, Math.max(100, Math.round(col1InnerPt * 0.96)));
-  const col1ImgMaxH = Math.min(132, Math.max(92, Math.round(effectiveBaseHeightPt * 1.22)));
+  // Compute column-aware target image bounds
+  const col1InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * c1Pct) / 100) - 12);
+  const col1ImgMaxW = Math.min(200, Math.max(100, Math.round(col1InnerPt * 0.94)));
+  const col1ImgMaxH = Math.min(136, Math.max(92, Math.round(effectiveBaseHeightPt * 1.22)));
 
-  const col3InnerPt = Math.max(96, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[2]) / 100) - 12);
-  const col3ImgMaxW = Math.min(148, Math.max(96, Math.round(col3InnerPt * 0.95)));
-  const col3ImgMaxH = Math.min(110, Math.max(82, Math.round(effectiveBaseHeightPt)));
+  const col3InnerPt = Math.max(96, Math.round((PRINTABLE_TABLE_WIDTH_PT * c3Pct) / 100) - 12);
+  const col3ImgMaxW = Math.min(185, Math.max(96, Math.round(col3InnerPt * 0.92)));
+  const col3ImgMaxH = Math.min(114, Math.max(82, Math.round(effectiveBaseHeightPt)));
 
-  const col4InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[3]) / 100) - 12);
-  const col4DiagMaxW = Math.min(156, Math.max(100, Math.round(col4InnerPt * 0.96)));
-  const col4DiagMaxH = Math.min(108, Math.max(82, Math.round(effectiveBaseHeightPt)));
+  const col4InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * c4Pct) / 100) - 12);
+  const col4DiagMaxW = Math.min(190, Math.max(100, Math.round(col4InnerPt * 0.92)));
+  const col4DiagMaxH = Math.min(114, Math.max(82, Math.round(effectiveBaseHeightPt)));
 
   const isDocx = format === 'docx' || filename.toLowerCase().endsWith('.docx');
 
@@ -451,11 +495,57 @@ export async function buildWordExportPackage(
 
   // Next: Each Grade's Lesson Plan
   processedPlans.forEach((plan, planIdx) => {
+    const bpSec1 = activeBlueprint?.sectionHeadings?.sec1 || 'I. YÊU CẦU CẦN ĐẠT';
+    const bpSec2 = activeBlueprint?.sectionHeadings?.sec2 || 'II. ĐỊA ĐIỂM – PHƯƠNG TIỆN';
+    const bpSec3 = activeBlueprint?.sectionHeadings?.sec3 || 'III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU';
+    const bpSec4 = activeBlueprint?.sectionHeadings?.sec4 || 'IV. ĐIỀU CHỈNH SAU BÀI DẠY';
+    const showSec4 = activeBlueprint ? activeBlueprint.sectionHeadings.showSec4 !== false : true;
+    const docTitlePrefix = activeBlueprint?.headerBlock?.documentTitlePrefix?.trim() || 'KẾ HOẠCH BÀI DẠY';
+
+    const topAdminHeaderHtml =
+      activeBlueprint && (activeBlueprint.headerBlock.showNationalMotto || activeBlueprint.headerBlock.showSchoolHeader)
+        ? `
+      <table border="0" cellspacing="0" cellpadding="2" style="width: 100%; border: none; margin-bottom: 10pt;">
+        <tr>
+          <td style="width: ${activeBlueprint.headerBlock.showNationalMotto ? '46%' : '100%'}; border: none; text-align: ${activeBlueprint.headerBlock.showNationalMotto ? 'center' : 'left'}; vertical-align: top; font-size: 10.5pt;">
+            ${
+              activeBlueprint.headerBlock.showSchoolHeader
+                ? `<p style="margin: 0; font-weight: bold; text-transform: uppercase;">${escapeHtml(
+                    activeBlueprint.headerBlock.topLeftLine1 || settings.schoolName || 'TRƯỜNG TIỂU HỌC'
+                  )}</p>
+                   <p style="margin: 2pt 0 0 0; font-weight: bold; text-transform: uppercase;">${escapeHtml(
+                     activeBlueprint.headerBlock.topLeftLine2 || settings.departmentName || 'TỔ CHUYÊN MÔN'
+                   )}</p>`
+                : ''
+            }
+          </td>
+          ${
+            activeBlueprint.headerBlock.showNationalMotto
+              ? `<td style="width: 54%; border: none; text-align: center; vertical-align: top; font-size: 10.5pt;">
+                  <p style="margin: 0; font-weight: bold; text-transform: uppercase;">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</p>
+                  <p style="margin: 2pt 0 0 0; font-weight: bold; text-decoration: underline;">Độc lập – Tự do – Hạnh phúc</p>
+                </td>`
+              : ''
+          }
+        </tr>
+      </table>
+      `
+        : '';
+
+    const teacherMetaHtml = activeBlueprint?.headerBlock?.showTeacherMetaLine
+      ? `<p style="margin: 4pt 0 0 0; font-size: 11pt;">
+          <b>Môn học:</b> Giáo dục thể chất &nbsp;|&nbsp; <b>Lớp:</b> Khối ${plan.grade} &nbsp;|&nbsp; <b>Giáo viên:</b> ${escapeHtml(
+          settings.teacherName || activeBlueprint.detectedTeacherName || ''
+        )}
+        </p>`
+      : '';
+
     bodyContent += `
       <!-- KẾ HOẠCH BÀI DẠY KHỐI ${plan.grade} -->
+      ${topAdminHeaderHtml}
       <div style="text-align: center; margin: 10pt 0 14pt 0;">
         <h2 style="margin: 0; font-size: 13.5pt; font-weight: bold; text-transform: uppercase;">
-          KẾ HOẠCH BÀI DẠY TUẦN ${plan.week} – KHỐI ${plan.grade}
+          ${escapeHtml(docTitlePrefix)} TUẦN ${plan.week} – KHỐI ${plan.grade}
         </h2>
         <p style="margin: 2pt 0 6pt 0; font-size: 11pt; font-style: italic;">
           (${escapeHtml(plan.dateRange)})
@@ -466,12 +556,13 @@ export async function buildWordExportPackage(
         <p style="margin: 4pt 0 0 0; font-size: 13pt; font-weight: bold;">
           ${escapeHtml(cleanLessonTitleForHeader(plan.title))}
         </p>
+        ${teacherMetaHtml}
       </div>
 
       <!-- I. YÊU CẦU CẦN ĐẠT -->
       <div style="margin-bottom: 12pt;">
         <p style="font-size: 12.5pt; font-weight: bold; margin: 6pt 0 4pt 0; text-transform: uppercase;">
-          I. YÊU CẦU CẦN ĐẠT
+          ${escapeHtml(bpSec1)}
         </p>
 
         <p style="font-size: 11.5pt; font-weight: bold; margin: 4pt 0 2pt 0;">1. Năng lực đặc thù</p>
@@ -574,7 +665,7 @@ export async function buildWordExportPackage(
       <!-- II. ĐỊA ĐIỂM – PHƯƠNG TIỆN -->
       <div style="margin-bottom: 12pt;">
         <p style="font-size: 12.5pt; font-weight: bold; margin: 6pt 0 4pt 0; text-transform: uppercase;">
-          II. ĐỊA ĐIỂM – PHƯƠNG TIỆN
+          ${escapeHtml(bpSec2)}
         </p>
         <p style="font-size: 11.5pt; margin: 2pt 0 2pt 15pt;">
           <b>1. Địa điểm:</b> ${escapeHtml(plan.locationEquipment?.location || 'Sân trường bằng phẳng, sạch sẽ, an toàn.')}
@@ -590,26 +681,40 @@ export async function buildWordExportPackage(
         </p>
       </div>
 
-      <!-- III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU (BẢNG 4 CỘT) -->
+      <!-- III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU -->
       <div style="margin-bottom: 12pt;">
         <p style="font-size: 12.5pt; font-weight: bold; margin: 6pt 0 4pt 0; text-transform: uppercase;">
-          III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU
+          ${escapeHtml(bpSec3)}
         </p>
 
+        ${(() => {
+          const tableWidths = activeBlueprint && bpWidths ? bpWidths : resolvedLessonColWidths;
+          const tableHeaders =
+            activeBlueprint && bpHeaders
+              ? bpHeaders
+              : [
+                  'Nội Dung / Kỹ Thuật Động Tác',
+                  'LVĐ',
+                  'Hoạt Động Của Giáo Viên',
+                  'Hoạt Động Của Học Sinh / Sơ Đồ'
+                ];
+          return `
         <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; table-layout: fixed; mso-table-layout-alt: fixed; width: 100%; border: 1pt solid #000;">
           <colgroup>
-            ${resolvedLessonColWidths.map((w) => `<col style="width: ${w}%;" />`).join('')}
+            ${tableWidths.map((w) => `<col style="width: ${w}%;" />`).join('')}
           </colgroup>
           <thead>
             <tr style="background-color: #f2f2f2; font-weight: bold; text-align: center; font-size: 11pt;">
-              <th width="${resolvedLessonColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[0]}%;">Nội Dung / Kỹ Thuật Động Tác</th>
-              <th width="${resolvedLessonColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedLessonColWidths[1]}%;">LVĐ</th>
-              <th width="${resolvedLessonColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[2]}%;">Hoạt Động Của Giáo Viên</th>
-              <th width="${resolvedLessonColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[3]}%;">Hoạt Động Của Học Sinh / Sơ Đồ</th>
+              ${tableHeaders
+                .map(
+                  (hdr, idx) =>
+                    `<th width="${tableWidths[idx]}%" style="border: 1pt solid #000; padding: ${tableWidths[idx] <= 10 ? '5pt 3pt' : '5pt'}; width: ${tableWidths[idx]}%;">${escapeHtml(hdr)}</th>`
+                )
+                .join('')}
             </tr>
           </thead>
           <tbody>
-            ${plan.processedRows.map((row: any) => {
+            ${plan.processedRows.map((row: any, rowIdx: number) => {
               const diagramsWithSrc = (row.diagrams || []).map((d: any) => ({
                 title: d.title,
                 src: registerImage(d.pngBase64),
@@ -701,26 +806,57 @@ export async function buildWordExportPackage(
                 </div>
               ` : '';
 
+              if (activeBlueprint && activeBlueprint.columnMode !== '4col_standard' && bpWidths) {
+                const projectedCells = projectRowForBlueprint(row, rowIdx, activeBlueprint.columnMode);
+                const blockHtmlBySource = (sourceCol: 'stt' | 'c1' | 'lvd' | 'c3' | 'c4', textVal?: string) => {
+                  if (sourceCol === 'stt') return `<b>${escapeHtml(textVal || String(rowIdx + 1))}</b>`;
+                  if (sourceCol === 'c1') return col1FlowHtml;
+                  if (sourceCol === 'lvd') return `<b>${escapeHtml((row.lvd || '').trim()).replace(/\n/g, '<br/>')}</b>`;
+                  if (sourceCol === 'c3') return `<div>${col3TextHtml}</div>${col3AttachedHtml}`;
+                  return `<div>${col4TextHtml}</div>${col4DiagramsHtml}`;
+                };
+
+                return `
+                  <tr style="font-size: 11pt; vertical-align: top;">
+                    ${projectedCells
+                      .map((cell, cIdx) => {
+                        const w = bpWidths[cIdx] ?? 25;
+                        const inner = cell.blocks
+                          .map((blk, bIdx) => {
+                            const content = blockHtmlBySource(blk.sourceCol, blk.text);
+                            const badgeHtml = blk.badge
+                              ? `<p style="font-size: 10.5pt; font-weight: bold; margin: ${bIdx === 0 ? '0' : '6pt'} 0 2pt 0; color: #1e3a8a;">• ${escapeHtml(blk.badge)}:</p>`
+                              : '';
+                            return `${badgeHtml}${content}`;
+                          })
+                          .join('');
+                        return `<td width="${w}%" style="border: 1pt solid #000; padding: ${w <= 10 ? '5pt 3pt' : '5pt'}; width: ${w}%; vertical-align: top; text-align: ${cell.align}; ${cell.bold ? 'font-weight: bold;' : ''}">${inner}</td>`;
+                      })
+                      .join('')}
+                  </tr>
+                `;
+              }
+
               return `
                 <tr style="font-size: 11pt; vertical-align: top;">
                   <!-- Cột 1: Nội dung & Ảnh kỹ thuật chèn ngay sau tiêu đề động tác / trò chơi / luyện tập / vận dụng -->
-                  <td width="${resolvedLessonColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[0]}%; vertical-align: top; text-align: left;">
+                  <td width="${tableWidths[0]}%" style="border: 1pt solid #000; padding: 5pt; width: ${tableWidths[0]}%; vertical-align: top; text-align: left;">
                     ${col1FlowHtml}
                   </td>
 
                   <!-- Cột 2: LVĐ -->
-                  <td width="${resolvedLessonColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedLessonColWidths[1]}%; vertical-align: top; text-align: center; font-weight: bold;">
+                  <td width="${tableWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${tableWidths[1]}%; vertical-align: top; text-align: center; font-weight: bold;">
                     ${escapeHtml((row.lvd || '').trim()).replace(/\n/g, '<br/>')}
                   </td>
 
                   <!-- Cột 3: HĐ của GV -->
-                  <td width="${resolvedLessonColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[2]}%; vertical-align: top; text-align: left;">
+                  <td width="${tableWidths[2]}%" style="border: 1pt solid #000; padding: 5pt; width: ${tableWidths[2]}%; vertical-align: top; text-align: left;">
                     <div>${col3TextHtml}</div>
                     ${col3AttachedHtml}
                   </td>
 
                   <!-- Cột 4: HĐ của HS & SƠ ĐỒ ĐỘI HÌNH ĐÃ CHUẨN KÍCH THƯỚC -->
-                  <td width="${resolvedLessonColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[3]}%; vertical-align: top; text-align: left;">
+                  <td width="${tableWidths[3]}%" style="border: 1pt solid #000; padding: 5pt; width: ${tableWidths[3]}%; vertical-align: top; text-align: left;">
                     <div>${col4TextHtml}</div>
                     ${col4DiagramsHtml}
                   </td>
@@ -729,17 +865,23 @@ export async function buildWordExportPackage(
             }).join('')}
           </tbody>
         </table>
+          `;
+        })()}
       </div>
 
-      <!-- IV. ĐIỀU CHỈNH SAU BÀI DẠY -->
+      ${
+        showSec4
+          ? `<!-- IV. ĐIỀU CHỈNH SAU BÀI DẠY -->
       <div style="margin-bottom: 14pt;">
         <p style="font-size: 12.5pt; font-weight: bold; margin: 6pt 0 3pt 0; text-transform: uppercase;">
-          IV. ĐIỀU CHỈNH SAU BÀI DẠY
+          ${escapeHtml(bpSec4)}
         </p>
         <p style="font-size: 11pt; font-style: italic; margin: 2pt 0 8pt 15pt; color: #444;">
           ${escapeHtml(plan.postLessonAdjustment || '…………………………………………………………………………………………………………………………………………………………………………………………')}
         </p>
-      </div>
+      </div>`
+          : ''
+      }
 
       ${planIdx < processedPlans.length - 1 ? `
         <!-- Ngắt trang sang khối tiếp theo -->
@@ -748,36 +890,51 @@ export async function buildWordExportPackage(
     `;
   });
 
-  // KHỐI KÝ DUYỆT DUY NHẤT Ở TRANG CUỐI CÙNG CỦA TOÀN BỘ BỘ GIÁO ÁN (BGH DUYỆT)
-  if (processedPlans.length > 0) {
+  // KHỐI KÝ DUYỆT DUY NHẤT Ở TRANG CUỐI CÙNG CỦA TOÀN BỘ BỘ GIÁO ÁN
+  const sigConfig = activeBlueprint?.signatureBlock;
+  if (processedPlans.length > 0 && (!sigConfig || sigConfig.enabled !== false)) {
     const firstPlan = processedPlans[0];
+    const sigCount = sigConfig?.count ?? 3;
+    const leftTitle = sigConfig?.leftTitle || 'BGH DUYỆT';
+    const middleTitle = sigConfig?.middleTitle || 'TỔ TRƯỞNG CHUYÊN MÔN';
+    const rightTitle = sigConfig?.rightTitle || 'GIÁO VIÊN SOẠN';
+
+    const sigColumns: Array<{ title: string; name: string; width: string }> =
+      sigCount === 1
+        ? [
+            { title: '', name: '', width: '55%' },
+            { title: rightTitle, name: settings.teacherName || 'Lê Quốc Hưng', width: '45%' }
+          ]
+        : sigCount === 2
+        ? [
+            { title: leftTitle, name: settings.approverPrincipal || settings.approverHead || 'Võ Thị Thuận', width: '50%' },
+            { title: rightTitle, name: settings.teacherName || 'Lê Quốc Hưng', width: '50%' }
+          ]
+        : [
+            { title: leftTitle, name: settings.approverPrincipal || 'Võ Thị Thuận', width: '33%' },
+            { title: middleTitle, name: settings.approverHead || 'Bùi Ngọc Lâm', width: '33%' },
+            { title: rightTitle, name: settings.teacherName || 'Lê Quốc Hưng', width: '34%' }
+          ];
+
     bodyContent += `
-      <!-- KHỐI KÝ DUYỆT BGH Ở TRANG CUỐI CÙNG -->
+      <!-- KHỐI KÝ DUYỆT Ở TRANG CUỐI CÙNG -->
       <table border="0" cellspacing="0" cellpadding="3" style="width: 100%; border: none; margin-top: 24pt; page-break-inside: avoid;">
         <tr>
-          <td colspan="3" style="border: none; text-align: right; font-style: italic; font-size: 11pt; padding-bottom: 6pt;">
+          <td colspan="${sigColumns.length}" style="border: none; text-align: right; font-style: italic; font-size: 11pt; padding-bottom: 6pt;">
             ${escapeHtml(approvalDate || firstPlan?.signatures?.locationDate || 'Vệ Giang, ngày 13 tháng 11 năm 2026')}
           </td>
         </tr>
         <tr style="font-weight: bold; text-align: center; font-size: 11.5pt;">
-          <td style="width: 33%; border: none;">BGH DUYỆT</td>
-          <td style="width: 33%; border: none;">TỔ TRƯỞNG CHUYÊN MÔN</td>
-          <td style="width: 33%; border: none;">GIÁO VIÊN SOẠN</td>
+          ${sigColumns.map((c) => `<td style="width: ${c.width}; border: none;">${escapeHtml(c.title)}</td>`).join('')}
         </tr>
         <tr style="font-style: italic; font-size: 10pt; text-align: center; color: #555;">
-          <td style="border: none;">(Ký, ghi rõ họ tên)</td>
-          <td style="border: none;">(Ký, ghi rõ họ tên)</td>
-          <td style="border: none;">(Ký, ghi rõ họ tên)</td>
+          ${sigColumns.map((c) => `<td style="border: none;">${c.title ? '(Ký, ghi rõ họ tên)' : ''}</td>`).join('')}
         </tr>
         <tr>
-          <td style="border: none; height: 50pt;"></td>
-          <td style="border: none; height: 50pt;"></td>
-          <td style="border: none; height: 50pt;"></td>
+          ${sigColumns.map(() => `<td style="border: none; height: 50pt;"></td>`).join('')}
         </tr>
         <tr style="font-weight: bold; text-align: center; font-size: 11.5pt;">
-          <td style="border: none;">${escapeHtml(settings.approverPrincipal || 'Võ Thị Thuận')}</td>
-          <td style="border: none;">${escapeHtml(settings.approverHead || 'Bùi Ngọc Lâm')}</td>
-          <td style="border: none;">${escapeHtml(settings.teacherName || 'Lê Quốc Hưng')}</td>
+          ${sigColumns.map((c) => `<td style="border: none;">${escapeHtml(c.name)}</td>`).join('')}
         </tr>
       </table>
     `;

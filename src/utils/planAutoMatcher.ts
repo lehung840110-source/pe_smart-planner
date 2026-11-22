@@ -365,9 +365,10 @@ export function isInvalidColumn1AttachmentForRow(
   imgUrl: string | undefined,
   imgTitle: string | undefined,
   grade: number,
-  lessonTitle: string = ''
+  lessonTitle: string = '',
+  userPinned: boolean = false
 ): boolean {
-  if (!imgUrl) return false;
+  if (!imgUrl || userPinned) return false;
   const uLower = imgUrl.toLowerCase();
   const cLower = (rowContent || '').toLowerCase();
   const tNorm = (imgTitle || '').toLowerCase().replace(/["'“”‘’]/g, '');
@@ -492,6 +493,11 @@ export function sanitizeRowColumn1Media(
   grade: number,
   lessonTitle: string = ''
 ): LessonRow {
+  // Never strip media from rows the teacher has manually edited
+  if (row.userEditedMedia) {
+    return row;
+  }
+
   const existingList: DiagramAttachment[] =
     row.contentImages && row.contentImages.length > 0
       ? row.contentImages
@@ -504,7 +510,17 @@ export function sanitizeRowColumn1Media(
   }
 
   const validList = existingList.filter(
-    (item) => item.url && !isInvalidColumn1AttachmentForRow(row.content, item.url, item.title || row.contentImgTitle, grade, lessonTitle)
+    (item) =>
+      item.url &&
+      (item.userPinned ||
+        !isInvalidColumn1AttachmentForRow(
+          row.content,
+          item.url,
+          item.title || row.contentImgTitle,
+          grade,
+          lessonTitle,
+          Boolean(item.userPinned)
+        ))
   );
 
   if (validList.length === existingList.length && existingList.length > 0) {
@@ -2718,11 +2734,9 @@ export function createBalanced7LessonRows(
       lvd: `3 - 4 phút\n1 lượt / tổ`,
       gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.`,
       hs: `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
-      contentImgUrl: resolved.luyenTapBySlot.caNhan?.url,
-      contentImgTitle: resolved.luyenTapBySlot.caNhan?.title,
-      contentImages: resolved.luyenTapBySlot.caNhan?.url
-        ? [{ id: 'img_lt_cn_7r_1', url: resolved.luyenTapBySlot.caNhan.url, title: resolved.luyenTapBySlot.caNhan.title }]
-        : [],
+      contentImgUrl: undefined,
+      contentImgTitle: undefined,
+      contentImages: [],
       hsImgUrl: diagThiDua.svgDataUrl,
       hsImgTitle: diagThiDua.name,
       hsImages: [
@@ -3274,11 +3288,9 @@ export function createBalancedGranularLessonRows(
       lvd: `3 - 4 phút\n1 lượt / tổ`,
       gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng nhịp.`,
       hs: `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
-      contentImgUrl: resolved.luyenTapBySlot.caNhan?.url,
-      contentImgTitle: resolved.luyenTapBySlot.caNhan?.title,
-      contentImages: resolved.luyenTapBySlot.caNhan?.url
-        ? [{ id: 'img_lt_cn_1', url: resolved.luyenTapBySlot.caNhan.url, title: resolved.luyenTapBySlot.caNhan.title }]
-        : [],
+      contentImgUrl: undefined,
+      contentImgTitle: undefined,
+      contentImages: [],
       hsImgUrl: diagThiDua.svgDataUrl,
       hsImgTitle: diagThiDua.name,
       hsImages: [
@@ -3567,6 +3579,11 @@ export function autoScanLibraryAndAttachToRows(
   const updatedRows = stripFabricatedGameRows(rows).map((r) => ({ ...r }));
 
   updatedRows.forEach((row, idx) => {
+    // Strictly preserve any row whose media was manually edited/pinned/cleared by the teacher
+    if (row.userEditedMedia) {
+      return;
+    }
+
     const c = (row.content || '').toLowerCase();
     const isNhanLopRow = c.includes('1.1.') && !c.includes('1.2.') && !c.includes('1.3.');
     const isWarmupGame =
@@ -3691,30 +3708,32 @@ export function autoScanLibraryAndAttachToRows(
     }
 
     if (isPracticeTextRow) {
-      // Attach classified exact-lesson Luyện tập image matching each sub-slot (3.1 đồng loạt, 3.2 tổ nhóm, 3.3 cặp đôi, 3.4 cá nhân)
+      // Attach classified exact-lesson Luyện tập image matching each sub-slot (3.1 đồng loạt, 3.2 tổ nhóm, 3.3 cặp đôi)
+      // Do NOT auto-inject caNhan practice photo into 3.4. Thi đua trình diễn
       const sanitizedLt = sanitizeRowColumn1Media(row, grade, lessonTitle);
       row.contentImgUrl = sanitizedLt.contentImgUrl;
       row.contentImgTitle = sanitizedLt.contentImgTitle;
       row.contentImages = sanitizedLt.contentImages;
 
+      const isThiDuaRow = c.includes('thi đua') || c.includes('trình diễn');
       const matchedPracticeSubImg = c.includes('3.1.')
         ? resolved.luyenTapBySlot.dongLoat
         : c.includes('3.2.')
         ? resolved.luyenTapBySlot.toNhom || resolved.luyenTapImg
         : c.includes('3.3.')
         ? resolved.luyenTapBySlot.capDoi
-        : c.includes('3.4.')
+        : c.includes('3.4.') && !isThiDuaRow
         ? resolved.luyenTapBySlot.caNhan
         : null;
 
-      if (matchedPracticeSubImg?.url && !row.contentImgUrl) {
+      if (matchedPracticeSubImg?.url && !row.contentImgUrl && !row.userClearedContentImages) {
         row.contentImgUrl = matchedPracticeSubImg.url;
         row.contentImgTitle = matchedPracticeSubImg.title;
         row.contentImages = [{ id: `img_lt_${idx}`, url: matchedPracticeSubImg.url, title: matchedPracticeSubImg.title }];
         attachedCount++;
         messages.push(`Dòng ${idx + 1} (Luyện tập): Gắn "${matchedPracticeSubImg.title}"`);
       }
-      if (!row.hsImgUrl || isLegacySharedStandardFormationUrl(row.hsImgUrl)) {
+      if (!row.userClearedHsImages && (!row.hsImgUrl || isLegacySharedStandardFormationUrl(row.hsImgUrl))) {
         const ltPhase = c.includes('3.1.')
           ? 'dong_loat'
           : c.includes('3.2.')
@@ -3846,6 +3865,16 @@ export function applyGradeDistinctFormationsToRows(
   forceUpgrade: boolean = false
 ): LessonRow[] {
   return rows.map((row) => {
+    // Strictly preserve any row whose media was manually edited, cleared, or pinned by the teacher
+    if (
+      !forceUpgrade &&
+      (row.userEditedMedia ||
+        row.userClearedHsImages ||
+        (row.hsImages || []).some((img) => Boolean(img.userPinned)))
+    ) {
+      return row;
+    }
+
     const phase = detectFormationPhaseFromRowContent(row.content);
     const shouldUpgrade =
       !row.hsImgUrl ||

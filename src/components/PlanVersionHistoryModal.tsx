@@ -19,12 +19,14 @@ import {
   LessonPlanVersion,
   PlanVersionStore,
   computePlanDiff,
+  formatBytesApproxVi,
   formatDateTimeVi,
   formatRelativeTimeVi,
   getBestVersionForPlan,
   getPlanVersionKey,
   getPreferredVersionForPlan,
-  getVersionsForPlan
+  getVersionsForPlan,
+  getVersionStoreStats
 } from '../utils/planVersionHistory';
 
 interface PlanVersionTargetOption {
@@ -52,6 +54,7 @@ interface PlanVersionHistoryModalProps {
   onLoadVersion: (planKey: string, versionId: string) => void;
   onToggleBest: (planKey: string, versionId: string) => void;
   onDeleteVersion: (planKey: string, versionId: string) => void;
+  onPruneOldVersions?: (targetPlanKey?: string, keepCount?: number) => void;
   onResetToDefaultBaseline?: (target: PlanVersionTargetOption) => void;
 }
 
@@ -65,6 +68,7 @@ export const PlanVersionHistoryModal: React.FC<PlanVersionHistoryModalProps> = (
   onLoadVersion,
   onToggleBest,
   onDeleteVersion,
+  onPruneOldVersions,
   onResetToDefaultBaseline
 }) => {
   const [selectedKey, setSelectedKey] = useState<string>(() => {
@@ -116,6 +120,8 @@ export const PlanVersionHistoryModal: React.FC<PlanVersionHistoryModalProps> = (
     if (!activeTarget?.defaultBaselinePlan || !activeTarget.currentPlan) return null;
     return computePlanDiff(activeTarget.defaultBaselinePlan, activeTarget.currentPlan);
   }, [activeTarget]);
+
+  const storeStats = useMemo(() => getVersionStoreStats(store, 3), [store]);
 
   if (!isOpen || !activeTarget) return null;
 
@@ -261,6 +267,47 @@ export const PlanVersionHistoryModal: React.FC<PlanVersionHistoryModalProps> = (
               </button>
             </div>
           </div>
+
+          {/* Storage optimization bar: Keep only 3 most recent versions */}
+          {onPruneOldVersions && (
+            <div className="bg-white border border-slate-200 rounded-lg px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] text-slate-600 tabular-nums">
+                <span className="font-bold text-slate-800">Tối ưu dung lượng lịch sử:</span>{' '}
+                Tổng toàn hệ thống đang lưu <strong>{storeStats.totalVersions} phiên bản</strong> ({storeStats.totalPlans} tiết · ~{formatBytesApproxVi(storeStats.estimatedTotalBytes)}).
+                {storeStats.excessVersionsAboveKeep > 0 ? (
+                  <span className="text-amber-700 font-semibold">
+                    {' '}Có {storeStats.excessVersionsAboveKeep} bản cũ vượt mức 3 bản/tiết (~{formatBytesApproxVi(storeStats.estimatedFreedBytes)}).
+                  </span>
+                ) : (
+                  <span className="text-emerald-700 font-semibold"> Đã gọn nhẹ (≤ 3 bản/tiết).</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {versions.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => onPruneOldVersions(activePlanKey, 3)}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 whitespace-nowrap transition"
+                    title="Xóa các phiên bản cũ của tiết này, chỉ giữ lại 3 phiên bản gần nhất"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+                    <span>Tiết này: Chỉ giữ 3 bản gần nhất (Xóa {versions.length - 3})</span>
+                  </button>
+                )}
+                {storeStats.excessVersionsAboveKeep > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onPruneOldVersions(undefined, 3)}
+                    className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-red-600 hover:bg-red-700 text-white flex items-center gap-1 whitespace-nowrap shadow-2xs transition"
+                    title="Dọn toàn bộ lịch sử tất cả các tuần/khối, mỗi tiết chỉ giữ lại 3 phiên bản gần nhất để tiết kiệm dung lượng"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Dọn toàn hệ thống (Giữ 3 bản/tiết · Xóa {storeStats.excessVersionsAboveKeep})</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Optional diff against factory baseline */}
           {compareBaselineId === activePlanKey && liveDiffVsDefault && (

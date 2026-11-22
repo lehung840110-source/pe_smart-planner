@@ -24,7 +24,8 @@ import {
   X,
   LayoutGrid,
   ChevronRight,
-  MessageSquareHeart
+  MessageSquareHeart,
+  FlaskConical
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 import type { AuthUser } from '../contexts/AuthContext';
@@ -47,6 +48,7 @@ interface HeaderProps {
   authUser?: AuthUser | null;
   isGuest?: boolean;
   onOpenAuth?: () => void;
+  activeLayoutBlueprintName?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -67,6 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
   authUser,
   isGuest = false,
   onOpenAuth,
+  activeLayoutBlueprintName = null,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -77,15 +80,16 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'tab-library', label: '4. Thư Viện Kịch Bản', shortLabel: 'Kịch bản', icon: BookOpen, memberOnly: false },
     { id: 'tab-generator', label: '5. Sinh Giáo Án Tuần Mới', shortLabel: 'Sinh GA', icon: Wand2, memberOnly: false },
     { id: 'tab-export', label: '6. Xem Trước & In', shortLabel: 'Xem & In', icon: Printer, memberOnly: false },
-    { id: 'tab-intro', label: '7. Giới Thiệu & Hướng Dẫn', shortLabel: 'Hướng dẫn', icon: Info, memberOnly: false },
-    { id: 'tab-feedback', label: '8. Đánh Giá & Góp Ý', shortLabel: 'Đánh giá', icon: MessageSquareHeart, memberOnly: false },
+    { id: 'tab-template-lab', label: '7. Thử Mẫu Giáo Án', shortLabel: 'Thử mẫu', icon: FlaskConical, memberOnly: false },
+    { id: 'tab-intro', label: '8. Giới Thiệu & Hướng Dẫn', shortLabel: 'Hướng dẫn', icon: Info, memberOnly: false },
+    { id: 'tab-feedback', label: '9. Đánh Giá & Góp Ý', shortLabel: 'Đánh giá', icon: MessageSquareHeart, memberOnly: false },
   ];
 
   const mobileBottomTabs = [
     { id: 'tab-generator', label: 'Sinh GA', icon: Wand2 },
     { id: 'tab-export', label: 'Xem & In', icon: Printer },
+    { id: 'tab-template-lab', label: 'Thử mẫu', icon: FlaskConical },
     { id: 'tab-img-library', label: 'Ảnh SGK', icon: Images },
-    { id: 'tab-library', label: 'Kịch bản', icon: BookOpen },
   ];
 
   const handleMobileSelectTab = (tabId: string) => {
@@ -101,6 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
   const isDrawerTabActive =
     activeTab === 'tab-scan' ||
     activeTab === 'tab-extract' ||
+    activeTab === 'tab-library' ||
     activeTab === 'tab-intro' ||
     activeTab === 'tab-feedback';
 
@@ -402,6 +407,12 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-400'}`} />
                   <span>{tab.label}</span>
+                  {tab.id === 'tab-template-lab' && activeLayoutBlueprintName && (
+                    <span
+                      className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"
+                      title={`Đang áp dụng mẫu riêng: ${activeLayoutBlueprintName}`}
+                    />
+                  )}
                   {showLock && (
                     <Lock className="w-3 h-3 text-amber-500 shrink-0" />
                   )}
@@ -485,9 +496,9 @@ export const Header: React.FC<HeaderProps> = ({
 
             {/* Scrollable Body */}
             <div className="overflow-y-auto px-4 py-3 space-y-5">
-              {/* All 7 Tabs */}
+              {/* All Tabs */}
               <div>
-                <p className="text-[11px] font-bold text-slate-500 mb-2">Các màn hình chính (7 tab)</p>
+                <p className="text-[11px] font-bold text-slate-500 mb-2">Các màn hình chính ({navTabs.length} tab)</p>
                 <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-white">
                   {navTabs.map((tab) => {
                     const Icon = tab.icon;

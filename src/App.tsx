@@ -6,6 +6,7 @@ import { TabExtractSample } from './components/TabExtractSample';
 import { TabScenarioLibrary } from './components/TabScenarioLibrary';
 import { TabGenerator } from './components/TabGenerator';
 import { TabExportPrint } from './components/TabExportPrint';
+import { TabTemplateLab } from './components/TabTemplateLab';
 import { TabIntro } from './components/TabIntro';
 import { TabFeedback } from './components/TabFeedback';
 import { SettingsModal } from './components/SettingsModal';
@@ -57,7 +58,14 @@ import {
   applyOfficialIntegrationsToLessonRows,
   hasActivityIntegrationMarkers
 } from './data/integrationAddressesData';
-import { GradeLevel, SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate } from './types/gdtc';
+import { GradeLevel, SgkImageItem, ScenarioItem, SchoolSettings, LessonRow, ImageCategory, UserCustomTemplate, CustomLayoutBlueprint } from './types/gdtc';
+import {
+  getSavedLayoutBlueprints,
+  getActiveLayoutBlueprintId,
+  saveLayoutBlueprints,
+  setActiveLayoutBlueprintId,
+  hydrateLayoutBlueprintsFromDB
+} from './utils/customLayoutBlueprint';
 import {
   getAllImagesDB,
   saveImageDB,
@@ -81,7 +89,9 @@ import {
   commitOfficialVersion,
   activateVersionInStore,
   toggleBestVersionInStore,
-  deleteVersionFromStore
+  deleteVersionFromStore,
+  pruneVersionsKeepLatest,
+  formatBytesApproxVi
 } from './utils/planVersionHistory';
 import { getGradePpctInfo } from './utils/academicCalendar';
 import { getPpctPeriodItem } from './data/defaultPpctData';
@@ -131,6 +141,101 @@ export default function App() {
   useEffect(() => {
     userCustomTemplatesRef.current = userCustomTemplates;
   }, [userCustomTemplates]);
+
+  // Custom Layout Blueprints (Tab 7: Thử nghiệm mẫu giáo án riêng)
+  const [layoutBlueprints, setLayoutBlueprints] = useState<CustomLayoutBlueprint[]>(() =>
+    getSavedLayoutBlueprints()
+  );
+  const [activeLayoutBlueprintId, setActiveLayoutBlueprintIdState] = useState<string | null>(() =>
+    getActiveLayoutBlueprintId()
+  );
+
+  useEffect(() => {
+    hydrateLayoutBlueprintsFromDB().then(({ blueprints, activeId }) => {
+      if (blueprints.length > 0) {
+        setLayoutBlueprints(blueprints);
+      }
+      if (activeId !== undefined) {
+        setActiveLayoutBlueprintIdState(activeId);
+      }
+    });
+    const onBlueprintChanged = () => {
+      setLayoutBlueprints(getSavedLayoutBlueprints());
+      setActiveLayoutBlueprintIdState(getActiveLayoutBlueprintId());
+    };
+    window.addEventListener('gdtc:custom-layout-blueprint-changed', onBlueprintChanged);
+    return () => window.removeEventListener('gdtc:custom-layout-blueprint-changed', onBlueprintChanged);
+  }, []);
+
+  const activeLayoutBlueprint: CustomLayoutBlueprint | null =
+    activeLayoutBlueprintId
+      ? layoutBlueprints.find((b) => b.id === activeLayoutBlueprintId) || null
+      : null;
+
+  const handleSaveLayoutBlueprint = (bp: CustomLayoutBlueprint, activate = false) => {
+    setLayoutBlueprints((prev) => {
+      const next = [bp, ...prev.filter((item) => item.id !== bp.id)];
+      saveLayoutBlueprints(next);
+      return next;
+    });
+    if (activate) {
+      setActiveLayoutBlueprintIdState(bp.id);
+      setActiveLayoutBlueprintId(bp.id);
+    }
+  };
+
+  const handleUpdateLayoutBlueprint = (updatedBp: CustomLayoutBlueprint) => {
+    setLayoutBlueprints((prev) => {
+      const next = prev.map((item) => (item.id === updatedBp.id ? updatedBp : item));
+      saveLayoutBlueprints(next);
+      return next;
+    });
+  };
+
+  const handleDeleteLayoutBlueprint = (id: string) => {
+    setLayoutBlueprints((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      saveLayoutBlueprints(next);
+      return next;
+    });
+    if (activeLayoutBlueprintId === id) {
+      setActiveLayoutBlueprintIdState(null);
+      setActiveLayoutBlueprintId(null);
+      showToast('Đã xóa mẫu và quay về mẫu chuẩn 4 cột GDPT 2018.');
+    } else {
+      showToast('Đã xóa mẫu khỏi kho mẫu thử nghiệm.');
+    }
+  };
+
+  const handleActivateLayoutBlueprint = (id: string | null, applyDetectedSchoolMeta = true) => {
+    setActiveLayoutBlueprintIdState(id);
+    setActiveLayoutBlueprintId(id);
+    if (!id) {
+      showToast('🔄 Đã quay về mẫu chuẩn 4 cột GDPT 2018 mặc định!');
+      return;
+    }
+    const target = layoutBlueprints.find((b) => b.id === id);
+    if (target) {
+      if (
+        applyDetectedSchoolMeta &&
+        (target.detectedSchoolName ||
+          target.detectedDepartmentName ||
+          target.detectedTeacherName ||
+          target.detectedApproverPrincipal ||
+          target.detectedApproverHead)
+      ) {
+        setSchoolSettings((prev) => ({
+          ...prev,
+          schoolName: target.detectedSchoolName || prev.schoolName,
+          departmentName: target.detectedDepartmentName || prev.departmentName,
+          teacherName: target.detectedTeacherName || prev.teacherName,
+          approverPrincipal: target.detectedApproverPrincipal || prev.approverPrincipal,
+          approverHead: target.detectedApproverHead || prev.approverHead
+        }));
+      }
+      showToast(`✨ Đã áp dụng trực tiếp mẫu "${target.name}" cho toàn bộ giáo án (Tab 6 & xuất Word)!`);
+    }
+  };
 
   // IndexedDB-backed State
   const [images, setImages] = useState<SgkImageItem[]>(defaultSgkImages);
@@ -1129,7 +1234,7 @@ export default function App() {
     plansToSave: MasterPlanItem[],
     sourceTab: 'tab-generator' | 'tab-export'
   ) => {
-    if (!isDbLoadedRef.current || !authUser || plansToSave.length === 0) return;
+    if (!isDbLoadedRef.current || isAccessLocked || plansToSave.length === 0) return;
     let updatedStore = planVersionStoreRef.current;
     let anyChanged = false;
     const dictUpdates: Record<string, MasterPlanItem> = {};
@@ -1151,7 +1256,16 @@ export default function App() {
       setPlanVersionStore(updatedStore);
       savePlanVersionStoreDB(updatedStore).catch(() => {});
     }
-    setAllMasterPlans((prev) => ({ ...prev, ...dictUpdates }));
+    setAllMasterPlans((prev) => {
+      const next = { ...prev, ...dictUpdates };
+      setAppStateDB('gdtc_all_master_plans', next).catch(() => {});
+      return next;
+    });
+    if (sourceTab === 'tab-generator' && plansToSave[0]) {
+      const firstNorm = normalizeMasterPlan(plansToSave[0]);
+      setAppStateDB('master_plan', firstNorm).catch(() => {});
+      setAppStateDB('current_lesson_rows', firstNorm.rows).catch(() => {});
+    }
   };
 
   const handleSaveOfficialVersion = (
@@ -1281,6 +1395,26 @@ export default function App() {
     setPlanVersionStore(nextStore);
     savePlanVersionStoreDB(nextStore).catch(() => {});
     showToast('🗑️ Đã xóa phiên bản cũ khỏi lịch sử.');
+  };
+
+  const handlePrunePlanVersions = (targetPlanKey?: string, keepCount: number = 3) => {
+    if (isAccessLocked) {
+      requireAuth('Dọn các phiên bản cũ để tiết kiệm dung lượng');
+      return;
+    }
+    const res = pruneVersionsKeepLatest(planVersionStoreRef.current, keepCount, targetPlanKey);
+    if (res.removedCount === 0) {
+      showToast(`✅ Dữ liệu đã gọn nhẹ — mỗi tiết hiện đều đang có ≤ ${keepCount} phiên bản gần nhất!`);
+      return;
+    }
+    planVersionStoreRef.current = res.store;
+    setPlanVersionStore(res.store);
+    savePlanVersionStoreDB(res.store).catch(() => {});
+    setVersionRefreshNonce((n) => n + 1);
+    const scopeText = targetPlanKey ? 'tiết giáo án này' : `${res.affectedPlansCount} tiết giáo án`;
+    showToast(
+      `🧹 Đã xóa ${res.removedCount} phiên bản cũ của ${scopeText} (chỉ giữ ${keepCount} bản gần nhất/tiết) · Tiết kiệm ~${formatBytesApproxVi(res.freedBytesApprox)}!`
+    );
   };
 
   useEffect(() => {
@@ -1419,7 +1553,7 @@ export default function App() {
 
   // Debounced auto-save draft for Tab 5 edits (NEVER overwrites a different week/grade/lesson slot!)
   useEffect(() => {
-    if (!isDbLoadedRef.current || !authUser) return;
+    if (!isDbLoadedRef.current || isAccessLocked) return;
     if (!lessonRows || lessonRows.length === 0) return;
 
     const currentKey = getPlanVersionKey(week, grade, lessonNum);
@@ -1465,15 +1599,15 @@ export default function App() {
       });
       setCurrentMasterPlan(syncedPlan);
       handleAutoSaveDraftPlans([syncedPlan], 'tab-generator');
-    }, 450);
+    }, 350);
 
     return () => clearTimeout(timer);
-  }, [lessonRows, week, grade, lessonNum, topic, title, authUser]);
+  }, [lessonRows, week, grade, lessonNum, topic, title, isAccessLocked]);
 
   // Flush draft immediately when closing/reloading browser tab
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (!isDbLoadedRef.current || !authUser || !lessonRows || lessonRows.length === 0) return;
+      if (!isDbLoadedRef.current || isAccessLocked || !lessonRows || lessonRows.length === 0) return;
       const currentKey = getPlanVersionKey(week, grade, lessonNum);
       if (loadedPlanKeyRef.current !== currentKey) return;
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
@@ -1493,7 +1627,7 @@ export default function App() {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [lessonRows, week, grade, lessonNum, topic, title, currentMasterPlan, authUser]);
+  }, [lessonRows, week, grade, lessonNum, topic, title, currentMasterPlan, isAccessLocked]);
 
   useEffect(() => {
     if (isDbLoadedRef.current) {
@@ -1508,6 +1642,13 @@ export default function App() {
   const handleTabChange = (nextTab: string) => {
     if (activeTab === 'tab-generator' && nextTab !== 'tab-generator' && lessonRows.length > 0) {
       const key = `k${grade}_t${lessonNum}`;
+      const sameContext =
+        Number(currentMasterPlan.grade) === Number(grade) &&
+        Number(currentMasterPlan.week) === Number(week);
+      const resolvedIntegrations =
+        sameContext && currentMasterPlan.integrations?.addressLabel && currentMasterPlan.integrations?.addressContent
+          ? currentMasterPlan.integrations
+          : buildMasterPlanIntegrationsFromAddress(grade, week, lessonNum, title);
       const syncedPlan: MasterPlanItem = normalizeMasterPlan({
         ...currentMasterPlan,
         id: `plan_${key}_w${week}`,
@@ -1516,8 +1657,10 @@ export default function App() {
         lessonNum,
         topic,
         title,
+        integrations: resolvedIntegrations,
         rows: JSON.parse(JSON.stringify(lessonRows))
       });
+      setCurrentMasterPlan(syncedPlan);
       handleAutoSaveDraftPlans([syncedPlan], 'tab-generator');
     }
 
@@ -1525,9 +1668,14 @@ export default function App() {
       const latestVer = getPreferredVersionForPlan(planVersionStoreRef.current, week, grade, lessonNum);
       if (latestVer?.snapshot) {
         const snap = normalizeMasterPlan(latestVer.snapshot);
-        const hydratedRows = hasActivityIntegrationMarkers(snap.rows)
-          ? snap.rows
-          : applyOfficialIntegrationsToLessonRows(snap.rows, grade, week, lessonNum, snap.title);
+        const isUserEdited =
+          latestVer.sourceTab === 'tab-generator' ||
+          latestVer.sourceTab === 'tab-export' ||
+          latestVer.status !== 'draft';
+        const hydratedRows =
+          isUserEdited || hasActivityIntegrationMarkers(snap.rows)
+            ? snap.rows
+            : applyOfficialIntegrationsToLessonRows(snap.rows, grade, week, lessonNum, snap.title);
         snap.rows = hydratedRows;
         skipNextAutoDraftRef.current = true;
         setCurrentMasterPlan(snap);
@@ -1573,7 +1721,7 @@ export default function App() {
     showToast(
       isAccessLocked
         ? `Đang mở chế độ Xem trước A4 cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
-        : `Đã lưu bản nháp và chuyển sang Xem trước & In cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
+        : `✅ Đã đồng bộ bản cuối từ Tab 5 sang Tab 6 (Tuần ${week} · Khối ${grade} · Tiết ${lessonNum})!`
     );
   };
 
@@ -2175,6 +2323,7 @@ export default function App() {
         authUser={authUser}
         isGuest={isAccessLocked}
         onOpenAuth={() => openAuthModal(isSubscriptionExpired ? 'billing' : 'login', null)}
+        activeLayoutBlueprintName={activeLayoutBlueprint?.name || null}
       />
 
       {/* Guest Banner: 1-Semester (120-Day) Passwordless Full Free Community Access */}
@@ -2455,6 +2604,7 @@ export default function App() {
               }
               handleDeletePlanVersion(planKey, versionId);
             }}
+            onPruneOldVersions={handlePrunePlanVersions}
             userCustomTemplates={userCustomTemplates}
             activeCustomTemplateId={activeCustomTemplateId}
             onApplyCustomTemplate={(tpl) => {
@@ -2531,6 +2681,7 @@ export default function App() {
               }
               handleDeletePlanVersion(planKey, versionId);
             }}
+            onPruneOldVersions={handlePrunePlanVersions}
             onActiveWeekChange={(nw) => setWeek(nw)}
             userCustomTemplates={userCustomTemplates}
             activeCustomTemplateId={activeCustomTemplateId}
@@ -2568,6 +2719,35 @@ export default function App() {
             onNavigateToGenerator={() => handleTabChange('tab-generator')}
             isGuest={isAccessLocked}
             onRequireAuth={(feature) => requireAuth(feature)}
+            activeLayoutBlueprint={activeLayoutBlueprint}
+            onClearActiveLayoutBlueprint={() => handleActivateLayoutBlueprint(null)}
+            onNavigateToTemplateLab={() => handleTabChange('tab-template-lab')}
+          />
+        )}
+
+        {activeTab === 'tab-template-lab' && (
+          <TabTemplateLab
+            blueprints={layoutBlueprints}
+            activeBlueprintId={activeLayoutBlueprintId}
+            onSaveBlueprint={handleSaveLayoutBlueprint}
+            onUpdateBlueprint={handleUpdateLayoutBlueprint}
+            onDeleteBlueprint={handleDeleteLayoutBlueprint}
+            onActivateBlueprint={handleActivateLayoutBlueprint}
+            onSaveUserTemplate={handleSaveUserTemplate}
+            onNavigateToExport={() => handleTabChange('tab-export')}
+            currentMasterPlan={{
+              ...currentMasterPlan,
+              grade,
+              week,
+              lessonNum,
+              topic,
+              title,
+              rows: lessonRows
+            }}
+            allMasterPlans={allMasterPlans}
+            images={images}
+            schoolSettings={schoolSettings}
+            showToast={showToast}
           />
         )}
 
@@ -2725,7 +2905,18 @@ export default function App() {
                 updated[rowIdx] = {
                   ...updated[rowIdx],
                   hsImgUrl: customFormation.svgDataUrl,
-                  hsImgTitle: customFormation.name
+                  hsImgTitle: customFormation.name,
+                  hsImages: [
+                    ...(updated[rowIdx].hsImages || []),
+                    {
+                      id: `diag_${Date.now()}`,
+                      url: customFormation.svgDataUrl,
+                      title: customFormation.name,
+                      userPinned: true
+                    }
+                  ],
+                  userEditedMedia: true,
+                  userClearedHsImages: false
                 };
               }
               return updated;
@@ -2757,7 +2948,18 @@ export default function App() {
                 updated[rowIdx] = {
                   ...updated[rowIdx],
                   hsImgUrl: formation.svgDataUrl,
-                  hsImgTitle: formation.name
+                  hsImgTitle: formation.name,
+                  hsImages: [
+                    ...(updated[rowIdx].hsImages || []),
+                    {
+                      id: `diag_${Date.now()}`,
+                      url: formation.svgDataUrl,
+                      title: formation.name,
+                      userPinned: true
+                    }
+                  ],
+                  userEditedMedia: true,
+                  userClearedHsImages: false
                 };
               }
               return updated;
@@ -2811,7 +3013,8 @@ export default function App() {
                 approvalDate: googleDriveBundle?.approvalDate,
                 dateRange: googleDriveBundle?.dateRange,
                 format: 'docx',
-                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`
+                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`,
+                layoutBlueprint: activeLayoutBlueprint || null
               });
               return pkg.html;
             },
@@ -2840,7 +3043,8 @@ export default function App() {
                 approvalDate: googleDriveBundle?.approvalDate,
                 dateRange: googleDriveBundle?.dateRange,
                 format: 'docx',
-                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`
+                filename: `KHBD_GDTC_Tuan_${targetWeek}.docx`,
+                layoutBlueprint: activeLayoutBlueprint || null
               });
               return pkg.docxBlob;
             },
@@ -2938,6 +3142,7 @@ export default function App() {
             setVersionRefreshNonce((n) => n + 1);
             setCustomFormationsNonce((n) => n + 1);
           }}
+          onPruneOldVersions={handlePrunePlanVersions}
           showToast={showToast}
         />
       )}

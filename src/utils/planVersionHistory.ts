@@ -60,6 +60,16 @@ function extractRowHeading(row?: LessonRow, idx: number = 0): string {
   return `Dòng ${idx + 1}${short ? ` (${short})` : ''}`;
 }
 
+function fingerprintUrl(url?: string): string {
+  if (!url) return 'empty';
+  let hash = 2166136261;
+  for (let i = 0; i < url.length; i++) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${(hash >>> 0).toString(36)}_${url.length}`;
+}
+
 function getRowContentImagesSummary(row?: LessonRow): string {
   if (!row) return '(Không có ảnh)';
   const list: DiagramAttachment[] =
@@ -69,7 +79,44 @@ function getRowContentImagesSummary(row?: LessonRow): string {
       ? [{ id: 'single', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh đính kèm' }]
       : [];
   if (list.length === 0) return '(Không có ảnh)';
-  return list.map((img) => `${img.title || 'Ảnh'} [${img.url.slice(0, 48)}]`).join(' | ');
+  return list.map((img) => img.title || 'Ảnh').join(' | ');
+}
+
+function getRowContentImagesSignature(row?: LessonRow): string {
+  if (!row) return 'none';
+  const list: DiagramAttachment[] =
+    row.contentImages && row.contentImages.length > 0
+      ? row.contentImages
+      : row.contentImgUrl
+      ? [{ id: 'single', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh đính kèm' }]
+      : [];
+  const clearedFlag = row.userClearedContentImages ? '1' : '0';
+  if (list.length === 0) return `empty:${clearedFlag}`;
+  return `${clearedFlag}:` + list.map((img) => `${img.title || ''}|${fingerprintUrl(img.url)}|${img.userPinned ? 'p' : ''}`).join(';;');
+}
+
+function getRowGvImagesSummary(row?: LessonRow): string {
+  if (!row) return '(Không có ảnh GV)';
+  const list: DiagramAttachment[] =
+    row.gvImages && row.gvImages.length > 0
+      ? row.gvImages
+      : row.gvImgUrl
+      ? [{ id: 'single', url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
+      : [];
+  if (list.length === 0) return '(Không có ảnh GV)';
+  return list.map((img) => img.title || 'Ảnh GV').join(' | ');
+}
+
+function getRowGvImagesSignature(row?: LessonRow): string {
+  if (!row) return 'none';
+  const list: DiagramAttachment[] =
+    row.gvImages && row.gvImages.length > 0
+      ? row.gvImages
+      : row.gvImgUrl
+      ? [{ id: 'single', url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
+      : [];
+  if (list.length === 0) return 'empty';
+  return list.map((img) => `${img.title || ''}|${fingerprintUrl(img.url)}|${img.userPinned ? 'p' : ''}`).join(';;');
 }
 
 function getRowHsImagesSummary(row?: LessonRow): string {
@@ -82,6 +129,19 @@ function getRowHsImagesSummary(row?: LessonRow): string {
       : [];
   if (list.length === 0) return '(Không có sơ đồ)';
   return list.map((img) => img.title || 'Sơ đồ').join(' | ');
+}
+
+function getRowHsImagesSignature(row?: LessonRow): string {
+  if (!row) return 'none';
+  const list: DiagramAttachment[] =
+    row.hsImages && row.hsImages.length > 0
+      ? row.hsImages
+      : row.hsImgUrl
+      ? [{ id: 'single', url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ' }]
+      : [];
+  const clearedFlag = row.userClearedHsImages ? '1' : '0';
+  if (list.length === 0) return `empty:${clearedFlag}`;
+  return `${clearedFlag}:` + list.map((img) => `${img.title || ''}|${fingerprintUrl(img.url)}|${img.userPinned ? 'p' : ''}`).join(';;');
 }
 
 function truncatePreview(val: string, maxLen: number = 180): string {
@@ -332,29 +392,42 @@ export function computePlanDiff(
       });
     }
 
-    const prevContentImg = getRowContentImagesSummary(rPrev);
-    const nextContentImg = getRowContentImagesSummary(rNext);
-    if (prevContentImg !== nextContentImg) {
+    const prevContentSig = getRowContentImagesSignature(rPrev);
+    const nextContentSig = getRowContentImagesSignature(rNext);
+    if (prevContentSig !== nextContentSig) {
       changedParts.push('Ảnh động tác/trò chơi Cột 1');
       details.push({
         id: `row_${i}_cimg`,
         section: 'III. Hoạt động dạy học',
         label: `${rowTitle} · Ảnh minh họa Cột 1`,
-        before: prevContentImg,
-        after: nextContentImg
+        before: getRowContentImagesSummary(rPrev),
+        after: getRowContentImagesSummary(rNext)
       });
     }
 
-    const prevHsImg = getRowHsImagesSummary(rPrev);
-    const nextHsImg = getRowHsImagesSummary(rNext);
-    if (prevHsImg !== nextHsImg) {
+    const prevGvSig = getRowGvImagesSignature(rPrev);
+    const nextGvSig = getRowGvImagesSignature(rNext);
+    if (prevGvSig !== nextGvSig) {
+      changedParts.push('Ảnh/Sơ đồ Cột 3 (GV)');
+      details.push({
+        id: `row_${i}_gvimg`,
+        section: 'III. Hoạt động dạy học',
+        label: `${rowTitle} · Hình ảnh Cột 3 (GV)`,
+        before: getRowGvImagesSummary(rPrev),
+        after: getRowGvImagesSummary(rNext)
+      });
+    }
+
+    const prevHsSig = getRowHsImagesSignature(rPrev);
+    const nextHsSig = getRowHsImagesSignature(rNext);
+    if (prevHsSig !== nextHsSig) {
       changedParts.push('Sơ đồ đội hình Cột 4');
       details.push({
         id: `row_${i}_hsimg`,
         section: 'III. Hoạt động dạy học',
         label: `${rowTitle} · Sơ đồ Cột 4`,
-        before: prevHsImg,
-        after: nextHsImg
+        before: getRowHsImagesSummary(rPrev),
+        after: getRowHsImagesSummary(rNext)
       });
     }
 
@@ -916,6 +989,171 @@ export function deleteVersionFromStore(
     },
     activeVersionIdByPlanKey: nextActive
   };
+}
+
+export interface VersionStoreStats {
+  totalPlans: number;
+  totalVersions: number;
+  excessVersionsAboveKeep: number;
+  plansWithExcess: number;
+  estimatedTotalBytes: number;
+  estimatedFreedBytes: number;
+}
+
+export function getVersionStoreStats(
+  store: PlanVersionStore,
+  keepCount: number = 3
+): VersionStoreStats {
+  const safeKeep = Math.max(1, keepCount);
+  const map = store?.versionsByPlanKey || {};
+  let totalPlans = 0;
+  let totalVersions = 0;
+  let excessVersionsAboveKeep = 0;
+  let plansWithExcess = 0;
+  let estimatedTotalBytes = 0;
+  let estimatedFreedBytes = 0;
+
+  for (const [planKey, list] of Object.entries(map)) {
+    if (!Array.isArray(list) || list.length === 0) continue;
+    totalPlans += 1;
+    totalVersions += list.length;
+    const sorted = [...list].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || (b.versionNumber || 0) - (a.versionNumber || 0));
+    const activeId = store.activeVersionIdByPlanKey?.[planKey];
+
+    // Pick kept set: active version first (if exists), then newest remaining up to safeKeep
+    const keptIds = new Set<string>();
+    if (activeId && sorted.some((v) => v.versionId === activeId)) {
+      keptIds.add(activeId);
+    }
+    for (const v of sorted) {
+      if (keptIds.size >= safeKeep) break;
+      keptIds.add(v.versionId);
+    }
+
+    if (sorted.length > keptIds.size) {
+      plansWithExcess += 1;
+      excessVersionsAboveKeep += sorted.length - keptIds.size;
+    }
+
+    for (const v of sorted) {
+      let approxBytes = 4096;
+      try {
+        approxBytes = JSON.stringify(v).length;
+      } catch {
+        approxBytes = 4096;
+      }
+      estimatedTotalBytes += approxBytes;
+      if (!keptIds.has(v.versionId)) {
+        estimatedFreedBytes += approxBytes;
+      }
+    }
+  }
+
+  return {
+    totalPlans,
+    totalVersions,
+    excessVersionsAboveKeep,
+    plansWithExcess,
+    estimatedTotalBytes,
+    estimatedFreedBytes
+  };
+}
+
+/**
+ * Prunes older lesson plan versions, keeping only the `keepCount` (default 3) most recent versions
+ * (always preserving the currently active version). Can target a single `planKey` or the entire store.
+ */
+export function pruneVersionsKeepLatest(
+  store: PlanVersionStore,
+  keepCount: number = 3,
+  targetPlanKey?: string
+): {
+  store: PlanVersionStore;
+  removedCount: number;
+  remainingCount: number;
+  affectedPlansCount: number;
+  freedBytesApprox: number;
+} {
+  const safeKeep = Math.max(1, keepCount);
+  const nextVersionsByPlanKey: Record<string, LessonPlanVersion[]> = {
+    ...(store?.versionsByPlanKey || {})
+  };
+  const nextActive: Record<string, string> = {
+    ...(store?.activeVersionIdByPlanKey || {})
+  };
+
+  let removedCount = 0;
+  let remainingCount = 0;
+  let affectedPlansCount = 0;
+  let freedBytesApprox = 0;
+
+  const keysToProcess = targetPlanKey
+    ? [targetPlanKey]
+    : Object.keys(nextVersionsByPlanKey);
+
+  for (const planKey of keysToProcess) {
+    const list = nextVersionsByPlanKey[planKey];
+    if (!Array.isArray(list) || list.length === 0) continue;
+
+    const sorted = [...list].sort(
+      (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0) || (b.versionNumber || 0) - (a.versionNumber || 0)
+    );
+    const activeId = nextActive[planKey];
+
+    const keptIds = new Set<string>();
+    if (activeId && sorted.some((v) => v.versionId === activeId)) {
+      keptIds.add(activeId);
+    }
+    for (const v of sorted) {
+      if (keptIds.size >= safeKeep) break;
+      keptIds.add(v.versionId);
+    }
+
+    const kept = sorted.filter((v) => keptIds.has(v.versionId));
+    const removed = sorted.filter((v) => !keptIds.has(v.versionId));
+
+    if (removed.length > 0) {
+      affectedPlansCount += 1;
+      removedCount += removed.length;
+      for (const r of removed) {
+        try {
+          freedBytesApprox += JSON.stringify(r).length;
+        } catch {
+          freedBytesApprox += 4096;
+        }
+      }
+      nextVersionsByPlanKey[planKey] = kept;
+      if (kept[0]) {
+        if (!activeId || !keptIds.has(activeId)) {
+          nextActive[planKey] = kept[0].versionId;
+        }
+        mirrorLatestDraftToLocalStorage(planKey, kept.find((v) => v.versionId === nextActive[planKey]) || kept[0]);
+      }
+    }
+  }
+
+  for (const list of Object.values(nextVersionsByPlanKey)) {
+    if (Array.isArray(list)) remainingCount += list.length;
+  }
+
+  return {
+    store: {
+      versionsByPlanKey: nextVersionsByPlanKey,
+      activeVersionIdByPlanKey: nextActive
+    },
+    removedCount,
+    remainingCount,
+    affectedPlansCount,
+    freedBytesApprox
+  };
+}
+
+export function formatBytesApproxVi(bytes: number): string {
+  if (!bytes || bytes <= 0) return '0 KB';
+  if (bytes < 1024 * 1024) {
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 export function formatDateTimeVi(ts: number): string {

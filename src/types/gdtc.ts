@@ -2,6 +2,7 @@ export interface DiagramAttachment {
   id: string;
   url: string;
   title: string;
+  userPinned?: boolean; // Đánh dấu ảnh/sơ đồ do giáo viên tự chọn/chèn — tuyệt đối không bị bộ lọc tự động xóa
 }
 
 export interface LessonRow {
@@ -18,6 +19,9 @@ export interface LessonRow {
   hsImgUrl?: string;
   hsImgTitle?: string;
   hsImages?: DiagramAttachment[];      // Cho phép gắn nhiều sơ đồ trong cùng 1 dòng hoạt động (đồng loạt, tổ nhóm, cặp đôi, cá nhân...)
+  userEditedMedia?: boolean;           // Giáo viên đã chủ động sửa/đổi/xóa ảnh hoặc sơ đồ ở dòng này
+  userClearedContentImages?: boolean;  // Giáo viên đã chủ động xóa sạch ảnh Cột 1 ở dòng này
+  userClearedHsImages?: boolean;       // Giáo viên đã chủ động xóa sạch sơ đồ Cột 4 ở dòng này
 }
 
 export interface ExtractedLessonData {
@@ -173,5 +177,101 @@ export interface UserCustomTemplate {
   detectedSections: string[];
   analysisNotes: string[];
   rawTextExcerpt?: string;
+}
+
+export type BlueprintColumnMode =
+  | '2col_nd_tc'
+  | '2col_gv_hs'
+  | '3col_nd_lvd_tc'
+  | '3col_nd_gv_hs'
+  | '4col_standard'
+  | '5col_stt';
+
+export interface BlueprintAnalysisDiagnostic {
+  id: string;
+  label: string;
+  value: string;
+  status: 'detected' | 'inferred' | 'fallback';
+}
+
+export interface CustomLayoutBlueprint {
+  id: string;
+  name: string;
+  sourceFileName?: string;
+  sourceType: 'docx' | 'doc' | 'pdf' | 'html' | 'preset' | 'text';
+  createdAt: number;
+  updatedAt: number;
+  confidenceScore: number;
+  columnMode: BlueprintColumnMode;
+  columnHeaders: string[];
+  columnWidths: number[];
+  headerBlock: {
+    showNationalMotto: boolean;
+    showSchoolHeader: boolean;
+    topLeftLine1: string;
+    topLeftLine2: string;
+    documentTitlePrefix: string;
+    showTeacherMetaLine: boolean;
+  };
+  sectionHeadings: {
+    sec1: string;
+    sec2: string;
+    sec3: string;
+    sec4: string;
+    showSec4: boolean;
+  };
+  signatureBlock: {
+    enabled: boolean;
+    count: 1 | 2 | 3;
+    leftTitle: string;
+    middleTitle: string;
+    rightTitle: string;
+  };
+  detectedSchoolName?: string;
+  detectedDepartmentName?: string;
+  detectedTeacherName?: string;
+  detectedApproverPrincipal?: string;
+  detectedApproverHead?: string;
+  analysisNotes: string[];
+  diagnostics: BlueprintAnalysisDiagnostic[];
+}
+
+export interface ImportedFormationMatchLogItem {
+  rowIdx: number;
+  diagramId: string;
+  diagramName: string;
+  reason: string;
+}
+
+export interface ImportedWeeklyPlanEntry {
+  id: string;
+  week: number;
+  period: number;
+  gradeNum: number;
+  gradeLabel: string;
+  topic: string;
+  lessonTitle: string;
+  gameName?: string;
+  pageHint?: number;
+  dateRange?: string;
+  objectivesSummary?: string;
+  equipmentSummary?: string;
+  rows: LessonRow[];
+  formationsAutoMatched?: boolean;
+  autoFormationLog?: ImportedFormationMatchLogItem[];
+}
+
+export interface ImportedTemplateWorkspace {
+  blueprintId: string;
+  fileName: string;
+  receivedAt: number;
+  detectedGradeNum: number;
+  detectedGradeLabel: string;
+  totalPages?: number;
+  weeklySchedule: ImportedWeeklyPlanEntry[];
+  selectedEntryId: string;
+  autoInsertedFormationsCount: number;
+  teacherUploadedImagesCount: number;
+  weeklyPlanSourceName?: string;
 }
 

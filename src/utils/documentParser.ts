@@ -29,6 +29,9 @@ export interface ParsedLessonFileResult {
   detectedSections?: string[];
   analysisNotes?: string[];
   rawTextExcerpt?: string;
+  fullText?: string;
+  totalPages?: number;
+  rawGrade?: number;
 }
 
 export interface MultiTaskAnalysisProgress {
@@ -76,18 +79,24 @@ const DEFAULT_LOCATION_EQUIPMENT: UserCustomTemplate['locationEquipment'] = {
  * Universal document parser for lesson plans:
  * Supports Word (.docx, .doc), HTML, JSON, PDF (spatial layout), and plain text.
  */
-export async function parseLessonFile(file: File): Promise<ParsedLessonFileResult> {
+export async function parseLessonFile(
+  file: File,
+  onProgress?: (label: string, percent: number) => void
+): Promise<ParsedLessonFileResult> {
   const fileName = file.name.toLowerCase();
 
   if (fileName.endsWith('.json')) {
     return parseJsonLessonFile(file);
   } else if (fileName.endsWith('.docx')) {
+    onProgress?.(`Đang giải nén tệp Word "${file.name}"...`, 25);
     return parseDocxLessonFile(file);
   } else if (fileName.endsWith('.doc') || fileName.endsWith('.html') || fileName.endsWith('.htm')) {
+    onProgress?.(`Đang đọc nội dung tệp "${file.name}"...`, 25);
     return parseHtmlOrDocLessonFile(file);
   } else if (fileName.endsWith('.pdf')) {
-    return parsePdfLessonFile(file);
+    return parsePdfLessonFile(file, onProgress);
   } else {
+    onProgress?.(`Đang phân tích tệp văn bản "${file.name}"...`, 30);
     const text = await file.text();
     return parseTextLessonPlanMultiTask(text, file.name, 'text');
   }
@@ -174,9 +183,11 @@ function sliceSection(text: string, startRegex: RegExp, endRegex?: RegExp): stri
 function extractSectionsFromText(rawText: string) {
   const normalizedText = rawText.replace(/\r\n/g, '\n');
 
-  const weekMatch = normalizedText.match(/tuần\s*(?:học)?\s*[:\-]?\s*(\d+)/i);
-  const gradeMatch = normalizedText.match(/(?:khối|lớp)\s*[:\-]?\s*(\d+)/i);
-  const lessonMatch = normalizedText.match(/tiết\s*(?:ppct|theo\s*ppct)?\s*[:\-]?\s*(\d+)/i);
+  const weekMatch = normalizedText.match(/tuần\s*(?:học)?\s*[:\-_.]?\s*0?(\d{1,2})/i);
+  const gradeMatch =
+    normalizedText.match(/(?:khối|lớp|gdtc|giáo\s*dục\s*thể\s*chất)\s*[:\-–]?\s*(\d{1,2})\b/i) ||
+    normalizedText.match(/\b(?:k|l)(\d{1,2})\b/i);
+  const lessonMatch = normalizedText.match(/tiết\s*(?:ppct|theo\s*ppct)?\s*[:\-_.]?\s*0?(\d{1,3})/i);
   const dateRangeMatch = normalizedText.match(/(?:từ\s*ngày[^\n\r]+|thời\s*gian\s*thực\s*hiện\s*[:\-]?\s*[^\n\r]+)/i);
 
   const topicLine = extractLabeledField(
@@ -186,40 +197,40 @@ function extractSectionsFromText(rawText: string) {
   const fullTopicMatch = normalizedText.match(/(chủ\s*đề[^\n\r]*)/i);
   const topic = fullTopicMatch ? cleanLine(fullTopicMatch[1]) : topicLine || 'CHỦ ĐỀ BÀI HỌC';
 
-  const titleMatch = normalizedText.match(/(?:tên\s*bài(?:\s*học)?|bài\s*\d+)\s*[:\-–]?\s*([^\n\r]+)/i);
-  const title = titleMatch ? cleanLine(titleMatch[0].replace(/^tên\s*bài(?:\s*học)?\s*[:\-–]?\s*/i, '')) : '';
+  const titleMatch = normalizedText.match(/(?:tên\s*bài(?:\s*học)?|bài\s*\d+)\s*[:\-–.]?\s*([^\n\r]+)/i);
+  const title = titleMatch ? cleanLine(titleMatch[0].replace(/^tên\s*bài(?:\s*học)?\s*[:\-–.]?\s*/i, '')) : '';
 
-  const schoolMatch = normalizedText.match(/(trường\s*(?:tiểu\s*học|thcs|th\s*&\s*thcs)[^\n\r]+)/i);
+  const schoolMatch = normalizedText.match(/(trường\s*(?:tiểu\s*học|thcs|thpt|th\s*&\s*thcs)[^\n\r]+)/i);
   const deptMatch = normalizedText.match(/(tổ\s*(?:chuyên\s*môn)?[^\n\r]+)/i);
-  const teacherMatch = normalizedText.match(/(?:giáo\s*viên(?:\s*soạn(?:\s*bài)?)?|người\s*soạn)\s*[:\-]?\s*([^\n\r]+)/i);
+  const teacherMatch = normalizedText.match(/(?:giáo\s*viên(?:\s*soạn(?:\s*bài)?)?|người\s*soạn|họ\s*và\s*tên\s*giáo\s*viên)\s*[:\-]?\s*([^\n\r]+)/i);
   const bghMatch = normalizedText.match(/(?:bgh\s*duyệt|ban\s*giám\s*hiệu|hiệu\s*trưởng)\s*[:\-]?\s*([^\n\r]+)/i);
   const headMatch = normalizedText.match(/(?:tổ\s*trưởng(?:\s*chuyên\s*môn)?)\s*[:\-]?\s*([^\n\r]+)/i);
   const locationDateMatch = normalizedText.match(/([^\n\r,]+,\s*ngày\s*\d+\s*tháng\s*\d+\s*năm\s*\d{4})/i);
 
-  // Section I: Yêu cầu cần đạt
+  // Section I: Yêu cầu cần đạt / Mục tiêu (CV 2345 & CV 5512)
   const sec1 = sliceSection(
     normalizedText,
-    /(?:^|\n)\s*I\.\s*YÊU\s*CẦU\s*CẦN\s*ĐẠT/i,
+    /(?:^|\n)\s*I\.\s*(?:YÊU\s*CẦU\s*CẦN\s*ĐẠT|MỤC\s*TIÊU(?:\s*BÀI\s*HỌC)?)/i,
     /(?:\n\s*II\.\s*(?:ĐỒ\s*DÙNG|ĐỊA\s*ĐIỂM|THIẾT\s*BỊ|CHUẨN\s*BỊ))/i
   );
 
-  // Section II: Địa điểm - Thiết bị
+  // Section II: Địa điểm - Thiết bị - Học liệu
   const sec2 = sliceSection(
     normalizedText,
     /(?:^|\n)\s*II\.\s*(?:ĐỒ\s*DÙNG|ĐỊA\s*ĐIỂM|THIẾT\s*BỊ|CHUẨN\s*BỊ)[^\n]*/i,
     /(?:\n\s*III\.\s*(?:CÁC\s*HOẠT\s*ĐỘNG|TIẾN\s*TRÌNH))/i
   );
 
-  // Section IV: Điều chỉnh sau bài dạy
+  // Section IV: Điều chỉnh sau bài dạy / Rút kinh nghiệm
   const sec4 = sliceSection(
     normalizedText,
-    /(?:^|\n)\s*IV\.\s*ĐIỀU\s*CHỈNH\s*SAU\s*BÀI\s*DẠY/i,
-    /(?:\n\s*(?:BGH|TỔ\s*TRƯỞNG|GIÁO\s*VIÊN|Vệ\s*Giang|Ngày\s*\d+))/i
+    /(?:^|\n)\s*(?:IV\.\s*ĐIỀU\s*CHỈNH\s*SAU\s*BÀI\s*DẠY|RÚT\s*KINH\s*NGHIỆM)/i,
+    /(?:\n\s*(?:BGH|TỔ\s*TRƯỞNG|GIÁO\s*VIÊN|Vệ\s*Giang|Ngày\s*\d+|Trường:|Tuần\s*0?\d+))/i
   );
 
   const healthCare = extractLabeledField(sec1, /chăm\s*sóc\s*sức\s*khỏe\s*[:\-]?\s*([^\n]+)/i);
-  const basicMovement = extractLabeledField(sec1, /(?:vận\s*động\s*cơ\s*bản|kiến\s*thức[, ]*kỹ\s*năng)\s*[:\-]?\s*([^\n]+)/i);
-  const sportsCompetency = extractLabeledField(sec1, /(?:thể\s*dục\s*thể\s*thao|hoạt\s*động\s*tdtt)\s*[:\-]?\s*([^\n]+)/i);
+  const basicMovement = extractLabeledField(sec1, /(?:vận\s*động\s*cơ\s*bản|kiến\s*thức[, ]*kỹ\s*năng|về\s*kiến\s*thức)\s*[:\-]?\s*([^\n]+)/i);
+  const sportsCompetency = extractLabeledField(sec1, /(?:thể\s*dục\s*thể\s*thao|hoạt\s*động\s*tdtt|năng\s*lực\s*thể\s*chất)\s*[:\-]?\s*([^\n]+)/i);
   const disabledSpecial = extractLabeledField(sec1, /năng\s*lực\s*đặc\s*thù[\s\S]{0,400}?học\s*sinh\s*khuyết\s*tật\s*[:\-]?\s*([^\n]+)/i);
 
   const autonomy = extractLabeledField(sec1, /tự\s*chủ\s*(?:và|&)\s*tự\s*học\s*[:\-]?\s*([^\n]+)/i);
@@ -238,19 +249,23 @@ function extractSectionsFromText(rawText: string) {
   const environmentalEducation = extractLabeledField(sec1, /môi\s*trường[^\n:]*[:\-]?\s*([^\n]+)/i);
 
   const location = extractLabeledField(sec2, /địa\s*điểm\s*[:\-]?\s*([^\n]+)/i);
-  const teacherTools = extractLabeledField(sec2, /(?:giáo\s*viên\s*chuẩn\s*bị|gv\s*chuẩn\s*bị|giáo\s*viên)\s*[:\-]?\s*([^\n]+)/i);
-  const studentTools = extractLabeledField(sec2, /(?:học\s*sinh\s*chuẩn\s*bị|hs\s*chuẩn\s*bị|học\s*sinh)\s*[:\-]?\s*([^\n]+)/i);
+  const teacherTools = extractLabeledField(sec2, /(?:giáo\s*viên\s*chuẩn\s*bị|gv\s*chuẩn\s*bị|giáo\s*viên|đối\s*với\s*giáo\s*viên)\s*[:\-]?\s*([^\n]+)/i);
+  const studentTools = extractLabeledField(sec2, /(?:học\s*sinh\s*chuẩn\s*bị|hs\s*chuẩn\s*bị|học\s*sinh|đối\s*với\s*học\s*sinh)\s*[:\-]?\s*([^\n]+)/i);
 
   const detectedSections: string[] = [];
   if (weekMatch || gradeMatch || title) detectedSections.push('Thông tin chung & PPCT');
-  if (sec1) detectedSections.push('I. Yêu cầu cần đạt (5512)');
+  if (sec1) detectedSections.push('I. Yêu cầu cần đạt / Mục tiêu (5512)');
   if (sec2) detectedSections.push('II. Địa điểm & Thiết bị dạy học');
-  if (sec4) detectedSections.push('IV. Điều chỉnh sau bài dạy');
+  if (sec4) detectedSections.push('IV. Điều chỉnh / Rút kinh nghiệm');
+
+  const parsedRawGrade = gradeMatch ? parseInt(gradeMatch[1], 10) : 1;
+  const validRawGrade = Number.isFinite(parsedRawGrade) && parsedRawGrade >= 1 && parsedRawGrade <= 12 ? parsedRawGrade : 1;
 
   return {
-    week: weekMatch ? parseInt(weekMatch[1], 10) : 9,
-    grade: gradeMatch ? Math.min(5, Math.max(1, parseInt(gradeMatch[1], 10))) : 1,
-    lessonNum: lessonMatch ? parseInt(lessonMatch[1], 10) : 17,
+    week: weekMatch ? parseInt(weekMatch[1], 10) : 1,
+    rawGrade: validRawGrade,
+    grade: Math.min(5, Math.max(1, validRawGrade)),
+    lessonNum: lessonMatch ? parseInt(lessonMatch[1], 10) : 1,
     dateRange: dateRangeMatch ? cleanLine(dateRangeMatch[0]) : 'Tuần học theo kế hoạch',
     topic,
     title,
@@ -362,12 +377,16 @@ export function extractFullLessonTemplateFromHtml(
 
       const c0 = (cells[0].textContent || '').trim();
       const c1 = (cells[1].textContent || '').trim();
+      const rowJoinedLower = cells.map((c) => (c.textContent || '').trim().toLowerCase()).join(' | ');
       const isHeader =
-        trIdx === 0 &&
+        trIdx <= 1 &&
         (c0.toLowerCase().includes('nội dung') ||
-          c0.toLowerCase().includes('hoạt động') ||
+          c0.toLowerCase().includes('hoạt động của gv') ||
+          c0.toLowerCase().includes('hoạt động của giáo viên') ||
           c1.toLowerCase().includes('lượng vận động') ||
-          c1.toLowerCase() === 'lvđ');
+          c1.toLowerCase() === 'lvđ' ||
+          c1.toLowerCase() === 'đlvđ' ||
+          (rowJoinedLower.includes('hoạt động của gv') && rowJoinedLower.includes('hoạt động của hs')));
       if (isHeader) return;
 
       // Support optional STT leading column (5 columns: STT | Nội dung | LVĐ | GV | HS)
@@ -423,6 +442,7 @@ export function extractFullLessonTemplateFromHtml(
     topic: sections.topic,
     week: sections.week,
     grade: sections.grade,
+    rawGrade: sections.rawGrade,
     lessonNum: sections.lessonNum,
     dateRange: sections.dateRange,
     schoolName: sections.schoolName,
@@ -446,19 +466,23 @@ export function extractFullLessonTemplateFromHtml(
     detectedSections,
     analysisNotes: [
       `Trích xuất ${rows.length} dòng hoạt động từ bảng giáo án chuẩn 5512.`,
-      `Nhận diện đầy đủ Khối ${sections.grade} · Tuần ${sections.week} · Tiết ${sections.lessonNum}.`,
+      `Nhận diện đầy đủ Khối ${sections.rawGrade} · Tuần ${sections.week} · Tiết ${sections.lessonNum}.`,
       rows.some((r) => Boolean(r.contentImgUrl || r.hsImgUrl))
         ? 'Đã giữ nguyên hình ảnh và sơ đồ đội hình đính kèm trong file gốc.'
-        : 'Giáo án văn bản thuần; có thể gắn thêm ảnh SGK hoặc sơ đồ ở Tab 5 & Tab 6.'
+        : 'Giáo án văn bản thuần; có thể gắn thêm ảnh động tác & tự động chèn sơ đồ từ thư viện.'
     ],
-    rawTextExcerpt: textContent.slice(0, 6000)
+    rawTextExcerpt: textContent.slice(0, 6000),
+    fullText: textContent
   };
 }
 
 /**
  * Spatial PDF extractor using pdfjs-dist text coordinates (Y-grouping + X-column detection).
  */
-async function parsePdfLessonFile(file: File): Promise<ParsedLessonFileResult> {
+async function parsePdfLessonFile(
+  file: File,
+  onProgress?: (label: string, percent: number) => void
+): Promise<ParsedLessonFileResult> {
   if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
     try {
       const workerMod: any = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
@@ -468,11 +492,13 @@ async function parsePdfLessonFile(file: File): Promise<ParsedLessonFileResult> {
     }
   }
 
+  onProgress?.(`Đang mở tệp PDF "${file.name}"...`, 10);
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  const totalPages = pdf.numPages;
+  const pageChunks: string[] = [];
 
-  for (let i = 1; i <= pdf.numPages; i++) {
+  for (let i = 1; i <= totalPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     const items = (content.items as any[]).filter((it) => typeof it.str === 'string' && it.str.trim().length > 0);
@@ -509,10 +535,24 @@ async function parsePdfLessonFile(file: File): Promise<ParsedLessonFileResult> {
       return joined.trim();
     });
 
-    fullText += pageLines.join('\n') + '\n';
+    pageChunks.push(`[[PAGE:${i}]]\n` + pageLines.join('\n'));
+
+    // Yield periodically on large multi-week PDFs so the browser stays responsive
+    if (i % 15 === 0 || i === totalPages) {
+      const pct = Math.min(88, 12 + Math.round((i / Math.max(1, totalPages)) * 74));
+      onProgress?.(`Đang đọc nội dung PDF: trang ${i} / ${totalPages}...`, pct);
+      await new Promise((r) => setTimeout(r, 0));
+    }
   }
 
-  return parseTextLessonPlanMultiTask(fullText, file.name, 'pdf');
+  const fullTextWithMarkers = pageChunks.join('\n');
+  const firstLessonText = fullTextWithMarkers.replace(/\[\[PAGE:\d+\]\]\n?/g, '');
+  const parsed = parseTextLessonPlanMultiTask(firstLessonText.slice(0, 18000), file.name, 'pdf');
+  return {
+    ...parsed,
+    fullText: fullTextWithMarkers,
+    totalPages
+  };
 }
 
 function splitRowColumnsFromLine(line: string): string[] | null {
@@ -572,9 +612,9 @@ export function parseTextLessonPlanMultiTask(
     });
   }
 
-  // Mode B: Structured headings (1., 1.1., 1.2., 1.3., 2., 2.1., 3., 3.1..3.5, 4., 4.1..4.3)
+  // Mode B: Structured headings (1., 1.1..1.3, 2., 2.1, 3., 3.1..3.5, 4., 4.1..4.3, plus CV 5512 "1. Hoạt động: Mở đầu", "2. Hoạt động: Hình thành kiến thức", "3. Hoạt động: Luyện tập", "4. Hoạt động: Vận dụng")
   if (rows.length === 0 && lines.length > 0) {
-    const headingRegex = /^(?:(?:[1-4]\.[1-5]\.?)|(?:[1-4]\.\s*(?:HOẠT ĐỘNG|MỞ ĐẦU|HÌNH THÀNH|KHÁM PHÁ|LUYỆN TẬP|VẬN DỤNG|HỒI TĨNH)))/i;
+    const headingRegex = /^(?:(?:[1-4]\.[1-5]\.?)|(?:[1-4]\.\s*(?:HOẠT\s*ĐỘNG\s*:?\s*|MỞ\s*ĐẦU|HÌNH\s*THÀNH|KHÁM\s*PHÁ|LUYỆN\s*TẬP|VẬN\s*DỤNG|HỒI\s*TĨNH|PHẦN\s*(?:MỞ\s*ĐẦU|CƠ\s*BẢN|KẾT\s*THÚC)))|(?:HOẠT\s*ĐỘNG\s*[1-4]\s*[:.\-–])|(?:(?:PHẦN\s*)?(?:MỞ\s*ĐẦU|CƠ\s*BẢN|KẾT\s*THÚC)\s*[:(]))/i;
     let currentBlock: string[] = [];
 
     const flushBlock = () => {
@@ -585,25 +625,44 @@ export function parseTextLessonPlanMultiTask(
       const contentLines: string[] = [];
       let detectedLvd = '3 - 5 phút';
 
-      const lvdMatch = blockText.match(/(\d+\s*[-–]\s*\d+\s*(?:phút|'|lần|lượt)|\d+L\s*x\s*\d+N)/i);
+      const lvdMatch = blockText.match(/(\d+\s*[-–]\s*\d+\s*(?:phút|'|lần|lượt)|\d+\s*phút|\d+L\s*x\s*\d+N|\d+\s*lần\s*x\s*\d+\s*nhịp)/i);
       if (lvdMatch) detectedLvd = lvdMatch[1];
 
       currentBlock.forEach((ln) => {
         const lower = ln.toLowerCase();
-        if (lower.startsWith('gv:') || lower.startsWith('- gv') || lower.includes('giáo viên:')) {
-          gvLines.push(ln.replace(/^(?:gv|giáo viên)\s*:\s*/i, '- '));
-        } else if (lower.startsWith('hs:') || lower.startsWith('- hs') || lower.includes('học sinh:') || lower.includes('đội hình:')) {
-          hsLines.push(ln.replace(/^(?:hs|học sinh)\s*:\s*/i, '- '));
+        if (
+          lower.startsWith('gv:') ||
+          lower.startsWith('- gv') ||
+          lower.includes('giáo viên:') ||
+          lower.startsWith('hoạt động của gv') ||
+          /^-?\s*gv\s+(?:tổ chức|hướng dẫn|làm mẫu|quan sát|phổ biến|nhận lớp|điều khiển|cho hs|chia lớp)/i.test(ln)
+        ) {
+          gvLines.push(ln.replace(/^(?:gv|giáo viên|hoạt động của gv)\s*:\s*/i, '- '));
+        } else if (
+          lower.startsWith('hs:') ||
+          lower.startsWith('- hs') ||
+          lower.includes('học sinh:') ||
+          lower.includes('đội hình:') ||
+          lower.startsWith('hoạt động của hs') ||
+          /^-?\s*(?:hs|cán sự|lớp trưởng|cả lớp)\s+(?:tập hợp|thực hiện|quan sát|lắng nghe|tham gia|báo cáo|khởi động|luyện tập|thả lỏng)/i.test(ln)
+        ) {
+          hsLines.push(ln.replace(/^(?:hs|học sinh|hoạt động của hs)\s*:\s*/i, '- '));
         } else {
           contentLines.push(ln);
         }
       });
 
+      const contentJoined = contentLines.join('\n').trim() || blockText;
+      if (contentJoined.length < 3 && gvLines.length === 0 && hsLines.length === 0) {
+        currentBlock = [];
+        return;
+      }
+
       rows.push({
-        content: contentLines.join('\n') || blockText,
+        content: contentJoined,
         lvd: detectedLvd,
-        gv: gvLines.join('\n') || '- GV hướng dẫn, tổ chức và quan sát học sinh thực hiện hoạt động.',
-        hs: hsLines.join('\n') || '- Học sinh chú ý lắng nghe và tích cực thực hiện nhiệm vụ học tập.'
+        gv: gvLines.join('\n') || '- GV hướng dẫn, tổ chức, làm mẫu và quan sát sửa sai cho học sinh.',
+        hs: hsLines.join('\n') || '- Học sinh chú ý lắng nghe, quan sát và tích cực thực hiện nhiệm vụ theo đội hình.'
       });
       currentBlock = [];
     };
@@ -661,6 +720,7 @@ export function parseTextLessonPlanMultiTask(
     topic: sections.topic,
     week: sections.week,
     grade: sections.grade,
+    rawGrade: sections.rawGrade,
     lessonNum: sections.lessonNum,
     dateRange: sections.dateRange,
     schoolName: sections.schoolName,
@@ -684,9 +744,10 @@ export function parseTextLessonPlanMultiTask(
     detectedSections,
     analysisNotes: [
       `Đã phân tích ${rows.length} dòng hoạt động từ tài liệu "${fallbackFileName}".`,
-      `Phát hiện thông số: Khối ${sections.grade} · Tuần ${sections.week} · Tiết ${sections.lessonNum}.`
+      `Phát hiện thông số: Khối ${sections.rawGrade} · Tuần ${sections.week} · Tiết ${sections.lessonNum}.`
     ],
-    rawTextExcerpt: normalizedText.slice(0, 6000)
+    rawTextExcerpt: normalizedText.slice(0, 6000),
+    fullText: normalizedText
   };
 }
 

@@ -114,6 +114,7 @@ interface TabGeneratorProps {
   onLoadPlanVersion?: (planKey: string, versionId: string) => void;
   onToggleBestVersion?: (planKey: string, versionId: string) => void;
   onDeletePlanVersion?: (planKey: string, versionId: string) => void;
+  onPruneOldVersions?: (targetPlanKey?: string, keepCount?: number) => void;
   userCustomTemplates?: UserCustomTemplate[];
   activeCustomTemplateId?: string | null;
   onApplyCustomTemplate?: (tpl: UserCustomTemplate) => void;
@@ -148,6 +149,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
   onLoadPlanVersion,
   onToggleBestVersion,
   onDeletePlanVersion,
+  onPruneOldVersions,
   userCustomTemplates = [],
   activeCustomTemplateId = null,
   onApplyCustomTemplate,
@@ -208,6 +210,20 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       }),
     [currentMasterPlan, grade, lessonNum, week, topic, title, lessonRows]
   );
+
+  const [justSavedFeedback, setJustSavedFeedback] = useState<boolean>(false);
+
+  const handleQuickSaveTab5 = () => {
+    if (isGuest && onRequireAuth) {
+      onRequireAuth('Lưu thay đổi giáo án & đồng bộ sang Tab 6');
+      return;
+    }
+    if (onSaveOfficialVersion) {
+      onSaveOfficialVersion(currentPlanSnapshot, undefined, false, null, false);
+    }
+    setJustSavedFeedback(true);
+    setTimeout(() => setJustSavedFeedback(false), 2600);
+  };
 
   // Compute textbook PDF page for current lesson
   const sgkInfo = useMemo(() => getSgkPageForLesson(grade, title, topic), [grade, title, topic]);
@@ -522,23 +538,27 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     setLessonRows((prev) => {
       const updated = [...prev];
       if (updated[rowIdx]) {
-        const currentDiags = updated[rowIdx].hsImages && updated[rowIdx].hsImages!.length > 0
-          ? [...updated[rowIdx].hsImages!]
-          : updated[rowIdx].hsImgUrl
-          ? [{ id: `diag_init`, url: updated[rowIdx].hsImgUrl!, title: updated[rowIdx].hsImgTitle || 'Sơ đồ' }]
-          : [];
+        const currentDiags: DiagramAttachment[] =
+          updated[rowIdx].hsImages && updated[rowIdx].hsImages!.length > 0
+            ? [...updated[rowIdx].hsImages!]
+            : updated[rowIdx].hsImgUrl
+            ? [{ id: `diag_init`, url: updated[rowIdx].hsImgUrl!, title: updated[rowIdx].hsImgTitle || 'Sơ đồ' }]
+            : [];
 
         currentDiags.push({
           id: `diag_${Date.now()}`,
           url: formation.svgDataUrl,
-          title: formation.name
+          title: formation.name,
+          userPinned: true
         });
 
         updated[rowIdx] = {
           ...updated[rowIdx],
           hsImgUrl: currentDiags[0]?.url,
           hsImgTitle: currentDiags[0]?.title,
-          hsImages: currentDiags
+          hsImages: currentDiags,
+          userEditedMedia: true,
+          userClearedHsImages: false
         };
       }
       return updated;
@@ -552,21 +572,22 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
       const targetRow = updated[rowIdx];
       if (!targetRow) return prev;
 
-      const currentDiags = targetRow.hsImages && targetRow.hsImages.length > 0
-        ? [...targetRow.hsImages]
-        : targetRow.hsImgUrl
-        ? [{ id: 'diag_init', url: targetRow.hsImgUrl, title: targetRow.hsImgTitle || 'Sơ đồ' }]
-        : [];
+      const currentDiags: DiagramAttachment[] =
+        targetRow.hsImages && targetRow.hsImages.length > 0
+          ? [...targetRow.hsImages]
+          : targetRow.hsImgUrl
+          ? [{ id: 'diag_init', url: targetRow.hsImgUrl, title: targetRow.hsImgTitle || 'Sơ đồ' }]
+          : [];
 
-      currentDiags.splice(diagIdx, 1);
-      targetRow.hsImages = currentDiags;
-      if (currentDiags.length > 0) {
-        targetRow.hsImgUrl = currentDiags[0].url;
-        targetRow.hsImgTitle = currentDiags[0].title;
-      } else {
-        delete targetRow.hsImgUrl;
-        delete targetRow.hsImgTitle;
-      }
+      const nextDiags = currentDiags.filter((_, i) => i !== diagIdx);
+      updated[rowIdx] = {
+        ...targetRow,
+        hsImages: nextDiags,
+        hsImgUrl: nextDiags[0]?.url || undefined,
+        hsImgTitle: nextDiags[0]?.title || undefined,
+        userEditedMedia: true,
+        userClearedHsImages: nextDiags.length === 0
+      };
       return updated;
     });
     showToast('Đã xóa sơ đồ khỏi dòng hoạt động.');
@@ -576,10 +597,19 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     setLessonRows((prev) => {
       const updated = [...prev];
       if (updated[rowIdx]) {
+        const nextAttachment: DiagramAttachment = {
+          id: `cimg_${Date.now()}`,
+          url: imgUrl,
+          title: imgTitle,
+          userPinned: true
+        };
         updated[rowIdx] = {
           ...updated[rowIdx],
           contentImgUrl: imgUrl,
           contentImgTitle: imgTitle,
+          contentImages: [nextAttachment],
+          userEditedMedia: true,
+          userClearedContentImages: false
         };
       }
       return updated;
@@ -648,29 +678,49 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         const row = updated[rIdx];
         if (row) {
           if (col === 'content') {
-            const list = row.contentImages && row.contentImages.length > 0
+            const list: DiagramAttachment[] = row.contentImages && row.contentImages.length > 0
               ? [...row.contentImages]
               : row.contentImgUrl
               ? [{ id: 'init', url: row.contentImgUrl, title: row.contentImgTitle || 'Ảnh' }]
               : [];
-            list.push({ id: `cimg_${Date.now()}`, url: imgUrl, title: imgTitle });
-            updated[rIdx] = { ...row, contentImgUrl: list[0]?.url, contentImgTitle: list[0]?.title, contentImages: list };
+            list.push({ id: `cimg_${Date.now()}`, url: imgUrl, title: imgTitle, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              contentImgUrl: list[0]?.url,
+              contentImgTitle: list[0]?.title,
+              contentImages: list,
+              userEditedMedia: true,
+              userClearedContentImages: false
+            };
           } else if (col === 'gv') {
-            const list = row.gvImages && row.gvImages.length > 0
+            const list: DiagramAttachment[] = row.gvImages && row.gvImages.length > 0
               ? [...row.gvImages]
               : row.gvImgUrl
               ? [{ id: 'init', url: row.gvImgUrl, title: row.gvImgTitle || 'Ảnh GV' }]
               : [];
-            list.push({ id: `gvimg_${Date.now()}`, url: imgUrl, title: imgTitle });
-            updated[rIdx] = { ...row, gvImgUrl: list[0]?.url, gvImgTitle: list[0]?.title, gvImages: list };
+            list.push({ id: `gvimg_${Date.now()}`, url: imgUrl, title: imgTitle, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              gvImgUrl: list[0]?.url,
+              gvImgTitle: list[0]?.title,
+              gvImages: list,
+              userEditedMedia: true
+            };
           } else {
-            const list = row.hsImages && row.hsImages.length > 0
+            const list: DiagramAttachment[] = row.hsImages && row.hsImages.length > 0
               ? [...row.hsImages]
               : row.hsImgUrl
               ? [{ id: 'init', url: row.hsImgUrl, title: row.hsImgTitle || 'Ảnh HS' }]
               : [];
-            list.push({ id: `hsimg_${Date.now()}`, url: imgUrl, title: imgTitle });
-            updated[rIdx] = { ...row, hsImgUrl: list[0]?.url, hsImgTitle: list[0]?.title, hsImages: list };
+            list.push({ id: `hsimg_${Date.now()}`, url: imgUrl, title: imgTitle, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              hsImgUrl: list[0]?.url,
+              hsImgTitle: list[0]?.title,
+              hsImages: list,
+              userEditedMedia: true,
+              userClearedHsImages: false
+            };
           }
         }
         return updated;
@@ -719,23 +769,49 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         const row = updated[rIdx];
         if (row) {
           if (col === 'content') {
-            const list = row.contentImages && row.contentImages.length > 0
+            const list: DiagramAttachment[] = row.contentImages && row.contentImages.length > 0
               ? [...row.contentImages]
               : row.contentImgUrl
               ? [{ id: 'init', url: row.contentImgUrl, title: row.contentImgTitle || 'Sơ đồ' }]
               : [];
-            list.push({ id: `cform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name });
-            updated[rIdx] = { ...row, contentImgUrl: list[0]?.url, contentImgTitle: list[0]?.title, contentImages: list };
+            list.push({ id: `cform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              contentImgUrl: list[0]?.url,
+              contentImgTitle: list[0]?.title,
+              contentImages: list,
+              userEditedMedia: true,
+              userClearedContentImages: false
+            };
           } else if (col === 'gv') {
-            const list = row.gvImages && row.gvImages.length > 0
+            const list: DiagramAttachment[] = row.gvImages && row.gvImages.length > 0
               ? [...row.gvImages]
               : row.gvImgUrl
               ? [{ id: 'init', url: row.gvImgUrl, title: row.gvImgTitle || 'Sơ đồ GV' }]
               : [];
-            list.push({ id: `gvform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name });
-            updated[rIdx] = { ...row, gvImgUrl: list[0]?.url, gvImgTitle: list[0]?.title, gvImages: list };
+            list.push({ id: `gvform_${Date.now()}`, url: formation.svgDataUrl, title: formation.name, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              gvImgUrl: list[0]?.url,
+              gvImgTitle: list[0]?.title,
+              gvImages: list,
+              userEditedMedia: true
+            };
           } else {
-            handleSelectFormation(rIdx, formation);
+            const list: DiagramAttachment[] = row.hsImages && row.hsImages.length > 0
+              ? [...row.hsImages]
+              : row.hsImgUrl
+              ? [{ id: 'diag_init', url: row.hsImgUrl, title: row.hsImgTitle || 'Sơ đồ' }]
+              : [];
+            list.push({ id: `diag_${Date.now()}`, url: formation.svgDataUrl, title: formation.name, userPinned: true });
+            updated[rIdx] = {
+              ...row,
+              hsImgUrl: list[0]?.url,
+              hsImgTitle: list[0]?.title,
+              hsImages: list,
+              userEditedMedia: true,
+              userClearedHsImages: false
+            };
           }
         }
         return updated;
@@ -1424,6 +1500,30 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
             <button
               type="button"
+              onClick={handleQuickSaveTab5}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs ${
+                justSavedFeedback
+                  ? 'bg-emerald-700 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+              title="Lưu ngay mọi thay đổi của tiết giáo án này và đồng bộ làm bản cuối sang Tab 6"
+            >
+              {justSavedFeedback ? (
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Đã Lưu &amp; Đồng Bộ Tab 6</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Lưu Thay Đổi</span>
+                </>
+              )}
+              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+            </button>
+
+            <button
+              type="button"
               onClick={onSwitchToExport}
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition flex items-center gap-1.5"
             >
@@ -1624,13 +1724,22 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                             onClick={() => {
                               setLessonRows((prev) => {
                                 const updated = [...prev];
-                                const cur = updated[idx]?.contentImages || [];
+                                const curRow = updated[idx];
+                                if (!curRow) return prev;
+                                const cur: DiagramAttachment[] =
+                                  curRow.contentImages && curRow.contentImages.length > 0
+                                    ? curRow.contentImages
+                                    : curRow.contentImgUrl
+                                    ? [{ id: 'init', url: curRow.contentImgUrl, title: curRow.contentImgTitle || 'Ảnh' }]
+                                    : [];
                                 const next = cur.filter((_, i) => i !== cIdx);
                                 updated[idx] = {
-                                  ...updated[idx],
+                                  ...curRow,
                                   contentImages: next,
-                                  contentImgUrl: next[0]?.url,
-                                  contentImgTitle: next[0]?.title
+                                  contentImgUrl: next[0]?.url || undefined,
+                                  contentImgTitle: next[0]?.title || undefined,
+                                  userEditedMedia: true,
+                                  userClearedContentImages: next.length === 0
                                 };
                                 return updated;
                               });
@@ -2194,13 +2303,22 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                   onClick={() => {
                                     setLessonRows((prev) => {
                                       const updated = [...prev];
-                                      const cur = updated[idx]?.contentImages || [];
+                                      const curRow = updated[idx];
+                                      if (!curRow) return prev;
+                                      const cur: DiagramAttachment[] =
+                                        curRow.contentImages && curRow.contentImages.length > 0
+                                          ? curRow.contentImages
+                                          : curRow.contentImgUrl
+                                          ? [{ id: 'init', url: curRow.contentImgUrl, title: curRow.contentImgTitle || 'Ảnh' }]
+                                          : [];
                                       const next = cur.filter((_, i) => i !== cIdx);
                                       updated[idx] = {
-                                        ...updated[idx],
+                                        ...curRow,
                                         contentImages: next,
-                                        contentImgUrl: next[0]?.url,
-                                        contentImgTitle: next[0]?.title
+                                        contentImgUrl: next[0]?.url || undefined,
+                                        contentImgTitle: next[0]?.title || undefined,
+                                        userEditedMedia: true,
+                                        userClearedContentImages: next.length === 0
                                       };
                                       return updated;
                                     });
@@ -2218,9 +2336,12 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                       })()}
 
                       {/* Misplaced attachment warning OR Missing-image guidance */}
-                      {contentImgs.some((im) =>
-                        isInvalidColumn1AttachmentForRow(row.content, im.url, im.title, grade, title)
-                      ) && (
+                      {!row.userEditedMedia &&
+                        contentImgs.some(
+                          (im) =>
+                            !im.userPinned &&
+                            isInvalidColumn1AttachmentForRow(row.content, im.url, im.title, grade, title)
+                        ) && (
                         <div className="p-2 bg-red-50 border border-red-300 rounded-lg text-[10.5px] leading-snug text-red-900 flex items-start gap-1.5">
                           <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
                           <div className="flex-1">
@@ -2480,12 +2601,21 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                                     onClick={() => {
                                       setLessonRows((prev) => {
                                         const updated = [...prev];
-                                        const next = (updated[idx]?.gvImages || []).filter((_, i) => i !== gIdx);
+                                        const curRow = updated[idx];
+                                        if (!curRow) return prev;
+                                        const cur: DiagramAttachment[] =
+                                          curRow.gvImages && curRow.gvImages.length > 0
+                                            ? curRow.gvImages
+                                            : curRow.gvImgUrl
+                                            ? [{ id: 'gv_init', url: curRow.gvImgUrl, title: curRow.gvImgTitle || 'Ảnh GV' }]
+                                            : [];
+                                        const next = cur.filter((_, i) => i !== gIdx);
                                         updated[idx] = {
-                                          ...updated[idx],
+                                          ...curRow,
                                           gvImages: next,
-                                          gvImgUrl: next[0]?.url,
-                                          gvImgTitle: next[0]?.title
+                                          gvImgUrl: next[0]?.url || undefined,
+                                          gvImgTitle: next[0]?.title || undefined,
+                                          userEditedMedia: true
                                         };
                                         return updated;
                                       });
@@ -2741,18 +2871,40 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
         </div>
 
         {/* Bottom bar */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs">
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap justify-between items-center gap-3 text-xs">
           <span className="text-slate-500">
-            Giáo án được bảo đảm tương thích in ấn A4 và xuất file Word đầy đủ hình ảnh
+            Mọi chỉnh sửa tại Tab 5 sẽ tự động lưu nháp &amp; đồng bộ làm bản cuối khi chuyển sang Tab 6 (Xem Trước &amp; In).
           </span>
 
-          <button
-            type="button"
-            onClick={onSwitchToExport}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition"
-          >
-            <Eye className="w-4 h-4" /> Xem Trước & In Giáo Án
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={handleQuickSaveTab5}
+              className={`px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition ${
+                justSavedFeedback
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
+            >
+              {justSavedFeedback ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4" /> Đã Lưu Giáo Án Thành Công
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" /> Lưu Giáo Án &amp; Đồng Bộ Tab 6
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={onSwitchToExport}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm transition"
+            >
+              <Eye className="w-4 h-4" /> Xem Trước &amp; In Giáo Án
+            </button>
+          </div>
         </div>
       </div>
 
@@ -2842,6 +2994,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
           onLoadVersion={onLoadPlanVersion}
           onToggleBest={onToggleBestVersion}
           onDeleteVersion={onDeletePlanVersion}
+          onPruneOldVersions={onPruneOldVersions}
           onResetToDefaultBaseline={(target) => {
             if (target.defaultBaselinePlan) {
               setLessonRows(JSON.parse(JSON.stringify(target.defaultBaselinePlan.rows)));

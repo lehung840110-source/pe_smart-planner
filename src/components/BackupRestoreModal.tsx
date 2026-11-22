@@ -18,7 +18,9 @@ import {
   LogOut,
   Copy,
   Check,
-  ExternalLink
+  ExternalLink,
+  Trash2,
+  History
 } from 'lucide-react';
 import { User as FirebaseGoogleUser } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -27,8 +29,15 @@ import {
   ScenarioItem,
   SchoolSettings,
   LessonRow,
-  UserCustomTemplate
+  UserCustomTemplate,
+  CustomLayoutBlueprint
 } from '../types/gdtc';
+import {
+  getSavedLayoutBlueprints,
+  getActiveLayoutBlueprintId,
+  saveLayoutBlueprints,
+  setActiveLayoutBlueprintId
+} from '../utils/customLayoutBlueprint';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import {
   FormationDiagram,
@@ -41,7 +50,12 @@ import {
   mergeCustomFormationsIntoStorage,
   saveCustomFormationsList
 } from '../data/formationDiagrams';
-import { PlanVersionStore, savePlanVersionStoreDB } from '../utils/planVersionHistory';
+import {
+  PlanVersionStore,
+  savePlanVersionStoreDB,
+  getVersionStoreStats,
+  formatBytesApproxVi
+} from '../utils/planVersionHistory';
 import {
   SgkTreeLessonOverride,
   getSgkTreeOverrides,
@@ -108,6 +122,7 @@ interface BackupRestoreModalProps {
     activeTopic?: string;
     activeTitle?: string;
   }) => void;
+  onPruneOldVersions?: (targetPlanKey?: string, keepCount?: number) => void;
   showToast: (msg: string) => void;
 }
 
@@ -127,6 +142,8 @@ export interface BackupDataPackage {
   planVersionStore?: PlanVersionStore;
   userCustomTemplates?: UserCustomTemplate[];
   activeCustomTemplateId?: string | null;
+  customLayoutBlueprints?: CustomLayoutBlueprint[];
+  activeLayoutBlueprintId?: string | null;
   sgkTreeOverrides?: Record<string, SgkTreeLessonOverride>;
   activeState: {
     week: number;
@@ -162,6 +179,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   onToggleCloudAutoSync,
   onDisconnectCloudSync,
   onRestoreSuccess,
+  onPruneOldVersions,
   showToast
 }) => {
   const [storageInfo, setStorageInfo] = useState<{ usedMB: string; quotaMB: string }>({
@@ -256,6 +274,8 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         planVersionStore,
         userCustomTemplates,
         activeCustomTemplateId,
+        customLayoutBlueprints: getSavedLayoutBlueprints(),
+        activeLayoutBlueprintId: getActiveLayoutBlueprintId(),
         sgkTreeOverrides: exportSgkTreeOverrides,
         activeState: {
           week: activeWeek,
@@ -442,6 +462,17 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
 
       if (previewBackup.activeCustomTemplateId) {
         await setAppStateDB('active_custom_template_id', previewBackup.activeCustomTemplateId);
+      }
+
+      if (Array.isArray(previewBackup.customLayoutBlueprints) && previewBackup.customLayoutBlueprints.length > 0) {
+        const existingBps = getSavedLayoutBlueprints();
+        const bpMap = new Map<string, CustomLayoutBlueprint>();
+        existingBps.forEach((b) => bpMap.set(b.id, b));
+        previewBackup.customLayoutBlueprints.forEach((b) => bpMap.set(b.id, b));
+        saveLayoutBlueprints(Array.from(bpMap.values()));
+      }
+      if (previewBackup.activeLayoutBlueprintId !== undefined) {
+        setActiveLayoutBlueprintId(previewBackup.activeLayoutBlueprintId || null);
       }
 
       if (previewBackup.sgkTreeOverrides && typeof previewBackup.sgkTreeOverrides === 'object') {
@@ -831,7 +862,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
               <span className="text-[10.5px] text-emerald-700 font-semibold flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                 Cơ chế tự động lưu IndexedDB đang kích hoạt
@@ -845,6 +876,58 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 <span>{isForceSaving ? 'Đang lưu...' : 'Lưu Tức Thì Ngay'}</span>
               </button>
             </div>
+
+            {/* 1-Click Prune Old Versions — Keep Only 3 Most Recent Per Lesson */}
+            {planVersionStore && onPruneOldVersions && (() => {
+              const vStats = getVersionStoreStats(planVersionStore, 3);
+              return (
+                <div className="pt-2.5 mt-1 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="space-y-0.5">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>Dọn lịch sử phiên bản cũ (Chỉ giữ 3 bản gần nhất / tiết)</span>
+                    </div>
+                    <p className="text-[10.5px] text-slate-600 tabular-nums">
+                      Hiện có <strong>{vStats.totalVersions} phiên bản</strong> của {vStats.totalPlans} tiết (~{formatBytesApproxVi(vStats.estimatedTotalBytes)}).
+                      {vStats.excessVersionsAboveKeep > 0 ? (
+                        <span className="text-amber-700 font-semibold">
+                          {' '}Có thể xóa {vStats.excessVersionsAboveKeep} bản cũ dư thừa (~{formatBytesApproxVi(vStats.estimatedFreedBytes)}) để tiết kiệm dung lượng &amp; làm nhẹ file sao lưu.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-semibold"> Mọi tiết đều đã gọn nhẹ (≤ 3 phiên bản gần nhất).</span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={vStats.excessVersionsAboveKeep === 0}
+                    onClick={() => {
+                      onPruneOldVersions(undefined, 3);
+                      setTimeout(() => {
+                        getStorageEstimate().then(setStorageInfo);
+                      }, 350);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 transition ${
+                      vStats.excessVersionsAboveKeep > 0
+                        ? 'bg-red-600 hover:bg-red-700 text-white shadow-2xs'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-default'
+                    }`}
+                  >
+                    {vStats.excessVersionsAboveKeep > 0 ? (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Xóa {vStats.excessVersionsAboveKeep} bản cũ (Giữ 3 bản/tiết)</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Đã tối ưu ≤ 3 bản/tiết</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Action Grid: Export & Import */}

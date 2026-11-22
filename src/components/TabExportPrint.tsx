@@ -34,10 +34,17 @@ import {
   Clock,
   FileEdit,
   Lock,
-  Gamepad2
+  Gamepad2,
+  FlaskConical
 } from 'lucide-react';
 import mammoth from 'mammoth';
-import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel } from '../types/gdtc';
+import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel, CustomLayoutBlueprint } from '../types/gdtc';
+import {
+  COLUMN_MODE_SPECS,
+  extractRowAttachments,
+  normalizeBlueprintWidths,
+  projectRowForBlueprint
+} from '../utils/customLayoutBlueprint';
 import { customTemplateToMasterPlan } from '../utils/documentParser';
 import { TextCaseButtons } from './TextCaseToolbar';
 import {
@@ -157,6 +164,7 @@ interface TabExportPrintProps {
   onLoadPlanVersion?: (planKey: string, versionId: string) => void;
   onToggleBestVersion?: (planKey: string, versionId: string) => void;
   onDeletePlanVersion?: (planKey: string, versionId: string) => void;
+  onPruneOldVersions?: (targetPlanKey?: string, keepCount?: number) => void;
   onActiveWeekChange?: (w: number) => void;
   userCustomTemplates?: UserCustomTemplate[];
   activeCustomTemplateId?: string | null;
@@ -180,6 +188,9 @@ interface TabExportPrintProps {
   onNavigateToGenerator?: () => void;
   isGuest?: boolean;
   onRequireAuth?: (feature: string) => void;
+  activeLayoutBlueprint?: CustomLayoutBlueprint | null;
+  onClearActiveLayoutBlueprint?: () => void;
+  onNavigateToTemplateLab?: () => void;
 }
 
 export const TabExportPrint: React.FC<TabExportPrintProps> = ({
@@ -202,6 +213,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   onLoadPlanVersion,
   onToggleBestVersion,
   onDeletePlanVersion,
+  onPruneOldVersions,
   onActiveWeekChange,
   userCustomTemplates = [],
   activeCustomTemplateId = null,
@@ -215,12 +227,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   onOpenGoogleDrive,
   onNavigateToGenerator,
   isGuest = false,
-  onRequireAuth
+  onRequireAuth,
+  activeLayoutBlueprint = null,
+  onClearActiveLayoutBlueprint,
+  onNavigateToTemplateLab
 }) => {
   // 1. Dynamic Week Selection (Weeks 1 to 35)
   const [selectedWeek, setSelectedWeek] = useState<number>(() => {
     return initialWeek || currentMasterPlan?.week || 9;
   });
+
+  // Always sync selectedWeek if teacher switches to Tab 6 from a different week in Tab 5
+  useEffect(() => {
+    if (initialWeek && initialWeek !== selectedWeek) {
+      setSelectedWeek(initialWeek);
+    }
+  }, [initialWeek]);
 
   // Mouse-draggable column widths (auto-persisted & synced with Tab 5, A4 Print & Word export)
   const scheduleCols = useResizableTableColumns('weeklySchedule');
@@ -1021,17 +1043,19 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
       if (isPracticeSubRow) {
         const cleanedPractice = sanitizeRowColumn1Media(r, g, resolvedTitle);
+        const rLowerP = (r.content || '').toLowerCase();
+        const isThiDuaRow = rLowerP.includes('thi đua') || rLowerP.includes('trình diễn');
         const targetLtImg = r.content.includes('3.1.')
           ? slotAssets.luyenTapBySlot.dongLoat || (!isGranularRaw ? slotAssets.luyenTapImg : null)
           : r.content.includes('3.2.')
           ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
           : r.content.includes('3.3.')
           ? slotAssets.luyenTapBySlot.capDoi
-          : r.content.includes('3.4.')
+          : r.content.includes('3.4.') && !isThiDuaRow
           ? slotAssets.luyenTapBySlot.caNhan
           : null;
 
-        if (targetLtImg?.url && !cleanedPractice.contentImgUrl) {
+        if (targetLtImg?.url && !cleanedPractice.contentImgUrl && !cleanedPractice.userClearedContentImages && !cleanedPractice.userEditedMedia) {
           return {
             ...cleanedPractice,
             contentImgUrl: targetLtImg.url,
@@ -1276,6 +1300,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
       let changed = false;
       const nextRows = rowsIn.map((origRow, rIdx) => {
+        // Strictly respect any row whose media was manually edited or cleared by the teacher
+        if (origRow.userEditedMedia || origRow.userClearedContentImages) {
+          return origRow;
+        }
         const cleaned = sanitizeRowColumn1Media(origRow, gradeNum, lessonTitleStr);
         if (
           cleaned.contentImgUrl !== origRow.contentImgUrl ||
@@ -1362,13 +1390,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           };
         }
         if (isPracticeSubRow) {
+          const isThiDuaRow = rLower.includes('thi đua') || rLower.includes('trình diễn');
           const targetLtImg = cleaned.content.includes('3.1.')
             ? slotAssets.luyenTapBySlot.dongLoat || (!isGranular ? slotAssets.luyenTapImg : null)
             : cleaned.content.includes('3.2.')
             ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
             : cleaned.content.includes('3.3.')
             ? slotAssets.luyenTapBySlot.capDoi
-            : cleaned.content.includes('3.4.')
+            : cleaned.content.includes('3.4.') && !isThiDuaRow
             ? slotAssets.luyenTapBySlot.caNhan
             : null;
           if (targetLtImg?.url) {
@@ -1407,32 +1436,38 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     };
 
     // Priority 1: Preferred (last edited / active / best) version from persistent planVersionStore
+    // CRITICAL: When edited by the teacher in Tab 5 or Tab 6, Tab 6 MUST display that exact final version
+    // WITHOUT auto-hydrating deleted images/diagrams or overwriting manual edits!
     const preferredVer = getPreferredVersionForPlan(planVersionStore, targetWeek, g, pNum);
     if (preferredVer?.snapshot) {
       const snap = normalizeMasterPlan(preferredVer.snapshot);
-      const isUnpinnedDraft = preferredVer.status === 'draft' && !preferredVer.isStarredBest;
-      // Bypass stale un-pinned auto-drafts if they leaked old Bài thể dục onto Assessment OR disagree with the uploaded 2026–2027 integrated PPCT plan
+      const isUserEditedSource =
+        preferredVer.sourceTab === 'tab-generator' ||
+        preferredVer.sourceTab === 'tab-export' ||
+        preferredVer.status !== 'draft' ||
+        preferredVer.isStarredBest;
+      const isUnpinnedAutoDraft = !isUserEditedSource && preferredVer.status === 'draft' && !preferredVer.isStarredBest;
+
       if (
-        !(isUnpinnedDraft && (hasStaleExerciseLeakInAssessment(snap) || hasStalePpctTitleMismatch(snap)))
+        !(isUnpinnedAutoDraft && (hasStaleExerciseLeakInAssessment(snap) || hasStalePpctTitleMismatch(snap)))
       ) {
-        // Always strip fake .svg placeholders & cross-grade/cross-domain movement leaks, compact verbose 8-beat 2.1 walls,
-        // hydrate empty Column 1 slots from the current image library, and upgrade legacy shared Col 4 formations
-        const cleanedSnapRows = hydrateEmptySlotImages(
-          stripFabricatedGameRows(snap.rows).map((r) => compactOverlongKnowledgeRow(r)),
-          g,
-          snap.title || expectedRule.cleanTitle,
-          snap.topic || expectedRule.topic,
-          expectedRule.warmupGame,
-          expectedRule.practiceGame
-        ).rows;
-        const sanitizedRows =
-          isUnpinnedDraft
-            ? applyGradeDistinctFormationsToRows(
-                sanitizePlanRowsVanDung(cleanedSnapRows, g),
-                g,
-                false
-              )
-            : sanitizePlanRowsVanDung(cleanedSnapRows, g);
+        const finalRows = isUserEditedSource
+          ? stripFabricatedGameRows(snap.rows)
+          : applyGradeDistinctFormationsToRows(
+              sanitizePlanRowsVanDung(
+                hydrateEmptySlotImages(
+                  stripFabricatedGameRows(snap.rows).map((r) => compactOverlongKnowledgeRow(r)),
+                  g,
+                  snap.title || expectedRule.cleanTitle,
+                  snap.topic || expectedRule.topic,
+                  expectedRule.warmupGame,
+                  expectedRule.practiceGame
+                ).rows,
+                g
+              ),
+              g,
+              false
+            );
         const officialSnapInteg = buildMasterPlanIntegrationsFromAddress(
           g,
           targetWeek,
@@ -1442,17 +1477,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         const needsPdfIntegRefresh =
           !snap.integrations?.addressLabel ||
           !snap.integrations?.addressContent ||
-          (isUnpinnedDraft && isPdfIntegratedGrade && snap.integrations.addressContent !== officialSnapInteg.addressContent);
+          (isUnpinnedAutoDraft && isPdfIntegratedGrade && snap.integrations.addressContent !== officialSnapInteg.addressContent);
         const hydratedIntegrations = needsPdfIntegRefresh
           ? {
               ...officialSnapInteg
             }
           : snap.integrations;
         const rowsWithIntegrations =
-          hasActivityIntegrationMarkers(sanitizedRows) && !needsPdfIntegRefresh
-            ? sanitizedRows
+          isUserEditedSource || (hasActivityIntegrationMarkers(finalRows) && !needsPdfIntegRefresh)
+            ? finalRows
             : applyOfficialIntegrationsToLessonRows(
-                sanitizedRows,
+                finalRows,
                 g,
                 targetWeek,
                 pNum,
@@ -1645,6 +1680,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
       let anyPlanChanged = false;
 
       const updatedPlans = prevPlans.map((plan) => {
+        // NEVER overwrite or re-inject images into plans that already have a teacher-edited/saved version in planVersionStore
+        const existingUserVer = getPreferredVersionForPlan(
+          planVersionStore,
+          plan.week,
+          plan.grade,
+          plan.lessonNum
+        );
+        if (
+          existingUserVer &&
+          (existingUserVer.sourceTab === 'tab-generator' ||
+            existingUserVer.sourceTab === 'tab-export' ||
+            existingUserVer.status !== 'draft')
+        ) {
+          return plan;
+        }
+
         const g = plan.grade;
         const titleStr = plan.title || '';
         const topicStr = plan.topic || '';
@@ -1670,6 +1721,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         let planChanged = strippedRows.length !== plan.rows.length;
 
         const nextRows = strippedRows.map((origRow, rIdx) => {
+          // Strictly skip rows the teacher has manually edited or cleared
+          if (origRow.userEditedMedia || origRow.userClearedContentImages) {
+            return origRow;
+          }
           const cleaned = sanitizeRowColumn1Media(origRow, g, titleStr);
           if (
             cleaned.contentImgUrl !== origRow.contentImgUrl ||
@@ -1756,13 +1811,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             };
           }
           if (isPracticeSubRow) {
+            const isThiDuaRow = rLower.includes('thi đua') || rLower.includes('trình diễn');
             const targetLtImg = cleaned.content.includes('3.1.')
               ? slotAssets.luyenTapBySlot.dongLoat || (!isGranular ? slotAssets.luyenTapImg : null)
               : cleaned.content.includes('3.2.')
               ? slotAssets.luyenTapBySlot.toNhom || slotAssets.luyenTapImg
               : cleaned.content.includes('3.3.')
               ? slotAssets.luyenTapBySlot.capDoi
-              : cleaned.content.includes('3.4.')
+              : cleaned.content.includes('3.4.') && !isThiDuaRow
               ? slotAssets.luyenTapBySlot.caNhan
               : null;
             if (targetLtImg?.url) {
@@ -1941,14 +1997,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentContentImages.push({
           id: `diag_${Date.now()}`,
           url: diag.svgDataUrl,
-          title: diag.name
+          title: diag.name,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...targetRow,
           contentImgUrl: currentContentImages[0]?.url,
           contentImgTitle: currentContentImages[0]?.title,
-          contentImages: currentContentImages
+          contentImages: currentContentImages,
+          userEditedMedia: true,
+          userClearedContentImages: false
         };
       } else if (targetCol === 'gv') {
         const currentGvImages: DiagramAttachment[] = targetRow.gvImages && targetRow.gvImages.length > 0
@@ -1960,14 +2019,16 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentGvImages.push({
           id: `diag_${Date.now()}`,
           url: diag.svgDataUrl,
-          title: diag.name
+          title: diag.name,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...targetRow,
           gvImgUrl: currentGvImages[0]?.url,
           gvImgTitle: currentGvImages[0]?.title,
-          gvImages: currentGvImages
+          gvImages: currentGvImages,
+          userEditedMedia: true
         };
       } else {
         // Default to Column 4 (hsImages)
@@ -1980,14 +2041,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentDiagrams.push({
           id: `diag_${Date.now()}`,
           url: diag.svgDataUrl,
-          title: diag.name
+          title: diag.name,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...targetRow,
           hsImgUrl: currentDiagrams[0]?.url,
           hsImgTitle: currentDiagrams[0]?.title,
-          hsImages: currentDiagrams
+          hsImages: currentDiagrams,
+          userEditedMedia: true,
+          userClearedHsImages: false
         };
       }
 
@@ -2022,7 +2086,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         ...targetRow,
         hsImgUrl: currentDiagrams[0]?.url || undefined,
         hsImgTitle: currentDiagrams[0]?.title || undefined,
-        hsImages: currentDiagrams
+        hsImages: currentDiagrams,
+        userEditedMedia: true,
+        userClearedHsImages: currentDiagrams.length === 0
       };
 
       return { ...p, rows: newRows };
@@ -2357,7 +2423,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           hs: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
         };
       } else if (col === 'content') {
-        const currentContentImages = newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0
+        const currentContentImages: DiagramAttachment[] = newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0
           ? [...newRows[rowIndex].contentImages!]
           : newRows[rowIndex].contentImgUrl
           ? [{ id: 'content_img_1', url: newRows[rowIndex].contentImgUrl!, title: newRows[rowIndex].contentImgTitle || 'Ảnh động tác' }]
@@ -2366,17 +2432,20 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentContentImages.push({
           id: `content_img_${Date.now()}`,
           url: imgUrl,
-          title: imgTitle
+          title: imgTitle,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           contentImgUrl: currentContentImages[0]?.url,
           contentImgTitle: currentContentImages[0]?.title,
-          contentImages: currentContentImages
+          contentImages: currentContentImages,
+          userEditedMedia: true,
+          userClearedContentImages: false
         };
       } else if (col === 'gv') {
-        const currentGvImages = newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0
+        const currentGvImages: DiagramAttachment[] = newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0
           ? [...newRows[rowIndex].gvImages!]
           : newRows[rowIndex].gvImgUrl
           ? [{ id: 'gv_img_1', url: newRows[rowIndex].gvImgUrl!, title: newRows[rowIndex].gvImgTitle || 'Hình minh họa GV' }]
@@ -2385,17 +2454,19 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentGvImages.push({
           id: `gv_img_${Date.now()}`,
           url: imgUrl,
-          title: imgTitle
+          title: imgTitle,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           gvImgUrl: currentGvImages[0]?.url,
           gvImgTitle: currentGvImages[0]?.title,
-          gvImages: currentGvImages
+          gvImages: currentGvImages,
+          userEditedMedia: true
         };
       } else {
-        const currentDiagrams = newRows[rowIndex].hsImages && newRows[rowIndex].hsImages!.length > 0
+        const currentDiagrams: DiagramAttachment[] = newRows[rowIndex].hsImages && newRows[rowIndex].hsImages!.length > 0
           ? [...newRows[rowIndex].hsImages!]
           : newRows[rowIndex].hsImgUrl
           ? [{ id: 'diag_1', url: newRows[rowIndex].hsImgUrl!, title: newRows[rowIndex].hsImgTitle || 'Sơ đồ đội hình' }]
@@ -2404,14 +2475,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         currentDiagrams.push({
           id: `diag_${Date.now()}`,
           url: imgUrl,
-          title: imgTitle
+          title: imgTitle,
+          userPinned: true
         });
 
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           hsImgUrl: currentDiagrams[0]?.url,
           hsImgTitle: currentDiagrams[0]?.title,
-          hsImages: currentDiagrams
+          hsImages: currentDiagrams,
+          userEditedMedia: true,
+          userClearedHsImages: false
         };
       }
       return { ...p, rows: newRows };
@@ -2460,7 +2534,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           hs: insertImageAtCursor(oldText, start, end, imgTitle, imgUrl)
         };
       } else if (col === 'content') {
-        const currentContentImages =
+        const currentContentImages: DiagramAttachment[] =
           newRows[rowIndex].contentImages && newRows[rowIndex].contentImages!.length > 0
             ? [...newRows[rowIndex].contentImages!]
             : newRows[rowIndex].contentImgUrl
@@ -2470,17 +2544,20 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           currentContentImages.push({
             id: `content_img_${Date.now()}`,
             url: imgUrl,
-            title: imgTitle
+            title: imgTitle,
+            userPinned: true
           });
         }
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           contentImgUrl: currentContentImages[0]?.url,
           contentImgTitle: currentContentImages[0]?.title,
-          contentImages: currentContentImages
+          contentImages: currentContentImages,
+          userEditedMedia: true,
+          userClearedContentImages: false
         };
       } else if (col === 'gv') {
-        const currentGvImages =
+        const currentGvImages: DiagramAttachment[] =
           newRows[rowIndex].gvImages && newRows[rowIndex].gvImages!.length > 0
             ? [...newRows[rowIndex].gvImages!]
             : newRows[rowIndex].gvImgUrl
@@ -2490,17 +2567,19 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           currentGvImages.push({
             id: `gv_img_${Date.now()}`,
             url: imgUrl,
-            title: imgTitle
+            title: imgTitle,
+            userPinned: true
           });
         }
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           gvImgUrl: currentGvImages[0]?.url,
           gvImgTitle: currentGvImages[0]?.title,
-          gvImages: currentGvImages
+          gvImages: currentGvImages,
+          userEditedMedia: true
         };
       } else {
-        const currentDiagrams =
+        const currentDiagrams: DiagramAttachment[] =
           newRows[rowIndex].hsImages && newRows[rowIndex].hsImages!.length > 0
             ? [...newRows[rowIndex].hsImages!]
             : newRows[rowIndex].hsImgUrl
@@ -2510,14 +2589,17 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           currentDiagrams.push({
             id: `diag_${Date.now()}`,
             url: imgUrl,
-            title: imgTitle
+            title: imgTitle,
+            userPinned: true
           });
         }
         newRows[rowIndex] = {
           ...newRows[rowIndex],
           hsImgUrl: currentDiagrams[0]?.url,
           hsImgTitle: currentDiagrams[0]?.title,
-          hsImages: currentDiagrams
+          hsImages: currentDiagrams,
+          userEditedMedia: true,
+          userClearedHsImages: false
         };
       }
       return { ...p, rows: newRows };
@@ -2609,7 +2691,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         ...newRows[rowIndex],
         contentImgUrl: currentImages[0]?.url || undefined,
         contentImgTitle: currentImages[0]?.title || undefined,
-        contentImages: currentImages
+        contentImages: currentImages,
+        userEditedMedia: true,
+        userClearedContentImages: currentImages.length === 0
       };
       return { ...p, rows: newRows };
     });
@@ -2632,7 +2716,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         ...newRows[rowIndex],
         gvImgUrl: currentImages[0]?.url || undefined,
         gvImgTitle: currentImages[0]?.title || undefined,
-        gvImages: currentImages
+        gvImages: currentImages,
+        userEditedMedia: true
       };
       return { ...p, rows: newRows };
     });
@@ -2809,7 +2894,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         dateRange: customDateRange,
         imageMaxHeightPt: Math.max(82, Math.min(130, Math.round(imageHeight * 0.88))),
         lessonPlanColWidths: lessonCols.widths,
-        scheduleColWidths: scheduleCols.widths
+        scheduleColWidths: scheduleCols.widths,
+        layoutBlueprint: activeLayoutBlueprint || null
       });
 
       showToast(`✅ Đã xuất file Word (.${format.toUpperCase()}): "${filename}"! Hình ảnh hiển thị 100%, sẵn sàng in trực tiếp.`);
@@ -2872,6 +2958,46 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <span className="ml-2 text-emerald-700 font-semibold">· Đã tự động lưu nháp</span>
               )}
             </p>
+            {activeLayoutBlueprint ? (
+              <div className="mt-2 inline-flex flex-wrap items-center gap-2 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-[11px] text-indigo-900">
+                <FlaskConical className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>
+                  Đang áp dụng mẫu riêng: <b>{activeLayoutBlueprint.name}</b> (
+                  {COLUMN_MODE_SPECS[activeLayoutBlueprint.columnMode].shortLabel})
+                </span>
+                {onNavigateToTemplateLab && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToTemplateLab}
+                    className="font-bold text-indigo-700 hover:underline"
+                  >
+                    Chỉnh mẫu
+                  </button>
+                )}
+                {onClearActiveLayoutBlueprint && (
+                  <button
+                    type="button"
+                    onClick={onClearActiveLayoutBlueprint}
+                    className="font-bold text-rose-600 hover:underline"
+                  >
+                    Về mẫu chuẩn 4 cột
+                  </button>
+                )}
+              </div>
+            ) : (
+              onNavigateToTemplateLab && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    onClick={onNavigateToTemplateLab}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 hover:underline"
+                  >
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    <span>Muốn xuất theo mẫu giáo án riêng của trường (2/3/5 cột)? Mở Tab 7 Thử Mẫu Giáo Án →</span>
+                  </button>
+                </div>
+              )
+            )}
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
@@ -4070,10 +4196,46 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 </div>
               </div>
 
+              {/* Optional Custom Blueprint Top Administrative Header (School / National Motto) */}
+              {activeLayoutBlueprint &&
+                (activeLayoutBlueprint.headerBlock.showSchoolHeader ||
+                  activeLayoutBlueprint.headerBlock.showNationalMotto) && (
+                  <div className="flex items-start justify-between gap-4 mb-5 text-xs">
+                    <div
+                      className={
+                        activeLayoutBlueprint.headerBlock.showNationalMotto
+                          ? 'w-[46%] text-center'
+                          : 'w-full text-left'
+                      }
+                    >
+                      {activeLayoutBlueprint.headerBlock.showSchoolHeader && (
+                        <>
+                          <p className="font-bold uppercase leading-snug text-slate-900">
+                            {activeLayoutBlueprint.headerBlock.topLeftLine1 || localSettings.schoolName}
+                          </p>
+                          <p className="font-bold uppercase leading-snug text-slate-800 mt-0.5">
+                            {activeLayoutBlueprint.headerBlock.topLeftLine2 || localSettings.departmentName}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                    {activeLayoutBlueprint.headerBlock.showNationalMotto && (
+                      <div className="w-[54%] text-center">
+                        <p className="font-bold uppercase leading-snug text-slate-900">
+                          CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+                        </p>
+                        <p className="font-bold underline underline-offset-4 text-slate-800 mt-0.5">
+                          Độc lập – Tự do – Hạnh phúc
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
               {/* Title Section - In HOA, KHÔNG gạch ngang dưới tiêu đề */}
               <div className="text-center space-y-1.5 mb-6">
                 <h2 className="font-extrabold text-sm sm:text-base uppercase tracking-wider text-slate-900">
-                  KẾ HOẠCH BÀI DẠY TUẦN {plan.week} – KHỐI {plan.grade}
+                  {(activeLayoutBlueprint?.headerBlock?.documentTitlePrefix || 'KẾ HOẠCH BÀI DẠY')} TUẦN {plan.week} – KHỐI {plan.grade}
                 </h2>
                 {isEditMode ? (
                   <div className="flex justify-center items-center gap-2 py-0.5">
@@ -4122,6 +4284,12 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-wide">
                         {cleanLessonTitleForHeader(plan.title)}
                       </h3>
+                      {activeLayoutBlueprint?.headerBlock?.showTeacherMetaLine && (
+                        <p className="text-[11px] text-slate-700 pt-0.5">
+                          <b>Môn học:</b> Giáo dục thể chất &nbsp;|&nbsp; <b>Lớp:</b> Khối {plan.grade} &nbsp;|&nbsp;{' '}
+                          <b>Giáo viên:</b> {localSettings.teacherName}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -4130,7 +4298,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               {/* I. YÊU CẦU CẦN ĐẠT - Chi tiết đầy đủ các năng lực và giảm tải cho HS khuyết tật */}
               <div className="space-y-2 mb-5">
                 <h4 className="font-bold uppercase text-xs border-b border-slate-300 pb-1 text-slate-800">
-                  I. YÊU CẦU CẦN ĐẠT
+                  {activeLayoutBlueprint?.sectionHeadings?.sec1 || 'I. YÊU CẦU CẦN ĐẠT'}
                 </h4>
                 {isEditMode ? (
                   <div className="pl-2 space-y-3 text-xs bg-slate-50 p-3 rounded-xl border border-slate-200">
@@ -4479,7 +4647,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               {/* II. ĐỊA ĐIỂM – PHƯƠNG TIỆN */}
               <div className="space-y-1.5 mb-5">
                 <h4 className="font-bold uppercase text-xs border-b border-slate-300 pb-1 text-slate-800">
-                  II. ĐỊA ĐIỂM – PHƯƠNG TIỆN
+                  {activeLayoutBlueprint?.sectionHeadings?.sec2 || 'II. ĐỊA ĐIỂM – PHƯƠNG TIỆN'}
                 </h4>
                 {isEditMode ? (
                   <div className="pl-2 space-y-1.5 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
@@ -4525,7 +4693,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 <div className="flex items-center justify-between border-b border-slate-300 pb-1">
                   <h4 className="font-bold uppercase text-xs text-slate-800 flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-blue-600" />
-                    <span>III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU</span>
+                    <span>{activeLayoutBlueprint?.sectionHeadings?.sec3 || 'III. CÁC HOẠT ĐỘNG DẠY HỌC CHỦ YẾU'}</span>
                   </h4>
                   <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-full">
                     {plan.rows.length} hoạt động tương xứng 1:1
@@ -4597,7 +4765,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       ).filter(
                         (att) =>
                           Boolean(att?.url && att.url.trim()) &&
-                          !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title)
+                          (Boolean(row.userEditedMedia) ||
+                            Boolean(att.userPinned) ||
+                            !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title))
                       );
 
                       const mGvImgs: DiagramAttachment[] = (
@@ -4706,6 +4876,144 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     Vuốt ngang sang phải để chỉnh sửa đầy đủ 4 cột giáo án.
                   </p>
                 )}
+                {/* Custom 2/3/5-Column Table Render when a non-4-col Custom Layout Blueprint is active (View/Print mode) */}
+                {!isEditMode && activeLayoutBlueprint && activeLayoutBlueprint.columnMode !== '4col_standard' ? (
+                  (() => {
+                    const spec = COLUMN_MODE_SPECS[activeLayoutBlueprint.columnMode];
+                    const bpWidths = normalizeBlueprintWidths(activeLayoutBlueprint.columnWidths, spec.colCount);
+                    const bpHeaders = spec.defaultHeaders.map(
+                      (def, idx) => activeLayoutBlueprint.columnHeaders[idx]?.trim() || def
+                    );
+                    return (
+                      <table className="w-full table-fixed min-w-[700px] print:min-w-0 border-collapse border border-slate-400 text-xs mt-2">
+                        <colgroup>
+                          {bpWidths.map((w, idx) => (
+                            <col key={idx} style={{ width: `${w}%` }} />
+                          ))}
+                        </colgroup>
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400">
+                            {bpHeaders.map((hdr, idx) => (
+                              <th key={idx} className="border border-slate-400 p-2 text-center">
+                                {hdr}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {plan.rows.map((row, rowIdx) => {
+                            const extracted = extractRowAttachments(row);
+                            const validC1 = extracted.c1Images.filter(
+                              (att) =>
+                                Boolean(row.userEditedMedia) ||
+                                Boolean(att.userPinned) ||
+                                !isInvalidColumn1AttachmentForRow(
+                                  row.content,
+                                  att.url,
+                                  att.title,
+                                  plan.grade,
+                                  plan.title
+                                )
+                            );
+                            const cells = projectRowForBlueprint(row, rowIdx, activeLayoutBlueprint.columnMode, {
+                              c1Images: validC1,
+                              c3Images: extracted.c3Images,
+                              c4Images: extracted.c4Images
+                            });
+                            return (
+                              <tr key={rowIdx} className="hover:bg-slate-50/50 align-top">
+                                {cells.map((cell, cIdx) => (
+                                  <td
+                                    key={cIdx}
+                                    className={`border border-slate-400 p-2 align-top leading-relaxed break-words ${
+                                      cell.align === 'center' ? 'text-center' : 'text-left'
+                                    } ${cell.bold ? 'font-bold' : ''}`}
+                                  >
+                                    {cell.blocks.map((blk, bIdx) => (
+                                      <div
+                                        key={bIdx}
+                                        className={bIdx > 0 ? 'mt-2 pt-1.5 border-t border-dashed border-slate-300' : ''}
+                                      >
+                                        {blk.badge && (
+                                          <p className="font-bold text-blue-900 text-[11px] mb-0.5">
+                                            • {blk.badge}:
+                                          </p>
+                                        )}
+                                        {blk.sourceCol === 'c1' ? (
+                                          <div className="space-y-2">
+                                            {splitColumn1ContentForMedia(blk.text || '', blk.images || []).map(
+                                              (seg, sIdx) =>
+                                                seg.type === 'text' ? (
+                                                  <RichTextWithImages
+                                                    key={sIdx}
+                                                    text={seg.text}
+                                                    imageHeight={imageHeight}
+                                                    className="whitespace-pre-line font-medium"
+                                                  />
+                                                ) : (
+                                                  <div key={sIdx} className="flex flex-col items-center gap-1.5 my-1">
+                                                    {seg.images.map((im, iIdx) => (
+                                                      <div key={im.id || iIdx} className="p-1 bg-slate-50 rounded border border-slate-200 text-center">
+                                                        <img
+                                                          src={im.url}
+                                                          alt={im.title}
+                                                          style={{ maxHeight: `${imageHeight}px` }}
+                                                          className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                                        />
+                                                        {im.title && (
+                                                          <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5">
+                                                            {im.title}
+                                                          </p>
+                                                        )}
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                )
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <>
+                                            {blk.text && (
+                                              <RichTextWithImages
+                                                text={blk.text}
+                                                imageHeight={imageHeight}
+                                                className="whitespace-pre-line"
+                                              />
+                                            )}
+                                            {blk.images && blk.images.length > 0 && (
+                                              <div className="flex flex-col items-center gap-1.5 mt-1.5">
+                                                {blk.images.map((im, iIdx) => (
+                                                  <div key={im.id || iIdx} className="p-1 bg-slate-50 rounded border border-slate-200 text-center">
+                                                    <img
+                                                      src={im.url}
+                                                      alt={im.title}
+                                                      style={{ maxHeight: `${imageHeight}px` }}
+                                                      className="w-auto mx-auto object-contain rounded bg-white shadow-2xs"
+                                                    />
+                                                    {im.title && (
+                                                      <p className="text-[9.5px] text-slate-700 font-semibold mt-0.5">
+                                                        {im.title}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                ) : (
+                <>
                 <ColumnWidthToolbar
                   tableKey="lessonPlan"
                   widths={lessonCols.widths}
@@ -4721,14 +5029,22 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   </colgroup>
                   <thead>
                     <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400">
-                      {[
-                        'Nội Dung / Kỹ Thuật Động Tác',
-                        'LVĐ',
-                        'Hoạt Động Của Giáo Viên',
-                        'Hoạt Động Của Học Sinh / Sơ Đồ'
-                      ].map((label, colIdx) => (
+                      {(activeLayoutBlueprint && activeLayoutBlueprint.columnMode === '4col_standard'
+                        ? [
+                            activeLayoutBlueprint.columnHeaders[0] || 'Nội Dung / Kỹ Thuật Động Tác',
+                            activeLayoutBlueprint.columnHeaders[1] || 'LVĐ',
+                            activeLayoutBlueprint.columnHeaders[2] || 'Hoạt Động Của Giáo Viên',
+                            activeLayoutBlueprint.columnHeaders[3] || 'Hoạt Động Của Học Sinh / Sơ Đồ'
+                          ]
+                        : [
+                            'Nội Dung / Kỹ Thuật Động Tác',
+                            'LVĐ',
+                            'Hoạt Động Của Giáo Viên',
+                            'Hoạt Động Của Học Sinh / Sơ Đồ'
+                          ]
+                      ).map((label, colIdx) => (
                         <th
-                          key={label}
+                          key={colIdx}
                           className={`relative border border-slate-400 ${colIdx === 1 ? 'p-1' : 'p-2'} text-center select-none`}
                         >
                           {label}
@@ -4760,7 +5076,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       ).filter(
                         (att) =>
                           Boolean(att?.url && att.url.trim()) &&
-                          !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title)
+                          (Boolean(row.userEditedMedia) ||
+                            Boolean(att.userPinned) ||
+                            !isInvalidColumn1AttachmentForRow(row.content, att.url, att.title, plan.grade, plan.title))
                       );
 
                       // Gather all diagrams/images for Column 3 (Hoạt động GV)
@@ -5469,28 +5787,32 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     })}
                   </tbody>
                 </table>
+                </>
+                )}
                 </div>
               </div>
 
               {/* IV. ĐIỀU CHỈNH SAU BÀI DẠY */}
-              <div className="space-y-1.5 mb-6">
-                <h4 className="font-bold uppercase text-xs border-b border-slate-300 pb-1 text-slate-800">
-                  IV. ĐIỀU CHỈNH SAU BÀI DẠY
-                </h4>
-                {isEditMode ? (
-                  <textarea
-                    value={plan.postLessonAdjustment || ''}
-                    onChange={(e) => handlePlanMetaChange(plan.id, 'postLessonAdjustment', e.target.value)}
-                    rows={2}
-                    placeholder="Ghi chú điều chỉnh sau bài dạy..."
-                    className="w-full p-1.5 border border-blue-300 rounded text-xs"
-                  />
-                ) : (
-                  <p className="text-slate-400 italic text-[11px] pl-3">
-                    {plan.postLessonAdjustment || '…………………………………………………………………………………………………………………………………………………………………………………………'}
-                  </p>
-                )}
-              </div>
+              {(!activeLayoutBlueprint || activeLayoutBlueprint.sectionHeadings.showSec4 !== false) && (
+                <div className="space-y-1.5 mb-6">
+                  <h4 className="font-bold uppercase text-xs border-b border-slate-300 pb-1 text-slate-800">
+                    {activeLayoutBlueprint?.sectionHeadings?.sec4 || 'IV. ĐIỀU CHỈNH SAU BÀI DẠY'}
+                  </h4>
+                  {isEditMode ? (
+                    <textarea
+                      value={plan.postLessonAdjustment || ''}
+                      onChange={(e) => handlePlanMetaChange(plan.id, 'postLessonAdjustment', e.target.value)}
+                      rows={2}
+                      placeholder="Ghi chú điều chỉnh sau bài dạy..."
+                      className="w-full p-1.5 border border-blue-300 rounded text-xs"
+                    />
+                  ) : (
+                    <p className="text-slate-400 italic text-[11px] pl-3">
+                      {plan.postLessonAdjustment || '…………………………………………………………………………………………………………………………………………………………………………………………'}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Ngắt trang in giữa các tiết (in A4 tự động sang trang) */}
               {!isSingle && planIdx < displayedPlans.length - 1 && (
@@ -5501,54 +5823,117 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         })}
 
         {/* KHỐI DUYỆT DUY NHẤT Ở SAU CÙNG CỦA TOÀN BỘ TẬP GIÁO ÁN (BGH DUYỆT) */}
-        {displayedPlans.length > 0 && (
+        {displayedPlans.length > 0 && (!activeLayoutBlueprint || activeLayoutBlueprint.signatureBlock.enabled !== false) && (
           <div className="mt-10 pt-6 border-t-2 border-slate-300 break-inside-avoid">
-
             <div className="text-right text-slate-700 italic mb-4 text-xs">
               {customApprovalDate}
             </div>
 
-            <div className="grid grid-cols-3 gap-4 text-center font-bold text-xs">
-              <div className="space-y-16">
-                <p className="uppercase text-[11px] text-slate-800">BGH DUYỆT</p>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={localSettings.approverPrincipal || 'Võ Thị Thuận'}
-                    onChange={(e) => setLocalSettings({ ...localSettings, approverPrincipal: e.target.value })}
-                    className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
-                  />
-                ) : (
-                  <p className="font-bold text-slate-900 text-xs">{localSettings.approverPrincipal || 'Võ Thị Thuận'}</p>
-                )}
-              </div>
-              <div className="space-y-16">
-                <p className="uppercase text-[11px] text-slate-800">TỔ TRƯỞNG CHUYÊN MÔN</p>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={localSettings.approverHead || 'Bùi Ngọc Lâm'}
-                    onChange={(e) => setLocalSettings({ ...localSettings, approverHead: e.target.value })}
-                    className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
-                  />
-                ) : (
-                  <p className="font-bold text-slate-900 text-xs">{localSettings.approverHead || 'Bùi Ngọc Lâm'}</p>
-                )}
-              </div>
-              <div className="space-y-16">
-                <p className="uppercase text-[11px] text-slate-800">GIÁO VIÊN SOẠN BÀI</p>
-                {isEditMode ? (
-                  <input
-                    type="text"
-                    value={localSettings.teacherName || 'Lê Quốc Hưng'}
-                    onChange={(e) => setLocalSettings({ ...localSettings, teacherName: e.target.value })}
-                    className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
-                  />
-                ) : (
-                  <p className="font-bold text-slate-900 text-xs">{localSettings.teacherName || 'Lê Quốc Hưng'}</p>
-                )}
-              </div>
-            </div>
+            {(() => {
+              const sig = activeLayoutBlueprint?.signatureBlock;
+              const sigCount = sig?.count ?? 3;
+              const leftTitle = sig?.leftTitle || 'BGH DUYỆT';
+              const middleTitle = sig?.middleTitle || 'TỔ TRƯỞNG CHUYÊN MÔN';
+              const rightTitle = sig?.rightTitle || 'GIÁO VIÊN SOẠN BÀI';
+
+              if (sigCount === 1) {
+                return (
+                  <div className="grid grid-cols-2 gap-4 text-center font-bold text-xs">
+                    <div />
+                    <div className="space-y-16">
+                      <p className="uppercase text-[11px] text-slate-800">{rightTitle}</p>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={localSettings.teacherName || 'Lê Quốc Hưng'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, teacherName: e.target.value })}
+                          className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                        />
+                      ) : (
+                        <p className="font-bold text-slate-900 text-xs">{localSettings.teacherName || 'Lê Quốc Hưng'}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (sigCount === 2) {
+                return (
+                  <div className="grid grid-cols-2 gap-4 text-center font-bold text-xs">
+                    <div className="space-y-16">
+                      <p className="uppercase text-[11px] text-slate-800">{leftTitle}</p>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={localSettings.approverPrincipal || 'Võ Thị Thuận'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, approverPrincipal: e.target.value })}
+                          className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                        />
+                      ) : (
+                        <p className="font-bold text-slate-900 text-xs">{localSettings.approverPrincipal || 'Võ Thị Thuận'}</p>
+                      )}
+                    </div>
+                    <div className="space-y-16">
+                      <p className="uppercase text-[11px] text-slate-800">{rightTitle}</p>
+                      {isEditMode ? (
+                        <input
+                          type="text"
+                          value={localSettings.teacherName || 'Lê Quốc Hưng'}
+                          onChange={(e) => setLocalSettings({ ...localSettings, teacherName: e.target.value })}
+                          className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                        />
+                      ) : (
+                        <p className="font-bold text-slate-900 text-xs">{localSettings.teacherName || 'Lê Quốc Hưng'}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-3 gap-4 text-center font-bold text-xs">
+                  <div className="space-y-16">
+                    <p className="uppercase text-[11px] text-slate-800">{leftTitle}</p>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={localSettings.approverPrincipal || 'Võ Thị Thuận'}
+                        onChange={(e) => setLocalSettings({ ...localSettings, approverPrincipal: e.target.value })}
+                        className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                      />
+                    ) : (
+                      <p className="font-bold text-slate-900 text-xs">{localSettings.approverPrincipal || 'Võ Thị Thuận'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-16">
+                    <p className="uppercase text-[11px] text-slate-800">{middleTitle}</p>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={localSettings.approverHead || 'Bùi Ngọc Lâm'}
+                        onChange={(e) => setLocalSettings({ ...localSettings, approverHead: e.target.value })}
+                        className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                      />
+                    ) : (
+                      <p className="font-bold text-slate-900 text-xs">{localSettings.approverHead || 'Bùi Ngọc Lâm'}</p>
+                    )}
+                  </div>
+                  <div className="space-y-16">
+                    <p className="uppercase text-[11px] text-slate-800">{rightTitle}</p>
+                    {isEditMode ? (
+                      <input
+                        type="text"
+                        value={localSettings.teacherName || 'Lê Quốc Hưng'}
+                        onChange={(e) => setLocalSettings({ ...localSettings, teacherName: e.target.value })}
+                        className="w-full text-center p-1 border border-blue-300 rounded font-bold text-xs"
+                      />
+                    ) : (
+                      <p className="font-bold text-slate-900 text-xs">{localSettings.teacherName || 'Lê Quốc Hưng'}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -6116,6 +6501,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               onDeletePlanVersion(planKey, versionId);
             }
           }}
+          onPruneOldVersions={onPruneOldVersions}
           onResetToDefaultBaseline={(target) => {
             if (!target.defaultBaselinePlan) return;
             const fresh = normalizeMasterPlan(target.defaultBaselinePlan);
