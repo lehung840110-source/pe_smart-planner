@@ -2144,7 +2144,7 @@ export default function App() {
                 Còn {authUser.daysRemaining} ngày Full
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Giai đoạn trải nghiệm miễn phí trọn 1 học kỳ kết thúc ngày <strong>{formatVnDate(authUser.trialEndsAt)}</strong> · Cam kết <strong>không mất giáo án cũ</strong>. Ủng hộ duy trì máy chủ từ <strong>20k/tuần</strong> · <strong>129k/học kỳ</strong> · <strong>199k/năm</strong>.
+                Giai đoạn trải nghiệm miễn phí trọn 1 học kỳ kết thúc ngày <strong>{formatVnDate(authUser.trialEndsAt)}</strong> · Cam kết <strong>không mất giáo án cũ</strong>. Thầy/cô có thể ủng hộ tùy tâm hoặc xem các gói tính năng khi cần.
               </span>
             </div>
             <button
@@ -2169,7 +2169,7 @@ export default function App() {
                 Chế Độ Cơ Bản
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ · Toàn bộ giáo án cũ vẫn giữ nguyên &amp; tiếp tục xem/tra cứu miễn phí. Chung tay duy trì hệ thống từ <strong>20k/tuần</strong> · <strong>129k/học kỳ</strong> · <strong>199k/năm</strong> (giảm 20% nhóm 3–5 GV).
+                Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ · Toàn bộ giáo án cũ vẫn giữ nguyên &amp; tiếp tục xem/tra cứu miễn phí. Nhập mã kích hoạt hoặc xem các gói tính năng để tiếp tục mở khóa đầy đủ.
               </span>
             </div>
             <button
@@ -2178,7 +2178,7 @@ export default function App() {
               className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
             >
               <Coffee className="w-3.5 h-3.5" />
-              <span>Gia Hạn / Nhập Mã</span>
+              <span>Ủng Hộ / Nhập Mã</span>
             </button>
           </div>
         </div>
@@ -2193,8 +2193,8 @@ export default function App() {
               title="Tab 1 · Quét & Bóc Tách Ảnh Từ SGK Điện Tử"
               description={
                 isSubscriptionExpired
-                  ? 'Giai đoạn 30 ngày dùng thử Full đã kết thúc. Nâng cấp gói duy trì hệ thống từ 20.000đ/tuần (hoặc 49k/tháng · 149k/học kỳ) để tiếp tục quét SGK & phân tích Gemini Vision AI.'
-                  : 'Đăng nhập 1 chạm bằng tài khoản cá nhân (không cần mật khẩu) để mở khóa miễn phí 30 ngày toàn bộ tính năng quét SGK Khối 1–5, làm sạch nền AI và phân tích kỹ thuật Gemini Vision.'
+                  ? 'Giai đoạn trải nghiệm miễn phí 1 học kỳ đã kết thúc. Vui lòng nhập mã kích hoạt hoặc liên hệ tác giả để tiếp tục sử dụng tính năng quét SGK & phân tích Gemini Vision AI.'
+                  : 'Đăng nhập 1 chạm bằng tài khoản cá nhân (không cần mật khẩu) để mở khóa miễn phí trọn 1 học kỳ toàn bộ tính năng quét SGK Khối 1–5, làm sạch nền AI và phân tích kỹ thuật Gemini Vision.'
               }
               highlights={[
                 'Cắt vùng ảnh chuẩn nét cao từ từng trang SGK Khối 1, 2, 3, 4, 5',
@@ -2250,8 +2250,8 @@ export default function App() {
               title="Tab 3 · Giáo Án Mẫu & Chỉnh Sửa Trực Tiếp 4 Cột"
               description={
                 isSubscriptionExpired
-                  ? 'Giai đoạn 30 ngày dùng thử Full đã kết thúc. Toàn bộ giáo án cũ của thầy/cô vẫn an toàn ở Tab 6. Nâng cấp Pro từ 20k/tuần để mở lại chỉnh sửa trực tiếp 4 cột & nạp mẫu riêng.'
-                  : 'Đăng nhập 1 chạm (không cần mật khẩu) để trải nghiệm miễn phí 30 ngày không gian chỉnh sửa trực tiếp 4 cột chuẩn Công văn 5512 và nạp mẫu giáo án riêng.'
+                  ? 'Giai đoạn trải nghiệm miễn phí 1 học kỳ đã kết thúc. Toàn bộ giáo án cũ của thầy/cô vẫn an toàn ở Tab 6. Vui lòng nhập mã kích hoạt hoặc liên hệ tác giả để mở lại chỉnh sửa trực tiếp 4 cột & nạp mẫu riêng.'
+                  : 'Đăng nhập 1 chạm (không cần mật khẩu) để trải nghiệm miễn phí trọn 1 học kỳ không gian chỉnh sửa trực tiếp 4 cột chuẩn Công văn 5512 và nạp mẫu giáo án riêng.'
               }
               highlights={[
                 'Sửa trực tiếp toàn bộ bảng 4 cột chuẩn 1:1 (Nội dung · LVĐ · GV · HS)',

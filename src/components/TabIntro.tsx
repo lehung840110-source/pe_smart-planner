@@ -4,7 +4,9 @@ import {
   Award,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Clock,
   FileSpreadsheet,
   FileText,
@@ -55,6 +57,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
   liveStats
 }) => {
   const [activeGuideStep, setActiveGuideStep] = useState<number>(0);
+  const [showFeaturePlans, setShowFeaturePlans] = useState<boolean>(false);
 
   const solvedProblems = [
     {
@@ -494,6 +497,19 @@ export const TabIntro: React.FC<TabIntroProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
+              onClick={() => setShowFeaturePlans((v) => !v)}
+              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-800 hover:text-blue-800 border border-slate-200 hover:border-blue-300 text-xs font-bold flex items-center gap-1.5 transition"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <span>{showFeaturePlans ? 'Ẩn các gói tính năng' : 'Xem các gói tính năng'}</span>
+              {showFeaturePlans ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
               onClick={() => (onOpenAuthMode ? onOpenAuthMode('register') : onOpenAuth?.())}
               className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
             >
@@ -513,57 +529,59 @@ export const TabIntro: React.FC<TabIntroProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
-            <div className="font-bold text-slate-800 flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10.5px] uppercase">Miễn phí trọn đời</span>
-              <span>Chế Độ Cơ Bản &amp; Cam Kết Dữ Liệu</span>
+        {showFeaturePlans && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-1">
+            <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
+              <div className="font-bold text-slate-800 flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10.5px] uppercase">Cơ bản</span>
+                <span>Chế Độ Cơ Bản &amp; Cam Kết Dữ Liệu</span>
+              </div>
+              <ul className="space-y-1.5 text-slate-600">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                  <span>Duyệt, tra cứu Thư viện ảnh SGK (Tab 2) &amp; Kịch bản sư phạm (Tab 4).</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                  <span>Xem trước bản A4 theo từng khối hoặc gộp cả 5 khối &amp; giữ nguyên 100% giáo án cũ đã tạo.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                  <span>Không khóa cứng dữ liệu, luôn trân trọng thành quả soạn giảng của giáo viên.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                  <span>Thông báo nhắc nhẹ trước 7 ngày khi kết thúc giai đoạn trải nghiệm 1 học kỳ.</span>
+                </li>
+              </ul>
             </div>
-            <ul className="space-y-1.5 text-slate-600">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Duyệt, tra cứu Thư viện ảnh SGK (Tab 2) &amp; Kịch bản sư phạm (Tab 4).</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Xem trước bản A4 theo từng khối hoặc gộp cả 5 khối &amp; giữ nguyên 100% giáo án cũ đã tạo.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Không khóa cứng dữ liệu, luôn trân trọng thành quả soạn giảng của giáo viên.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Thông báo nhắc nhẹ trước 7 ngày khi kết thúc giai đoạn trải nghiệm 1 học kỳ.</span>
-              </li>
-            </ul>
-          </div>
 
-          <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-4 space-y-2">
-            <div className="font-bold text-emerald-950 flex items-center gap-2 flex-wrap">
-              <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Full 1 Học Kỳ (120 Ngày)</span>
-              <span>Mở Khóa 100% Tính Năng Không Rào Cản</span>
+            <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-4 space-y-2">
+              <div className="font-bold text-emerald-950 flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Full Tính Năng · 1 Học Kỳ</span>
+                <span>Mở Khóa 100% Tính Năng Không Rào Cản</span>
+              </div>
+              <ul className="space-y-1.5 text-emerald-900">
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Thư viện 308+ hình ảnh SGK (Khối 1–5)</strong>, quét bóc tách SGK (Tab 1) &amp; làm sạch ảnh AI.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Studio Tạo Sơ Đồ Đội Hình Pro:</strong> lưới ô vuông, đường song song, nhóm hình, nối nét liền/đứt/mũi tên, xoay góc, Mirror &amp; canh thẳng hàng.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp mẫu riêng, chốt lịch sử &amp; <strong>kết nối Google Docs / Drive</strong>, xuất Word/PDF.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <span><strong>Chia sẻ vì cộng đồng GDTC:</strong> mở miễn phí trọn 1 học kỳ, hỗ trợ kích hoạt linh hoạt theo cá nhân hoặc Tổ/Nhóm chuyên môn (không ràng buộc chi phí).</span>
+                </li>
+              </ul>
             </div>
-            <ul className="space-y-1.5 text-emerald-900">
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Thư viện 308+ hình ảnh SGK (Khối 1–5)</strong>, quét bóc tách SGK (Tab 1) &amp; làm sạch ảnh AI.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Studio Tạo Sơ Đồ Đội Hình Pro:</strong> lưới ô vuông, đường song song, nhóm hình, nối nét liền/đứt/mũi tên, xoay góc, Mirror &amp; canh thẳng hàng.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp mẫu riêng, chốt lịch sử &amp; <strong>kết nối Google Docs / Drive</strong>, xuất Word/PDF.</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Ủng hộ / Duy trì linh hoạt sau 1 học kỳ:</strong> tùy tâm hoặc chọn gói nhẹ từ <strong>20k/tuần · 129k/học kỳ · 199k/năm</strong> (giảm 20% nhóm 3–5 GV).</span>
-              </li>
-            </ul>
           </div>
-        </div>
+        )}
       </section>
 
       {/* 3. Core Features Grid */}

@@ -107,7 +107,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [loggedInTab, setLoggedInTab] = useState<'overview' | 'billing' | 'admin'>('overview');
 
   // Billing & Key redemption state
-  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('week_1');
+  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('semester_1');
+  const [showFeaturePlans, setShowFeaturePlans] = useState(false);
   const [licenseCodeInput, setLicenseCodeInput] = useState('');
   const [isRedeeming, setIsRedeeming] = useState(false);
 
@@ -159,6 +160,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (isOpen) {
       setErrorMsg(null);
       setSuccessMsg(null);
+      setShowFeaturePlans(false);
       if (!email && rememberedAccounts.length > 0) {
         setEmail(rememberedAccounts[0].email);
         if (!fullName) setFullName(rememberedAccounts[0].fullName);
@@ -388,20 +390,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const buildRenewalMailtoHref = (isGroup = false) => {
     const plan = SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0];
     const subject = isGroup
-      ? `[SmartPlan GDTC Pro] Đăng ký Gói Tổ/Nhóm (3–5 GV · Giảm 20%) - ${user?.email || email}`
-      : `[SmartPlan GDTC Pro] Đăng ký gia hạn ${plan.name} (${plan.priceText}) - ${user?.email || email}`;
+      ? `[SmartPlan GDTC Pro] Liên hệ Gói Tổ/Nhóm (3–5 GV) - ${user?.email || email}`
+      : `[SmartPlan GDTC Pro] Liên hệ kích hoạt ${plan.name} - ${user?.email || email}`;
     const body = [
       'Kính gửi thầy Lê Quốc Hưng,',
       '',
       isGroup
-        ? 'Tổ chuyên môn chúng tôi muốn đăng ký Gói Nhóm (3–5 giáo viên, giảm 20% phí duy trì hệ thống):'
-        : 'Tôi muốn đăng ký gia hạn sử dụng SmartPlan GDTC Pro (phí duy trì hệ thống):',
+        ? 'Tổ chuyên môn chúng tôi muốn tìm hiểu và đăng ký kích hoạt Gói Tổ / Nhóm chuyên môn (3–5 giáo viên):'
+        : 'Tôi muốn liên hệ kích hoạt / gia hạn tính năng trên SmartPlan GDTC Pro:',
       `- Tài khoản Email đại diện: ${user?.email || email || '(chưa nhập)'}`,
       `- Họ và tên: ${user?.fullName || fullName || '(chưa nhập)'}`,
       `- Đơn vị / Trường: ${user?.schoolName || schoolName || '(chưa nhập)'}`,
       isGroup
-        ? `- Số lượng giáo viên dự kiến: 3–5 giáo viên · Gói quan tâm: ${plan.name}`
-        : `- Gói lựa chọn: ${plan.name} — ${plan.priceText} (${plan.perMonthText})`,
+        ? `- Số lượng giáo viên dự kiến: 3–5 giáo viên · Gói tính năng quan tâm: ${plan.name}`
+        : `- Gói tính năng quan tâm: ${plan.name} (${plan.durationDays} ngày Full tính năng)`,
       '',
       'Vui lòng gửi lại hướng dẫn và Mã kích hoạt giúp tôi. Xin cảm ơn!'
     ].join('\n');
@@ -428,18 +430,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       const params: SendGmailParams = {
         to: ADMIN_NOTIFICATION_EMAIL,
-        subject: `[SmartPlan GDTC Pro] Đăng ký gia hạn ${plan.name} (${plan.priceText}) - ${user.email}`,
+        subject: `[SmartPlan GDTC Pro] Liên hệ kích hoạt ${plan.name} - ${user.email}`,
         htmlBody: `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
-            <h2 style="color: #1d4ed8;">Yêu Cầu Gia Hạn SmartPlan GDTC Pro</h2>
-            <p>Thầy/cô vừa gửi yêu cầu duy trì hệ thống:</p>
+            <h2 style="color: #1d4ed8;">Yêu Cầu Kích Hoạt Tính Năng SmartPlan GDTC Pro</h2>
+            <p>Thầy/cô vừa gửi yêu cầu hỗ trợ kích hoạt tài khoản:</p>
             <ul>
               <li><strong>Họ và tên:</strong> ${user.fullName}</li>
               <li><strong>Email tài khoản:</strong> ${user.email}</li>
               <li><strong>Đơn vị / Trường:</strong> ${user.schoolName}</li>
-              <li><strong>Gói đăng ký:</strong> ${plan.name} — <strong>${plan.priceText}</strong> (${plan.perMonthText})</li>
+              <li><strong>Gói tính năng quan tâm:</strong> ${plan.name} (+${plan.durationDays} ngày Full tính năng)</li>
             </ul>
-            <p>Quản trị viên vui lòng mở mục <em>Quản trị Gia hạn</em> trong ứng dụng để cấp mã hoặc bấm gia hạn trực tiếp cho email trên.</p>
+            <p>Quản trị viên vui lòng mở mục <em>Quản Trị Mã</em> trong ứng dụng để cấp mã hoặc gia hạn trực tiếp cho email trên.</p>
           </div>
         `
       };
@@ -560,10 +562,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
                     <p className="font-bold text-amber-900">
-                      Đã hết 30 ngày dùng thử miễn phí
+                      Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ
                     </p>
                     <p className="text-[11.5px] text-amber-800 mt-0.5">
-                      Để tiếp tục sử dụng <strong>{gateReason}</strong>, mời thầy/cô gia hạn duy trì hệ thống chỉ <strong>20.000đ/tuần</strong> (chỉ bằng 1 ly cà phê) hoặc nhập Mã kích hoạt bên dưới.
+                      Để tiếp tục sử dụng <strong>{gateReason}</strong>, thầy/cô có thể nhập Mã kích hoạt hoặc xem thông tin ủng hộ &amp; các gói tính năng bên dưới.
                     </p>
                   </div>
                 </div>
@@ -717,7 +719,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold text-[11px] transition"
                       >
                         <Coffee className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Ủng hộ duy trì máy chủ / Xem gói gia hạn</span>
+                        <span>Ủng hộ duy trì hệ thống &amp; tiếp sức học sinh</span>
                       </button>
                     </div>
                   ) : (
@@ -725,14 +727,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="inline-flex items-center gap-1.5 font-extrabold text-rose-900">
                           <Clock className="w-4 h-4 text-rose-600" />
-                          Đã Hết 30 Ngày Dùng Thử Miễn Phí
+                          Đã Kết Thúc Giai Đoạn Trải Nghiệm Miễn Phí 1 Học Kỳ
                         </span>
                         <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10.5px] font-bold">
-                          TẠM KHÓA TẠO GIÁO ÁN
+                          CHẾ ĐỘ CƠ BẢN
                         </span>
                       </div>
                       <p className="text-[11.5px] text-rose-900/90 leading-relaxed">
-                        Hồ sơ và các giáo án thầy/cô đã soạn vẫn được lưu an toàn. Mời thầy/cô gia hạn với chi phí duy trì hệ thống chỉ <strong>20.000đ/tuần</strong> (chỉ bằng 1 ly cà phê) để mở lại toàn bộ tính năng.
+                        Hồ sơ và toàn bộ giáo án thầy/cô đã soạn vẫn được lưu giữ an toàn. Mời thầy/cô nhập Mã kích hoạt hoặc liên hệ tác giả để tiếp tục mở khóa đầy đủ tính năng.
                       </p>
                       <button
                         type="button"
@@ -740,7 +742,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition"
                       >
                         <Coffee className="w-4 h-4" />
-                        <span>Mở Gói Gia Hạn (20k/Tuần) &amp; Nhập Mã Kích Hoạt</span>
+                        <span>Ủng Hộ Duy Trì &amp; Nhập Mã Kích Hoạt</span>
                       </button>
                     </div>
                   )}
@@ -819,84 +821,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {/* TAB 2: BILLING & VOLUNTARY SUPPORT */}
+              {/* TAB 2: VOLUNTARY SUPPORT & COLLAPSIBLE FEATURE PLANS (NO PRICES) */}
               {loggedInTab === 'billing' && (
                 <div className="space-y-4">
                   {/* Official Vietcombank Support & Charitable Student Fund Card */}
                   <DonationSupportCard
                     compact
                     defaultShowQr
-                    suggestedAmountVnd={
-                      (SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).priceVnd
-                    }
-                    suggestedTransferNote={`Ung ho GDTC ${user.email.split('@')[0]}`}
+                    suggestedTransferNote={`Ung ho SmartPlan GDTC - ${user.fullName || user.email.split('@')[0]}`}
                     onShowToast={showToast}
                   />
-
-                  {/* 4 Pricing Plans Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {SUBSCRIPTION_PLANS.map((plan) => {
-                      const isSelected = selectedPlanId === plan.id;
-                      return (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          onClick={() => setSelectedPlanId(plan.id)}
-                          className={`text-left p-3.5 rounded-xl border-2 transition relative ${
-                            isSelected
-                              ? 'border-emerald-600 bg-emerald-50/70 shadow-xs'
-                              : 'border-slate-200 bg-white hover:border-slate-300'
-                          }`}
-                        >
-                          {plan.popular && (
-                            <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
-                              Hợp nhịp học kỳ
-                            </span>
-                          )}
-                          {plan.bestValue && (
-                            <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
-                              Tối ưu nhất
-                            </span>
-                          )}
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="font-extrabold text-slate-900 text-xs">
-                              {plan.name}
-                            </span>
-                            <span className="font-extrabold text-emerald-700 text-sm tabular-nums">
-                              {plan.priceText}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center justify-between text-[10.5px]">
-                            <span className="text-slate-600">{plan.tagline}</span>
-                          </div>
-                          <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]">
-                            <span>{plan.perMonthText}</span>
-                            <span>·</span>
-                            <span>+{plan.durationDays} ngày Full</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Group / Department Discount Card */}
-                  <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-start gap-2 text-[11px] text-indigo-950">
-                      <Users className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-extrabold">{GROUP_DISCOUNT_LABEL}</p>
-                        <p className="text-indigo-800/85">
-                          Phù hợp cho các thầy/cô cùng tổ chuyên môn GDTC đăng ký chung để tiết kiệm thêm chi phí.
-                        </p>
-                      </div>
-                    </div>
-                    <a
-                      href={buildRenewalMailtoHref(true)}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] whitespace-nowrap text-center shrink-0 transition"
-                    >
-                      Đăng Ký Nhóm (-20%)
-                    </a>
-                  </div>
 
                   {/* Activation Key Redemption Box */}
                   <form
@@ -912,7 +846,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="text"
                         value={licenseCodeInput}
                         onChange={(e) => setLicenseCodeInput(e.target.value.toUpperCase())}
-                        placeholder="VD: GDTC-W1-7K9M-XXXX"
+                        placeholder="VD: GDTC-S1-7K9M-XXXX"
                         className="flex-1 px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-mono text-xs font-bold tracking-wider uppercase focus:border-blue-500 focus:outline-none"
                       />
                       <button
@@ -933,43 +867,135 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </p>
                   </form>
 
-                  {/* Contact Author to Get Activation Key */}
-                  <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
-                    <div className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
-                      <Mail className="w-4 h-4 text-blue-600" />
-                      <span>Đăng ký nhận Mã Kích Hoạt qua tác giả Lê Quốc Hưng</span>
-                    </div>
-                    <p className="text-[11px] text-slate-700 leading-relaxed">
-                      Gửi yêu cầu gói{' '}
-                      <strong>
-                        {(SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).name} (
-                        {(SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).priceText})
-                      </strong>{' '}
-                      tới hộp thư cá nhân{' '}
-                      <strong className="text-blue-700">{ADMIN_NOTIFICATION_EMAIL}</strong> để nhận mã kích hoạt hoặc gia hạn trực tiếp trên tài khoản.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <a
-                        href={buildRenewalMailtoHref()}
-                        className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
-                      >
-                        <Mail className="w-3.5 h-3.5" />
-                        <span>Mở Email Gửi Yêu Cầu</span>
-                      </a>
-                      <button
-                        type="button"
-                        disabled={isSendingGmail}
-                        onClick={handleSendRenewalViaGmail}
-                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
-                      >
-                        {isSendingGmail ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  {/* Collapsible Toggle: Hidden by default — only opens when user clicks "Xem các gói tính năng" */}
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowFeaturePlans((v) => !v)}
+                      className="w-full px-4 py-3 flex items-center justify-between gap-2 text-left bg-slate-50/80 hover:bg-blue-50/70 transition"
+                    >
+                      <span className="inline-flex items-center gap-2 font-bold text-slate-800 text-xs">
+                        <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>Xem các gói tính năng</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700">
+                        <span>{showFeaturePlans ? 'Thu gọn' : 'Mở xem chi tiết'}</span>
+                        {showFeaturePlans ? (
+                          <ChevronUp className="w-4 h-4" />
                         ) : (
-                          <Send className="w-3.5 h-3.5" />
+                          <ChevronDown className="w-4 h-4" />
                         )}
-                        <span>Gửi Nhanh Qua Gmail</span>
-                      </button>
-                    </div>
+                      </span>
+                    </button>
+
+                    {showFeaturePlans && (
+                      <div className="p-4 border-t border-slate-200 space-y-3.5">
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Ứng dụng hiện đang được chia sẻ miễn phí cho cộng đồng giáo viên GDTC. Thầy/cô có thể chọn khung thời gian tính năng phù hợp và liên hệ tác giả để được hỗ trợ kích hoạt:
+                        </p>
+
+                        {/* 4 Feature Plans Grid — NO PRICES */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {SUBSCRIPTION_PLANS.map((plan) => {
+                            const isSelected = selectedPlanId === plan.id;
+                            return (
+                              <button
+                                key={plan.id}
+                                type="button"
+                                onClick={() => setSelectedPlanId(plan.id)}
+                                className={`text-left p-3.5 rounded-xl border-2 transition relative ${
+                                  isSelected
+                                    ? 'border-emerald-600 bg-emerald-50/70 shadow-xs'
+                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                }`}
+                              >
+                                {plan.popular && (
+                                  <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
+                                    Hợp nhịp học kỳ
+                                  </span>
+                                )}
+                                {plan.bestValue && (
+                                  <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
+                                    Trọn năm học
+                                  </span>
+                                )}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-extrabold text-slate-900 text-xs">
+                                    {plan.name}
+                                  </span>
+                                  {isSelected && (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  )}
+                                </div>
+                                <p className="mt-1 text-[10.5px] text-slate-600 leading-snug">
+                                  {plan.tagline}
+                                </p>
+                                <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]">
+                                  <span>+{plan.durationDays} ngày Full tính năng</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {/* Group / Department Card — NO PRICES */}
+                        <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-start gap-2 text-[11px] text-indigo-950">
+                            <Users className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-extrabold">{GROUP_DISCOUNT_LABEL}</p>
+                              <p className="text-indigo-800/85">
+                                Phù hợp cho các thầy/cô cùng tổ chuyên môn GDTC đăng ký sử dụng đồng bộ tại trường.
+                              </p>
+                            </div>
+                          </div>
+                          <a
+                            href={buildRenewalMailtoHref(true)}
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] whitespace-nowrap text-center shrink-0 transition"
+                          >
+                            Liên Hệ Tổ / Nhóm
+                          </a>
+                        </div>
+
+                        {/* Contact Author to Get Activation Key — NO PRICES */}
+                        <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
+                          <div className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
+                            <Mail className="w-4 h-4 text-blue-600" />
+                            <span>Liên hệ nhận Mã Kích Hoạt qua tác giả Lê Quốc Hưng</span>
+                          </div>
+                          <p className="text-[11px] text-slate-700 leading-relaxed">
+                            Gửi yêu cầu kích hoạt{' '}
+                            <strong>
+                              {(SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).name}
+                            </strong>{' '}
+                            tới hộp thư cá nhân{' '}
+                            <strong className="text-blue-700">{ADMIN_NOTIFICATION_EMAIL}</strong> để nhận mã kích hoạt hoặc gia hạn trực tiếp trên tài khoản.
+                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <a
+                              href={buildRenewalMailtoHref()}
+                              className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                            >
+                              <Mail className="w-3.5 h-3.5" />
+                              <span>Mở Email Gửi Yêu Cầu</span>
+                            </a>
+                            <button
+                              type="button"
+                              disabled={isSendingGmail}
+                              onClick={handleSendRenewalViaGmail}
+                              className="py-2.5 px-3 rounded-xl bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                            >
+                              {isSendingGmail ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Send className="w-3.5 h-3.5" />
+                              )}
+                              <span>Gửi Nhanh Qua Gmail</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -1013,10 +1039,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                           <div className="text-[11px]">{p.shortLabel} ({p.durationDays} ngày)</div>
                           <div
                             className={`text-[10px] ${
-                              adminGenPlanId === p.id ? 'text-indigo-100' : 'text-emerald-700 font-bold'
+                              adminGenPlanId === p.id ? 'text-indigo-100' : 'text-emerald-700 font-semibold'
                             }`}
                           >
-                            {p.priceText}
+                            +{p.durationDays} ngày Full
                           </div>
                         </button>
                       ))}
@@ -1125,11 +1151,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                               <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
                                 <span className="text-[10px] text-slate-500">Gia hạn / Tặng thêm:</span>
                                 {[
-                                  { days: 7, label: '+7 ngày (20k)' },
-                                  { days: 30, label: '+30 ngày (49k)' },
-                                  { days: 120, label: '+120 ngày (1 HK Free)' },
-                                  { days: 135, label: '+Học kỳ (129k)' },
-                                  { days: 365, label: '+Năm (199k)' }
+                                  { days: 7, label: '+7 ngày' },
+                                  { days: 30, label: '+30 ngày' },
+                                  { days: 120, label: '+120 ngày (1 HK)' },
+                                  { days: 135, label: '+135 ngày (HK)' },
+                                  { days: 365, label: '+365 ngày (1 Năm)' }
                                 ].map((btn) => (
                                   <button
                                     key={btn.days}
@@ -1211,7 +1237,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
                     <p className="font-bold text-amber-900">
-                      Mở khóa Full 100% tính năng miễn phí 30 ngày
+                      Mở khóa Full 100% tính năng miễn phí trọn 1 học kỳ (120 ngày)
                     </p>
                     <p className="text-[11px] text-amber-800 mt-0.5">
                       Đăng nhập nhanh bằng tài khoản cá nhân (không cần mật khẩu) để sử dụng: <strong>{gateReason}</strong>

@@ -318,7 +318,7 @@ export const Header: React.FC<HeaderProps> = ({
                       ? authUser.planTier === 'admin_lifetime'
                         ? `Quản trị viên: ${authUser.email} (Toàn quyền vĩnh viễn)`
                         : authUser.hasFullAccess === false
-                        ? `Đã hết 30 ngày dùng thử — Bấm để gia hạn từ 20k/tuần`
+                        ? `Đã kết thúc giai đoạn trải nghiệm — Bấm để xem hỗ trợ & nhập mã kích hoạt`
                         : `Đang đăng nhập: ${authUser.email} · Còn ${authUser.daysRemaining ?? 120} ngày Full`
                       : 'Đăng nhập tài khoản cá nhân (không cần mật khẩu) · Mở Full miễn phí trọn 1 học kỳ'
                   }

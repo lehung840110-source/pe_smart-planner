@@ -30,8 +30,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
     durationDays: 7,
     priceVnd: 20000,
     priceText: '20.000đ',
-    perMonthText: '20k / tuần',
-    tagline: 'Linh hoạt theo tuần · Chỉ bằng 1 ly cà phê'
+    perMonthText: 'Linh hoạt theo tuần',
+    tagline: 'Mở khóa toàn bộ tính năng soạn giảng theo tuần'
   },
   {
     id: 'month_1',
@@ -41,8 +41,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
     durationDays: 30,
     priceVnd: 49000,
     priceText: '49.000đ',
-    perMonthText: '~12k / tuần',
-    tagline: 'Phù hợp giai đoạn cao điểm · Tiết kiệm 39%'
+    perMonthText: 'Linh hoạt theo tháng',
+    tagline: 'Phù hợp giai đoạn cao điểm & chuyên đề thao giảng'
   },
   {
     id: 'semester_1',
@@ -52,8 +52,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
     durationDays: 135,
     priceVnd: 129000,
     priceText: '129.000đ',
-    perMonthText: '~29k / tháng',
-    tagline: 'Hợp nhịp 1 học kỳ · Ổn định & tiết kiệm',
+    perMonthText: 'Trọn nhịp 1 học kỳ',
+    tagline: 'Đồng bộ xuyên suốt 1 học kỳ · Ổn định & đầy đủ',
     popular: true
   },
   {
@@ -64,13 +64,13 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
     durationDays: 365,
     priceVnd: 199000,
     priceText: '199.000đ',
-    perMonthText: '~16k / tháng',
-    tagline: 'Tối ưu nhất cả năm học · Tiết kiệm nhất',
+    perMonthText: 'Trọn vẹn cả năm học',
+    tagline: 'Toàn quyền tính năng & lưu trữ suốt cả năm học',
     bestValue: true
   }
 ];
 
-export const GROUP_DISCOUNT_LABEL = 'Gói Tổ / Nhóm chuyên môn (3–5 giáo viên): Giảm ngay 20% khi đăng ký chung';
+export const GROUP_DISCOUNT_LABEL = 'Gói Tổ / Nhóm chuyên môn (3–5 giáo viên): Kích hoạt đồng bộ cho cả tổ bộ môn GDTC';
 
 export const DONATION_BANK_INFO = {
   bankCode: 'VCB',
