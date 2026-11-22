@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Activity,
   Award,
@@ -11,10 +11,12 @@ import {
   FileSpreadsheet,
   FileText,
   FileUp,
+  Film,
   History,
   Images,
   Layers,
   Palette,
+  PlayCircle,
   Printer,
   ScanLine,
   School,
@@ -58,6 +60,14 @@ export const TabIntro: React.FC<TabIntroProps> = ({
 }) => {
   const [activeGuideStep, setActiveGuideStep] = useState<number>(0);
   const [showFeaturePlans, setShowFeaturePlans] = useState<boolean>(false);
+  const introVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const handleJumpAndPlayIntroVideo = () => {
+    document.getElementById('intro-video-showcase')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+      introVideoRef.current?.play().catch(() => {});
+    }, 350);
+  };
 
   const solvedProblems = [
     {
@@ -284,6 +294,14 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               )}
               <button
                 type="button"
+                onClick={handleJumpAndPlayIntroVideo}
+                className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+              >
+                <PlayCircle className="w-4 h-4" />
+                <span>Xem Video Giới Thiệu</span>
+              </button>
+              <button
+                type="button"
                 onClick={() =>
                   document.getElementById('intro-slide-deck')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                 }
@@ -351,6 +369,59 @@ export const TabIntro: React.FC<TabIntroProps> = ({
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 1V. Official Introduction Video Showcase */}
+      <section
+        id="intro-video-showcase"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden"
+      >
+        <div className="px-5 py-4 bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 text-sky-300 flex items-center justify-center shrink-0">
+              <Film className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-extrabold text-white leading-snug">
+                Video Giới Thiệu Ứng Dụng SmartPlan GDTC Pro
+              </h3>
+              <p className="text-[11.5px] text-blue-200/90 mt-0.5">
+                Xem tổng quan trực quan quy trình soạn giáo án GDTC chuẩn GDPT 2018, kho 308+ hình ảnh SGK &amp; Studio sơ đồ đội hình
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const video = introVideoRef.current;
+              if (!video) return;
+              if (video.paused) {
+                video.play().catch(() => {});
+              } else {
+                video.pause();
+              }
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white border border-white/20 text-xs font-bold flex items-center gap-1.5 transition shrink-0"
+          >
+            <PlayCircle className="w-4 h-4 text-emerald-300" />
+            <span>Phát / Tạm dừng</span>
+          </button>
+        </div>
+
+        <div className="p-4 sm:p-6 bg-slate-950/95 flex justify-center">
+          <div className="w-full max-w-4xl rounded-xl overflow-hidden shadow-2xl border border-slate-700/80 bg-black">
+            <video
+              ref={introVideoRef}
+              src="/assets/aistudio/smartplan_gdtc_pro_gioi_thieu_15413708.mp4"
+              controls
+              playsInline
+              preload="metadata"
+              className="w-full aspect-video object-contain bg-black block"
+            >
+              Trình duyệt của thầy cô chưa hỗ trợ phát trực tiếp video MP4.
+            </video>
           </div>
         </div>
       </section>
