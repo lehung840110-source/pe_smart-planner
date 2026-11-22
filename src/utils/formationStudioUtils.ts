@@ -32,7 +32,9 @@ export interface FormationElement {
     | 'goal_gate'
     | 'zigzag_path'
     | 'jump_arc'
-    | 'star_target';
+    | 'star_target'
+    | 'mini_square'
+    | 'mini_triangle';
   x: number;
   y: number;
   width?: number;
@@ -59,6 +61,9 @@ export interface FormationElement {
   groupId?: string;
   /** Uniform scale multiplier for fixed-geometry icons (gv, cone, marker, flag) */
   scale?: number;
+  /** Mirror / Flip flags */
+  flipX?: boolean;
+  flipY?: boolean;
 }
 
 function getRotatedRectBox(cx: number, cy: number, w: number, h: number, rotationDeg?: number) {
@@ -277,7 +282,9 @@ export function scaleFormationElements(
       el.type === 'hand_left' ||
       el.type === 'hand_right' ||
       el.type === 'hands_pair' ||
-      el.type === 'star_target'
+      el.type === 'star_target' ||
+      el.type === 'mini_square' ||
+      el.type === 'mini_triangle'
     ) {
       const baseR =
         el.radius ||
@@ -427,6 +434,452 @@ export function alignFormationElements(
   });
 }
 
+export type ShapePatternItemType = 'hoop' | 'mini_square' | 'mini_triangle' | 'hs';
+export type ShapePatternLayout = 'circle' | 'arc' | 'triangle' | 'rectangle' | 'zigzag';
+
+/**
+ * Generate a locked group of N small shapes arranged in a geometric formation pattern:
+ * circle, arc, triangle, rectangle, or zigzag.
+ */
+export function generateShapePatternElements(options: {
+  itemType: ShapePatternItemType;
+  layout: ShapePatternLayout;
+  count: number;
+  itemRadius?: number;
+  numbered?: boolean;
+  color?: string;
+  centerX?: number;
+  centerY?: number;
+}): FormationElement[] {
+  const count = Math.max(3, Math.min(24, Math.round(options.count || 8)));
+  const itemType = options.itemType;
+  const layout = options.layout;
+  const cx = options.centerX ?? 320;
+  const cy = options.centerY ?? 235;
+  const defaultRadius =
+    itemType === 'hs' ? 11 : itemType === 'hoop' ? 16 : 15;
+  const r = Math.max(8, Math.min(30, options.itemRadius ?? defaultRadius));
+  const defaultColor =
+    itemType === 'hoop'
+      ? '#06b6d4'
+      : itemType === 'mini_square'
+      ? '#2563eb'
+      : itemType === 'mini_triangle'
+      ? '#ea580c'
+      : '#1e293b';
+  const color = options.color || defaultColor;
+
+  const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const points: Array<{ x: number; y: number }> = [];
+
+  if (layout === 'circle') {
+    const circRadius = clampNum((count * (r * 2.45)) / (2 * Math.PI), 56, 132);
+    for (let i = 0; i < count; i++) {
+      const ang = (2 * Math.PI * i) / count - Math.PI / 2;
+      points.push({
+        x: cx + Math.cos(ang) * circRadius,
+        y: cy + Math.sin(ang) * circRadius
+      });
+    }
+  } else if (layout === 'arc') {
+    const startDeg = 118;
+    const endDeg = 242;
+    const spanRad = ((endDeg - startDeg) * Math.PI) / 180;
+    const arcRadius = clampNum(((count - 1) * (r * 2.55)) / spanRad, 62, 145);
+    const rawPts: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < count; i++) {
+      const t = count === 1 ? 0.5 : i / (count - 1);
+      const ang = ((startDeg + (endDeg - startDeg) * t) * Math.PI) / 180;
+      rawPts.push({
+        x: Math.cos(ang) * arcRadius,
+        y: Math.sin(ang) * arcRadius
+      });
+    }
+    const minX = Math.min(...rawPts.map((p) => p.x));
+    const maxX = Math.max(...rawPts.map((p) => p.x));
+    const minY = Math.min(...rawPts.map((p) => p.y));
+    const maxY = Math.max(...rawPts.map((p) => p.y));
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+    rawPts.forEach((p) => points.push({ x: cx + (p.x - midX), y: cy + (p.y - midY) }));
+  } else if (layout === 'triangle') {
+    const side = clampNum((count / 3) * (r * 2.55), 118, 250);
+    const triH = (side * Math.sqrt(3)) / 2;
+    const v0 = { x: cx, y: cy - triH * 0.56 };
+    const v1 = { x: cx + side / 2, y: cy + triH * 0.44 };
+    const v2 = { x: cx - side / 2, y: cy + triH * 0.44 };
+    const verts = [v0, v1, v2];
+    for (let i = 0; i < count; i++) {
+      const pos = (i / count) * 3;
+      const edgeIdx = Math.min(2, Math.floor(pos));
+      const localT = pos - edgeIdx;
+      const a = verts[edgeIdx];
+      const b = verts[(edgeIdx + 1) % 3];
+      points.push({
+        x: a.x + (b.x - a.x) * localT,
+        y: a.y + (b.y - a.y) * localT
+      });
+    }
+  } else if (layout === 'rectangle') {
+    const perimeter = clampNum(count * (r * 2.55), 320, 860);
+    let rectH = clampNum(perimeter / 4.9, 86, 220);
+    let rectW = clampNum(rectH * 1.45, 130, 350);
+    if (count === 4) {
+      rectW = 150;
+      rectH = 104;
+    }
+    const left = cx - rectW / 2;
+    const right = cx + rectW / 2;
+    const top = cy - rectH / 2;
+    const bottom = cy + rectH / 2;
+    const totalP = 2 * (rectW + rectH);
+    for (let i = 0; i < count; i++) {
+      const d = (i / count) * totalP;
+      if (d <= rectW) {
+        points.push({ x: left + d, y: top });
+      } else if (d <= rectW + rectH) {
+        points.push({ x: right, y: top + (d - rectW) });
+      } else if (d <= 2 * rectW + rectH) {
+        points.push({ x: right - (d - rectW - rectH), y: bottom });
+      } else {
+        points.push({ x: left, y: bottom - (d - 2 * rectW - rectH) });
+      }
+    }
+  } else {
+    // zigzag (hình gấp khúc)
+    const stepX = clampNum(r * 2.55, 28, 56);
+    const totalW = Math.min(460, (count - 1) * stepX);
+    const actualStepX = count > 1 ? totalW / (count - 1) : 0;
+    const ampY = clampNum(r * 2.15, 28, 54);
+    const startX = cx - totalW / 2;
+    for (let i = 0; i < count; i++) {
+      points.push({
+        x: startX + i * actualStepX,
+        y: cy + (i % 2 === 0 ? -ampY : ampY)
+      });
+    }
+  }
+
+  const now = Date.now();
+  const groupId = `pat_${layout}_${now}`;
+  return points.map((pt, idx) => ({
+    id: `${itemType}_pat_${now}_${idx}`,
+    type: itemType,
+    x: clampNum(Math.round(pt.x), 24, 616),
+    y: clampNum(Math.round(pt.y), 70, 405),
+    radius: r,
+    color,
+    label: options.numbered ? String(idx + 1) : undefined,
+    groupId
+  }));
+}
+
+/**
+ * Mirror (flip) selected elements horizontally or vertically.
+ * When duplicate is true, creates an independent mirrored clone placed beside the original.
+ */
+export function mirrorFormationElements(
+  elements: FormationElement[],
+  targetIds: string[],
+  axis: 'horizontal' | 'vertical',
+  options?: { duplicate?: boolean }
+): { elements: FormationElement[]; nextSelectedIds: string[] } {
+  const idSet = new Set(targetIds);
+  const selected = elements.filter((el) => idSet.has(el.id));
+  if (selected.length === 0) return { elements, nextSelectedIds: targetIds };
+
+  let minX = 9999;
+  let maxX = -9999;
+  let minY = 9999;
+  let maxY = -9999;
+  selected.forEach((el) => {
+    const b = getElementBoundingBox(el);
+    minX = Math.min(minX, b.x);
+    maxX = Math.max(maxX, b.x + b.w);
+    minY = Math.min(minY, b.y);
+    maxY = Math.max(maxY, b.y + b.h);
+  });
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const transformElement = (el: FormationElement, pivotX: number, pivotY: number): FormationElement => {
+    const copy: FormationElement = JSON.parse(JSON.stringify(el));
+    const isLineLike =
+      copy.type === 'line_solid' ||
+      copy.type === 'line_dashed' ||
+      copy.type === 'arrow_straight' ||
+      copy.type === 'arrow_curved';
+
+    if (axis === 'horizontal') {
+      copy.x = Math.round(2 * pivotX - copy.x);
+      if (copy.endX !== undefined) {
+        copy.endX = Math.round(2 * pivotX - copy.endX);
+      }
+      if (copy.rotation) {
+        copy.rotation = (360 - (copy.rotation % 360)) % 360;
+      }
+      if (copy.type === 'foot_left') {
+        copy.type = 'foot_right';
+      } else if (copy.type === 'foot_right') {
+        copy.type = 'foot_left';
+      } else if (copy.type === 'hand_left') {
+        copy.type = 'hand_right';
+      } else if (copy.type === 'hand_right') {
+        copy.type = 'hand_left';
+      } else if (!isLineLike) {
+        copy.flipX = !copy.flipX;
+      }
+    } else {
+      copy.y = Math.round(2 * pivotY - copy.y);
+      if (copy.endY !== undefined) {
+        copy.endY = Math.round(2 * pivotY - copy.endY);
+      }
+      if (copy.rotation) {
+        copy.rotation = (180 - (copy.rotation % 360) + 360) % 360;
+      }
+      copy.flipY = !copy.flipY;
+    }
+
+    return copy;
+  };
+
+  if (options?.duplicate) {
+    const now = Date.now();
+    const clonedGroupMap = new Map<string, string>();
+    const gap = 18;
+    const pivotX = axis === 'horizontal' ? maxX + gap / 2 : cx;
+    const pivotY = axis === 'vertical' ? maxY + gap / 2 : cy;
+
+    let clones = selected.map((el, idx) => {
+      const mirrored = transformElement(el, pivotX, pivotY);
+      mirrored.id = `${mirrored.type}_mir_${now}_${idx}`;
+      if (el.groupId) {
+        if (!clonedGroupMap.has(el.groupId)) {
+          clonedGroupMap.set(el.groupId, `grp_mir_${now}_${clonedGroupMap.size}`);
+        }
+        mirrored.groupId = clonedGroupMap.get(el.groupId);
+      } else if (selected.length >= 2) {
+        mirrored.groupId = `grp_mir_${now}`;
+      }
+      return mirrored;
+    });
+
+    // Keep mirrored clones neatly inside court bounds if they overflow right/bottom/left/top
+    let cMinX = 9999;
+    let cMaxX = -9999;
+    let cMinY = 9999;
+    let cMaxY = -9999;
+    clones.forEach((c) => {
+      const b = getElementBoundingBox(c);
+      cMinX = Math.min(cMinX, b.x);
+      cMaxX = Math.max(cMaxX, b.x + b.w);
+      cMinY = Math.min(cMinY, b.y);
+      cMaxY = Math.max(cMaxY, b.y + b.h);
+    });
+    let fixDx = 0;
+    let fixDy = 0;
+    if (cMaxX > 616) fixDx = 616 - cMaxX;
+    if (cMinX + fixDx < 22) fixDx = 22 - cMinX;
+    if (cMaxY > 406) fixDy = 406 - cMaxY;
+    if (cMinY + fixDy < 64) fixDy = 64 - cMinY;
+
+    if (fixDx !== 0 || fixDy !== 0) {
+      clones = clones.map((c) => shiftElementBy(c, fixDx, fixDy));
+    }
+
+    return {
+      elements: [...elements, ...clones],
+      nextSelectedIds: clones.map((c) => c.id)
+    };
+  }
+
+  // In-place mirror across selection bounding-box center
+  const nextElements = elements.map((el) => {
+    if (!idSet.has(el.id)) return el;
+    const mirrored = transformElement(el, cx, cy);
+    mirrored.x = clampNum(mirrored.x, 18, 622);
+    mirrored.y = clampNum(mirrored.y, 62, 412);
+    if (mirrored.endX !== undefined) mirrored.endX = clampNum(mirrored.endX, 18, 622);
+    if (mirrored.endY !== undefined) mirrored.endY = clampNum(mirrored.endY, 62, 412);
+    return mirrored;
+  });
+
+  return { elements: nextElements, nextSelectedIds: targetIds };
+}
+
+export type ConnectorLineType = 'line_solid' | 'line_dashed' | 'arrow_straight';
+
+export function isLineLikeElement(el: FormationElement): boolean {
+  return (
+    el.type === 'line_solid' ||
+    el.type === 'line_dashed' ||
+    el.type === 'arrow_straight' ||
+    el.type === 'arrow_curved'
+  );
+}
+
+/**
+ * Compute angle (0..359°), length (px), and midpoint of a line or arrow element.
+ */
+export function getLineMetrics(el: FormationElement): {
+  angle: number;
+  length: number;
+  midX: number;
+  midY: number;
+} {
+  const x1 = el.x;
+  const y1 = el.y;
+  const x2 = el.endX ?? el.x + 80;
+  const y2 = el.endY ?? el.y;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const length = Math.max(10, Math.round(Math.hypot(dx, dy)));
+  const rawDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const angle = Math.round(((rawDeg % 360) + 360) % 360) % 360;
+  return {
+    angle,
+    length,
+    midX: (x1 + x2) / 2,
+    midY: (y1 + y2) / 2
+  };
+}
+
+/**
+ * Rotate a line/arrow around its midpoint to an exact angle (degrees) and optional new length.
+ */
+export function rotateLineToAngle(
+  el: FormationElement,
+  targetDeg: number,
+  nextLength?: number
+): Partial<FormationElement> {
+  const { length, midX, midY } = getLineMetrics(el);
+  const len = Math.max(16, Math.min(560, nextLength ?? length));
+  const rad = (targetDeg * Math.PI) / 180;
+  const halfX = (Math.cos(rad) * len) / 2;
+  const halfY = (Math.sin(rad) * len) / 2;
+  const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  return {
+    x: clampNum(Math.round(midX - halfX), 18, 622),
+    y: clampNum(Math.round(midY - halfY), 62, 412),
+    endX: clampNum(Math.round(midX + halfX), 18, 622),
+    endY: clampNum(Math.round(midY + halfY), 62, 412)
+  };
+}
+
+/**
+ * Rotate a group of selected elements around their combined bounding-box center by deltaDeg degrees.
+ */
+export function rotateFormationElements(
+  elements: FormationElement[],
+  targetIds: string[],
+  deltaDeg: number
+): FormationElement[] {
+  const idSet = new Set(targetIds);
+  const selected = elements.filter((el) => idSet.has(el.id));
+  if (selected.length === 0 || !deltaDeg) return elements;
+
+  let minX = 9999;
+  let maxX = -9999;
+  let minY = 9999;
+  let maxY = -9999;
+  selected.forEach((el) => {
+    const b = getElementBoundingBox(el);
+    minX = Math.min(minX, b.x);
+    maxX = Math.max(maxX, b.x + b.w);
+    minY = Math.min(minY, b.y);
+    maxY = Math.max(maxY, b.y + b.h);
+  });
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const rad = (deltaDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const clampNum = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+  const rotPt = (px: number, py: number) => ({
+    x: clampNum(Math.round(cx + (px - cx) * cos - (py - cy) * sin), 18, 622),
+    y: clampNum(Math.round(cy + (px - cx) * sin + (py - cy) * cos), 62, 412)
+  });
+
+  return elements.map((el) => {
+    if (!idSet.has(el.id)) return el;
+    const p1 = rotPt(el.x, el.y);
+    const next: FormationElement = {
+      ...el,
+      x: p1.x,
+      y: p1.y
+    };
+    if (el.endX !== undefined && el.endY !== undefined) {
+      const p2 = rotPt(el.endX, el.endY);
+      next.endX = p2.x;
+      next.endY = p2.y;
+    } else {
+      next.rotation = Math.round((((el.rotation || 0) + deltaDeg) % 360 + 360) % 360);
+    }
+    return next;
+  });
+}
+
+/**
+ * Create straight solid, dashed, or arrow connectors linking selected objects in sequence.
+ * Inserts connector lines behind existing nodes so numbers/shapes remain crisp and readable.
+ */
+export function connectFormationElements(
+  elements: FormationElement[],
+  targetIds: string[],
+  lineType: ConnectorLineType,
+  options?: { closed?: boolean; color?: string }
+): { elements: FormationElement[]; createdIds: string[] } {
+  const idSet = new Set(targetIds);
+  const nodes = elements.filter((el) => idSet.has(el.id) && !isLineLikeElement(el) && el.type !== 'text');
+  if (nodes.length < 2) return { elements, createdIds: [] };
+
+  // Smart ordering: if at least 2 nodes have numeric labels (e.g. 1, 2, 5, 8, 9, 10), order ascending
+  const numericNodes = nodes.filter((n) => n.label && /^\d+$/.test(n.label.trim()));
+  let ordered = [...nodes];
+  if (numericNodes.length >= 2) {
+    ordered.sort((a, b) => {
+      const na = a.label && /^\d+$/.test(a.label.trim()) ? parseInt(a.label.trim(), 10) : 999999;
+      const nb = b.label && /^\d+$/.test(b.label.trim()) ? parseInt(b.label.trim(), 10) : 999999;
+      return na - nb;
+    });
+  }
+
+  const defaultColor =
+    options?.color ||
+    (lineType === 'line_solid'
+      ? '#2563eb'
+      : lineType === 'line_dashed'
+      ? '#475569'
+      : '#16a34a');
+
+  const now = Date.now();
+  const created: FormationElement[] = [];
+  const pairCount = options?.closed && ordered.length >= 3 ? ordered.length : ordered.length - 1;
+
+  for (let i = 0; i < pairCount; i++) {
+    const a = ordered[i];
+    const b = ordered[(i + 1) % ordered.length];
+    if (a.x === b.x && a.y === b.y) continue;
+    created.push({
+      id: `${lineType}_conn_${now}_${i}`,
+      type: lineType,
+      x: a.x,
+      y: a.y,
+      endX: b.x,
+      endY: b.y,
+      color: defaultColor
+    });
+  }
+
+  return {
+    elements: [...created, ...elements],
+    createdIds: created.map((c) => c.id)
+  };
+}
+
 export function buildFootSvgInner(color: string, mirrorX: boolean = false, scale: number = 1): string {
   const sx = mirrorX ? -scale : scale;
   return `
@@ -524,10 +977,14 @@ export function renderFormationSvgString(
       switch (el.type) {
         case 'gv': {
           const sc = el.scale ?? 1;
+          const sx = (el.flipX ? -1 : 1) * sc;
+          const sy = (el.flipY ? -1 : 1) * sc;
           return `
-            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
-              <polygon points="0,-18 -16,14 16,14" fill="${el.color || '#dc2626'}" />
-              <text x="0" y="28" font-family="sans-serif" font-size="13" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle"> ${escXml(el.label || 'GV')}</text>
+            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+              <g transform="rotate(${el.rotation || 0}) scale(${sx}, ${sy})">
+                <polygon points="0,-18 -16,14 16,14" fill="${el.color || '#dc2626'}" />
+              </g>
+              <text x="0" y="${Math.round(28 * sc)}" font-family="sans-serif" font-size="13" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle"> ${escXml(el.label || 'GV')}</text>
             </g>
           `;
         }
@@ -562,7 +1019,7 @@ export function renderFormationSvgString(
           const w = el.width || 120;
           const h = el.height || 70;
           return `
-            <g transform="translate(${el.x}, ${el.y})">
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
               <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="8" fill="${el.color || '#eff6ff'}" fill-opacity="0.4" stroke="${el.color || '#3b82f6'}" stroke-width="2" stroke-dasharray="5,4"/>
               ${el.label ? `<text x="0" y="${-h / 2 + 18}" font-family="sans-serif" font-size="12" font-weight="bold" fill="${el.color || '#1d4ed8'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
@@ -611,11 +1068,12 @@ export function renderFormationSvgString(
           const x2 = el.endX ?? (el.x + 80);
           const y2 = el.endY ?? el.y;
           const midX = (el.x + x2) / 2;
-          const midY = Math.min(el.y, y2) - 40;
+          const midY = el.flipY ? Math.max(el.y, y2) + 40 : Math.min(el.y, y2) - 40;
+          const labelY = el.flipY ? midY + 14 : midY - 8;
           return `
             <g>
               <path d="M ${el.x} ${el.y} Q ${midX} ${midY} ${x2} ${y2}" fill="none" stroke="${el.color || '#ea580c'}" stroke-width="2.8" marker-end="url(#arrowMarkerOrange)"/>
-              ${el.label ? `<text x="${midX}" y="${midY - 8}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+              ${el.label ? `<text x="${midX}" y="${labelY}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -633,19 +1091,23 @@ export function renderFormationSvgString(
         }
         case 'cone': {
           const sc = el.scale ?? 1;
+          const sx = (el.flipX ? -1 : 1) * sc;
+          const sy = (el.flipY ? -1 : 1) * sc;
           return `
-            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
-              <polygon points="0,-16 -12,12 12,12" fill="${el.color || '#ea580c'}"/>
-              <rect x="-14" y="10" width="28" height="4" rx="2" fill="${el.color || '#c2410c'}"/>
-              <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6"/>
-              ${el.label ? `<text x="0" y="24" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+              <g transform="rotate(${el.rotation || 0}) scale(${sx}, ${sy})">
+                <polygon points="0,-16 -12,12 12,12" fill="${el.color || '#ea580c'}"/>
+                <rect x="-14" y="10" width="28" height="4" rx="2" fill="${el.color || '#c2410c'}"/>
+                <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6"/>
+              </g>
+              ${el.label ? `<text x="0" y="${Math.round(24 * sc)}" font-family="sans-serif" font-size="11" font-weight="bold" fill="${el.color || '#ea580c'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
         case 'marker': {
           const sc = el.scale ?? 1;
           return `
-            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0}) scale(${sc})" filter="url(#dropShadow)">
               <ellipse cx="0" cy="0" rx="14" ry="7" fill="${el.color || '#eab308'}" stroke="#ca8a04" stroke-width="1.5"/>
               <circle cx="0" cy="-1" r="3" fill="#ca8a04"/>
               ${el.label ? `<text x="0" y="17" font-family="sans-serif" font-size="10" font-weight="bold" fill="#a16207" text-anchor="middle">${escXml(el.label)}</text>` : ''}
@@ -654,10 +1116,12 @@ export function renderFormationSvgString(
         }
         case 'hoop': {
           const r = el.radius || 20;
+          const labelY = el.label && el.label.length <= 2 ? 4 : r + 14;
+          const labelSize = el.label && el.label.length <= 2 ? 10.5 : 10;
           return `
             <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
               <circle cx="0" cy="0" r="${r}" fill="none" stroke="${el.color || '#06b6d4'}" stroke-width="4.5"/>
-              ${el.label ? `<text x="0" y="${r + 14}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${el.color || '#0891b2'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+              ${el.label ? `<text x="0" y="${labelY}" font-family="sans-serif" font-size="${labelSize}" font-weight="bold" fill="${el.color || '#0891b2'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
@@ -672,27 +1136,33 @@ export function renderFormationSvgString(
         }
         case 'flag': {
           const sc = el.scale ?? 1;
+          const sx = (el.flipX ? -1 : 1) * sc;
+          const sy = (el.flipY ? -1 : 1) * sc;
           return `
-            <g transform="translate(${el.x}, ${el.y}) scale(${sc})" filter="url(#dropShadow)">
-              <line x1="0" y1="16" x2="0" y2="-18" stroke="#475569" stroke-width="2.5" stroke-linecap="round"/>
-              <polygon points="0,-18 18,-11 0,-4" fill="${el.color || '#dc2626'}"/>
-              <circle cx="0" cy="16" r="4" fill="#334155"/>
-              ${el.label ? `<text x="0" y="29" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+              <g transform="rotate(${el.rotation || 0}) scale(${sx}, ${sy})">
+                <line x1="0" y1="16" x2="0" y2="-18" stroke="#475569" stroke-width="2.5" stroke-linecap="round"/>
+                <polygon points="0,-18 18,-11 0,-4" fill="${el.color || '#dc2626'}"/>
+                <circle cx="0" cy="16" r="4" fill="#334155"/>
+              </g>
+              ${el.label ? `<text x="0" y="${Math.round(29 * sc)}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${el.color || '#dc2626'}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }
         case 'text': {
           return `
-            <text x="${el.x}" y="${el.y}" font-family="sans-serif" font-size="${el.fontSize || 13}" font-weight="bold" fill="${el.color || '#1e293b'}" text-anchor="middle">
-              ${escXml(el.label || 'Ghi chú')}
-            </text>
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
+              <text x="0" y="0" font-family="sans-serif" font-size="${el.fontSize || 13}" font-weight="bold" fill="${el.color || '#1e293b'}" text-anchor="middle">
+                ${escXml(el.label || 'Ghi chú')}
+              </text>
+            </g>
           `;
         }
         case 'sgk_board': {
           const w = el.width || 120;
           const h = el.height || 65;
           return `
-            <g transform="translate(${el.x}, ${el.y})" filter="url(#dropShadow)">
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
               <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="6" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
               <text x="0" y="${-h / 2 + 20}" font-family="sans-serif" font-size="11.5" font-weight="bold" fill="#b45309" text-anchor="middle">📖 TRANH KỸ THUẬT</text>
               <text x="0" y="${-h / 2 + 40}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="#92400e" text-anchor="middle">${escXml(el.label || 'Động Tác Mẫu SGK')}</text>
@@ -851,10 +1321,14 @@ export function renderFormationSvgString(
           const w = el.width || 64;
           const h = el.height || 28;
           const col = el.color || '#16a34a';
+          const fx = el.flipX ? -1 : 1;
+          const fy = el.flipY ? -1 : 1;
           return `
             <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
-              <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="3" fill="${col}" fill-opacity="0.1" stroke="${col}" stroke-width="1.2" stroke-dasharray="3,3"/>
-              <path d="M ${-w / 2},${h / 2} L ${-w / 2},${-h / 2} L ${w / 2},${-h / 2} L ${w / 2},${h / 2}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <g transform="scale(${fx}, ${fy})">
+                <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="3" fill="${col}" fill-opacity="0.1" stroke="${col}" stroke-width="1.2" stroke-dasharray="3,3"/>
+                <path d="M ${-w / 2},${h / 2} L ${-w / 2},${-h / 2} L ${w / 2},${-h / 2} L ${w / 2},${h / 2}" fill="none" stroke="${col}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </g>
               ${el.label ? `<text x="0" y="${h / 2 + 13}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
@@ -863,12 +1337,16 @@ export function renderFormationSvgString(
           const w = el.width || 160;
           const h = el.height || 40;
           const col = el.color || '#16a34a';
+          const fx = el.flipX ? -1 : 1;
+          const fy = el.flipY ? -1 : 1;
           const x0 = -w / 2;
           const seg = w / 4;
           const pts = `${x0},0 ${x0 + seg * 0.7},${-h / 2} ${x0 + seg * 1.8},${h / 2} ${x0 + seg * 2.9},${-h / 2} ${w / 2},0`;
           return `
             <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
-              <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.6" stroke-dasharray="5,3" stroke-linejoin="round" marker-end="url(#arrowMarker)"/>
+              <g transform="scale(${fx}, ${fy})">
+                <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="2.6" stroke-dasharray="5,3" stroke-linejoin="round" marker-end="url(#arrowMarker)"/>
+              </g>
               ${el.label ? `<text x="0" y="${-h / 2 - 7}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
@@ -877,9 +1355,13 @@ export function renderFormationSvgString(
           const w = el.width || 90;
           const h = el.height || 34;
           const col = el.color || '#ea580c';
+          const fx = el.flipX ? -1 : 1;
+          const fy = el.flipY ? -1 : 1;
           return `
             <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})">
-              <path d="M ${-w / 2},${h / 3} Q ${-w / 4},${-h} 0,${h / 3} Q ${w / 4},${-h} ${w / 2},${h / 3}" fill="none" stroke="${col}" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arrowMarkerOrange)"/>
+              <g transform="scale(${fx}, ${fy})">
+                <path d="M ${-w / 2},${h / 3} Q ${-w / 4},${-h} 0,${h / 3} Q ${w / 4},${-h} ${w / 2},${h / 3}" fill="none" stroke="${col}" stroke-width="2.5" stroke-dasharray="5,3" marker-end="url(#arrowMarkerOrange)"/>
+              </g>
               ${el.label ? `<text x="0" y="${-h / 2 - 4}" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
@@ -898,6 +1380,37 @@ export function renderFormationSvgString(
             <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
               <polygon points="${starPts.join(' ')}" fill="${col}" stroke="#ffffff" stroke-width="1.6"/>
               ${el.label ? `<text x="0" y="${r + 13}" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'mini_square': {
+          const r = el.radius || 15;
+          const col = el.color || '#2563eb';
+          const fx = el.flipX ? -1 : 1;
+          const fy = el.flipY ? -1 : 1;
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <g transform="scale(${fx}, ${fy})">
+                <rect x="${-r}" y="${-r}" width="${r * 2}" height="${r * 2}" rx="3.5" fill="${col}" fill-opacity="0.14" stroke="${col}" stroke-width="3.2"/>
+              </g>
+              ${el.label ? `<text x="0" y="4" font-family="sans-serif" font-size="10.5" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
+            </g>
+          `;
+        }
+        case 'mini_triangle': {
+          const r = el.radius || 16;
+          const col = el.color || '#ea580c';
+          const fx = el.flipX ? -1 : 1;
+          const fy = el.flipY ? -1 : 1;
+          const h = r * 1.1;
+          const w = r * 1.15;
+          const pts = `0,${(-h).toFixed(1)} ${w.toFixed(1)},${(h * 0.82).toFixed(1)} ${(-w).toFixed(1)},${(h * 0.82).toFixed(1)}`;
+          return `
+            <g transform="translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})" filter="url(#dropShadow)">
+              <g transform="scale(${fx}, ${fy})">
+                <polygon points="${pts}" fill="${col}" fill-opacity="0.14" stroke="${col}" stroke-width="3.2" stroke-linejoin="round"/>
+              </g>
+              ${el.label ? `<text x="0" y="5" font-family="sans-serif" font-size="10" font-weight="bold" fill="${col}" text-anchor="middle">${escXml(el.label)}</text>` : ''}
             </g>
           `;
         }

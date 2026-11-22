@@ -47,7 +47,10 @@ import {
   AlignStartHorizontal,
   AlignEndHorizontal,
   Magnet,
-  Crosshair
+  Crosshair,
+  FlipHorizontal2,
+  FlipVertical2,
+  Shapes
 } from 'lucide-react';
 import {
   FormationElement,
@@ -59,7 +62,17 @@ import {
   getElementBoundingBox,
   scaleFormationElements,
   alignFormationElements,
-  AlignmentMode
+  AlignmentMode,
+  generateShapePatternElements,
+  mirrorFormationElements,
+  ShapePatternItemType,
+  ShapePatternLayout,
+  ConnectorLineType,
+  isLineLikeElement,
+  getLineMetrics,
+  rotateLineToAngle,
+  rotateFormationElements,
+  connectFormationElements
 } from '../utils/formationStudioUtils';
 import { FormationExtraElementSvg } from './FormationExtraElementSvg';
 import { FormationDiagram, saveCustomFormationToStorage } from '../data/formationDiagrams';
@@ -142,6 +155,30 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   const [gridCellMode, setGridCellMode] = useState<'empty' | 'numbers' | 'hand_foot'>('empty');
   const [parallelCount, setParallelCount] = useState<number>(4);
   const [parallelStyle, setParallelStyle] = useState<'solid' | 'dashed'>('solid');
+
+  // Shape Pattern Group Builder (Vẽ nhóm hình nhỏ: vòng tròn, hình vuông, hình tam giác, HS)
+  const [patternItemType, setPatternItemType] = useState<ShapePatternItemType>('hoop');
+  const [patternLayout, setPatternLayout] = useState<ShapePatternLayout>('circle');
+  const [patternCount, setPatternCount] = useState<number>(8);
+  const [patternSize, setPatternSize] = useState<'sm' | 'md' | 'lg'>('md');
+  const [patternNumbered, setPatternNumbered] = useState<boolean>(false);
+
+  // Interactive Click-to-Connect tool (Nối đối tượng bằng đường thẳng nét liền / nét đứt / mũi tên)
+  const [connectMode, setConnectMode] = useState<ConnectorLineType | null>(null);
+  const [connectFromId, setConnectFromId] = useState<string | null>(null);
+  const [connectCursorPt, setConnectCursorPt] = useState<{ x: number; y: number } | null>(null);
+  const [connectClosedLoop, setConnectClosedLoop] = useState<boolean>(false);
+
+  // Custom group rotation input (degrees)
+  const [groupRotateInput, setGroupRotateInput] = useState<number>(45);
+
+  // Draggable line/arrow endpoint handle state
+  const [draggingLineEnd, setDraggingLineEnd] = useState<{
+    id: string;
+    handle: 'start' | 'end';
+    snapNodeId?: string;
+  } | null>(null);
+  const [lineDragSnapshot, setLineDragSnapshot] = useState<FormationElement[]>([]);
 
   // Toast notification inside modal
   const [toastNotice, setToastNotice] = useState<string | null>(null);
@@ -264,8 +301,13 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     };
   };
 
-  // Pointer down on Canvas Background (Starts Marquee Selection)
+  // Pointer down on Canvas Background (Starts Marquee Selection or resets connect chain)
   const handlePointerDownCanvas = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (connectMode) {
+      setConnectFromId(null);
+      setConnectCursorPt(null);
+      return;
+    }
     const pt = getSvgCoordinates(e);
     if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
       setSelectedIds([]);
@@ -287,6 +329,45 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   // Pointer down on an Element
   const handlePointerDownElement = (e: React.PointerEvent, id: string) => {
     e.stopPropagation();
+
+    // Interactive Click-to-Connect Mode: click node 1 -> node 2 -> node 3...
+    if (connectMode) {
+      const clickedEl = elements.find((item) => item.id === id);
+      if (!clickedEl || isLineLikeElement(clickedEl)) return;
+      if (!connectFromId) {
+        setConnectFromId(id);
+        showToast('Đã chọn điểm đầu — nhấp đối tượng tiếp theo để nối liên tiếp!');
+        return;
+      }
+      if (connectFromId === id) {
+        setConnectFromId(null);
+        setConnectCursorPt(null);
+        return;
+      }
+      const fromEl = elements.find((item) => item.id === connectFromId);
+      if (fromEl) {
+        const defaultColor =
+          connectMode === 'line_solid'
+            ? '#2563eb'
+            : connectMode === 'line_dashed'
+            ? '#475569'
+            : '#16a34a';
+        const newLine: FormationElement = {
+          id: `${connectMode}_conn_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          type: connectMode,
+          x: fromEl.x,
+          y: fromEl.y,
+          endX: clickedEl.x,
+          endY: clickedEl.y,
+          color: defaultColor
+        };
+        recordHistory([newLine, ...elements]);
+        setConnectFromId(id);
+        setConnectCursorPt({ x: clickedEl.x, y: clickedEl.y });
+      }
+      return;
+    }
+
     const pt = svgRef.current ? getSvgCoordinates(e as unknown as React.PointerEvent<SVGSVGElement>) : { x: 0, y: 0 };
     const unitIds = getGroupMemberIds(id);
 
@@ -313,6 +394,17 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     setIsDraggingGroup(true);
     setDragStartPt(pt);
     setInitialSnapshot(JSON.parse(JSON.stringify(elements)));
+  };
+
+  // Pointer down on draggable start/end endpoint handle of a selected Line / Arrow
+  const handlePointerDownLineEnd = (
+    e: React.PointerEvent,
+    id: string,
+    handle: 'start' | 'end'
+  ) => {
+    e.stopPropagation();
+    setLineDragSnapshot(JSON.parse(JSON.stringify(elements)));
+    setDraggingLineEnd({ id, handle });
   };
 
   // Pointer down on one of the 4 corner resize handles of groupBoundingBox
@@ -347,6 +439,45 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
   // Pointer move on Canvas
   const handlePointerMoveCanvas = (e: React.PointerEvent<SVGSVGElement>) => {
     const pt = getSvgCoordinates(e);
+
+    // Live cursor preview line during Connect Mode
+    if (connectMode && connectFromId) {
+      setConnectCursorPt(pt);
+      return;
+    }
+
+    // Dragging an endpoint of a selected Line / Arrow (with magnetic node snapping)
+    if (draggingLineEnd) {
+      let targetX = Math.max(15, Math.min(625, Math.round(pt.x)));
+      let targetY = Math.max(60, Math.min(415, Math.round(pt.y)));
+      let snapNodeId: string | undefined;
+
+      let bestDist = 14;
+      elements.forEach((other) => {
+        if (other.id === draggingLineEnd.id || isLineLikeElement(other)) return;
+        const d = Math.hypot(other.x - pt.x, other.y - pt.y);
+        if (d < bestDist) {
+          bestDist = d;
+          targetX = other.x;
+          targetY = other.y;
+          snapNodeId = other.id;
+        }
+      });
+
+      if (draggingLineEnd.snapNodeId !== snapNodeId) {
+        setDraggingLineEnd({ ...draggingLineEnd, snapNodeId });
+      }
+
+      setElements((prev) =>
+        prev.map((item) => {
+          if (item.id !== draggingLineEnd.id) return item;
+          return draggingLineEnd.handle === 'start'
+            ? { ...item, x: targetX, y: targetY }
+            : { ...item, endX: targetX, endY: targetY };
+        })
+      );
+      return;
+    }
 
     // Interactive Proportional Group Resize via Corner Handles
     if (isResizingGroup && resizeAnchor && resizeStartDist > 0 && resizeInitialSnapshot.length > 0) {
@@ -498,6 +629,16 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
   // Pointer up on Canvas
   const handlePointerUpCanvas = () => {
+    if (draggingLineEnd) {
+      setDraggingLineEnd(null);
+      if (
+        lineDragSnapshot.length > 0 &&
+        JSON.stringify(lineDragSnapshot) !== JSON.stringify(elements)
+      ) {
+        setHistory((prev) => [...prev.slice(-15), lineDragSnapshot]);
+      }
+      setLineDragSnapshot([]);
+    }
     if (isResizingGroup) {
       setIsResizingGroup(false);
       setResizeAnchor(null);
@@ -664,11 +805,16 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
         e.preventDefault();
         handleUndo();
+      } else if (e.key === 'Escape' && connectMode) {
+        e.preventDefault();
+        setConnectMode(null);
+        setConnectFromId(null);
+        setConnectCursorPt(null);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isOpen, selectedIds, elements, history]);
+  }, [isOpen, selectedIds, elements, history, connectMode]);
 
   // Group: Delete Selected
   const handleDeleteSelected = () => {
@@ -713,6 +859,107 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
     recordHistory([...elements, ...newClones]);
     setSelectedIds(newIds);
     showToast(`Đã nhân bản ${newClones.length} đối tượng thành nhóm mới!`);
+  };
+
+  // Group / Single: Mirror (Flip) horizontally or vertically, optionally creating a mirrored clone
+  const handleMirrorSelected = (axis: 'horizontal' | 'vertical', duplicate: boolean = false) => {
+    if (selectedIds.length === 0) return;
+    const { elements: nextEls, nextSelectedIds } = mirrorFormationElements(
+      elements,
+      selectedIds,
+      axis,
+      { duplicate }
+    );
+    recordHistory(nextEls);
+    setSelectedIds(nextSelectedIds);
+    if (duplicate) {
+      showToast(
+        axis === 'horizontal'
+          ? 'Đã tạo bản sao đối xứng ngang (Mirror ↔)!'
+          : 'Đã tạo bản sao đối xứng dọc (Mirror ↕)!'
+      );
+    } else {
+      showToast(
+        axis === 'horizontal'
+          ? 'Đã lật gương ngang (Trái ↔ Phải)!'
+          : 'Đã lật gương dọc (Trên ↕ Dưới)!'
+      );
+    }
+  };
+
+  // Toggle Interactive Click-to-Connect Mode (Nối từng cặp đối tượng trên sân)
+  const handleToggleConnectMode = (mode: ConnectorLineType) => {
+    if (connectMode === mode) {
+      setConnectMode(null);
+      setConnectFromId(null);
+      setConnectCursorPt(null);
+      return;
+    }
+    setConnectMode(mode);
+    setConnectFromId(null);
+    setConnectCursorPt(null);
+    setSelectedIds([]);
+    const modeLabel =
+      mode === 'line_solid' ? 'nét liền' : mode === 'line_dashed' ? 'nét đứt' : 'mũi tên';
+    showToast(`Chế độ nối ${modeLabel}: Nhấp lần lượt các đối tượng trên sân để nối liên tiếp!`);
+  };
+
+  // Batch connect currently selected objects in sequence (smart-sorted by label number or X)
+  const handleBatchConnectSelected = (lineType: ConnectorLineType) => {
+    const { elements: nextEls, createdIds } = connectFormationElements(
+      elements,
+      selectedIds,
+      lineType,
+      { closed: connectClosedLoop }
+    );
+    if (createdIds.length === 0) {
+      showToast('Cần chọn ít nhất 2 đối tượng (điểm/hình) để nối!');
+      return;
+    }
+    recordHistory(nextEls);
+    const label =
+      lineType === 'line_solid'
+        ? 'đường nét liền'
+        : lineType === 'line_dashed'
+        ? 'đường nét đứt'
+        : 'mũi tên';
+    showToast(`Đã nối ${createdIds.length} đoạn ${label} giữa các đối tượng đã chọn!`);
+  };
+
+  // Rotate all selected objects around their shared group center by deltaDeg
+  const handleRotateGroup = (deltaDeg: number) => {
+    if (selectedIds.length === 0 || !Number.isFinite(deltaDeg) || deltaDeg === 0) return;
+    const rotated = rotateFormationElements(elements, selectedIds, deltaDeg);
+    recordHistory(rotated);
+    showToast(`Đã xoay cả nhóm ${deltaDeg > 0 ? '+' : ''}${deltaDeg}°!`);
+  };
+
+  // Shape Pattern Group Builder: Insert N small shapes arranged as circle / arc / triangle / rectangle / zigzag
+  const handleInsertShapePattern = () => {
+    const sizeMap: Record<'sm' | 'md' | 'lg', number> = {
+      sm: patternItemType === 'hs' ? 9 : 12,
+      md: patternItemType === 'hs' ? 11 : 16,
+      lg: patternItemType === 'hs' ? 14 : 21
+    };
+    const generated = generateShapePatternElements({
+      itemType: patternItemType,
+      layout: patternLayout,
+      count: patternCount,
+      itemRadius: sizeMap[patternSize],
+      numbered: patternNumbered
+    });
+    recordHistory([...elements, ...generated]);
+    setSelectedIds(generated.map((el) => el.id));
+    const layoutLabel: Record<ShapePatternLayout, string> = {
+      circle: 'vòng tròn',
+      arc: 'vòng cung',
+      triangle: 'hình tam giác',
+      rectangle: 'hình chữ nhật',
+      zigzag: 'hình gấp khúc'
+    };
+    showToast(
+      `Đã tạo nhóm ${generated.length} hình xếp thành ${layoutLabel[patternLayout]}! Bạn có thể kéo góc thu nhỏ hoặc lật Mirror.`
+    );
   };
 
   // Group: Change Color for all selected
@@ -885,6 +1132,12 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
       defaultProps.color = '#eab308';
       defaultProps.radius = 16;
       defaultProps.label = 'Đích';
+    } else if (type === 'mini_square') {
+      defaultProps.color = '#2563eb';
+      defaultProps.radius = 15;
+    } else if (type === 'mini_triangle') {
+      defaultProps.color = '#ea580c';
+      defaultProps.radius = 16;
     }
 
     const newElement: FormationElement = {
@@ -1650,6 +1903,147 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
               </div>
             </div>
 
+            {/* 3B. Vẽ Nhóm Hình Theo Mẫu (Vòng tròn / Tam giác / Chữ nhật / Gấp khúc / Vòng cung) */}
+            <div className="p-2 rounded-xl bg-violet-50/75 border border-violet-200/80 space-y-1.5">
+              <p className="font-bold text-[10.5px] uppercase tracking-wider text-violet-800 flex items-center gap-1">
+                <Shapes className="w-3.5 h-3.5 text-violet-600" />
+                Vẽ Nhóm Hình Theo Mẫu
+              </p>
+
+              {/* Standalone Mini Shapes */}
+              <div className="grid grid-cols-2 gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleAddElement('mini_square')}
+                  className="bg-white hover:bg-blue-50 text-blue-800 font-semibold py-0.5 px-1.5 rounded-md border border-blue-200 text-[10px] transition"
+                  title="Chèn 1 hình vuông nhỏ lẻ"
+                >
+                  ⬜ + Vuông nhỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddElement('mini_triangle')}
+                  className="bg-white hover:bg-orange-50 text-orange-800 font-semibold py-0.5 px-1.5 rounded-md border border-orange-200 text-[10px] transition"
+                  title="Chèn 1 hình tam giác nhỏ lẻ"
+                >
+                  △ + Tam giác nhỏ
+                </button>
+              </div>
+
+              {/* Pattern Builder Card */}
+              <div className="space-y-1.5 bg-white p-1.5 rounded-lg border border-violet-100">
+                <span className="text-[10px] font-bold text-slate-600 block">1. Chọn hình nhỏ:</span>
+                <div className="grid grid-cols-4 gap-0.5 text-[9.5px]">
+                  {(
+                    [
+                      { id: 'hoop', label: '⭕ Vòng' },
+                      { id: 'mini_square', label: '⬜ Vuông' },
+                      { id: 'mini_triangle', label: '△ T.Giác' },
+                      { id: 'hs', label: '🔵 HS' }
+                    ] as const
+                  ).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setPatternItemType(item.id)}
+                      className={`py-0.5 px-0.5 rounded font-bold border transition ${
+                        patternItemType === item.id
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <span className="text-[10px] font-bold text-slate-600 block">2. Xếp thành dạng:</span>
+                <div className="grid grid-cols-3 gap-0.5 text-[9.5px]">
+                  {(
+                    [
+                      { id: 'circle', label: '⭕ Tròn' },
+                      { id: 'arc', label: '☾ Cung' },
+                      { id: 'triangle', label: '△ Tam giác' },
+                      { id: 'rectangle', label: '▭ Chữ nhật' },
+                      { id: 'zigzag', label: '〰 Gấp khúc' }
+                    ] as const
+                  ).map((lay) => (
+                    <button
+                      key={lay.id}
+                      type="button"
+                      onClick={() => setPatternLayout(lay.id)}
+                      className={`py-0.5 px-1 rounded font-bold border transition ${
+                        patternLayout === lay.id
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {lay.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between gap-1 text-[10px]">
+                  <label className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200 text-slate-600">
+                    <span>SL:</span>
+                    <input
+                      type="number"
+                      min={3}
+                      max={24}
+                      value={patternCount}
+                      onChange={(e) =>
+                        setPatternCount(Math.max(3, Math.min(24, parseInt(e.target.value, 10) || 3)))
+                      }
+                      className="w-8 text-center font-bold text-violet-700 bg-transparent focus:outline-none"
+                    />
+                  </label>
+                  <div className="flex items-center gap-0.5">
+                    {(
+                      [
+                        { id: 'sm', label: 'S' },
+                        { id: 'md', label: 'M' },
+                        { id: 'lg', label: 'L' }
+                      ] as const
+                    ).map((sz) => (
+                      <button
+                        key={sz.id}
+                        type="button"
+                        onClick={() => setPatternSize(sz.id)}
+                        className={`w-5 py-0.5 rounded text-[9.5px] font-bold border ${
+                          patternSize === sz.id
+                            ? 'bg-violet-600 text-white border-violet-600'
+                            : 'bg-slate-50 text-slate-600 border-slate-200'
+                        }`}
+                        title={`Cỡ hình nhỏ: ${sz.id === 'sm' ? 'Nhỏ' : sz.id === 'md' ? 'Vừa' : 'Lớn'}`}
+                      >
+                        {sz.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPatternNumbered((v) => !v)}
+                    className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold border transition ${
+                      patternNumbered
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-50 text-slate-600 border-slate-200'
+                    }`}
+                    title="Đánh số thứ tự 1..N bên trong từng hình nhỏ"
+                  >
+                    1..N
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleInsertShapePattern}
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white font-bold py-1 px-2 rounded-md text-[10.5px] transition shadow-2xs"
+                >
+                  + Vẽ Nhóm {patternCount} Hình
+                </button>
+              </div>
+            </div>
+
             {/* 4. Biểu Tượng Trò Chơi Đặc Biệt (Chân tay khéo khỏe...) */}
             <div>
               <p className="font-bold text-[10.5px] uppercase tracking-wider text-orange-600 mb-1">
@@ -1889,20 +2283,78 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
               </select>
             </div>
 
-            {/* Quick Canvas Toolbar: Marquee hints, Smart Snap, Quick Group & Select all */}
+            {/* Quick Canvas Toolbar: Marquee hints, Connect Tools, Smart Snap, Quick Group & Select all */}
             <div className="w-full max-w-[620px] mb-1.5 flex flex-wrap items-center justify-between gap-1.5 text-[11px] text-slate-600 bg-white/85 px-2.5 py-1 rounded-lg border border-slate-200 shrink-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-semibold text-blue-700 flex items-center gap-1">
                   <BoxSelect className="w-3.5 h-3.5 text-blue-600" />
-                  {selectedIds.length > 0 ? (
+                  {connectMode ? (
+                    <span className="text-emerald-700 font-bold">
+                      {connectFromId ? 'Đang nối: nhấp điểm kế tiếp' : 'Nhấp điểm đầu để nối'}
+                    </span>
+                  ) : selectedIds.length > 0 ? (
                     <span>
                       {selectionGroupMeta.isSingleLockedGroup ? '🔗 Đã nhóm: ' : 'Đang chọn: '}
-                      <strong>{selectedIds.length}</strong> đối tượng
+                      <strong>{selectedIds.length}</strong>
                     </span>
                   ) : (
-                    <span>Kéo chuột trên sân để quét vùng chọn nhóm</span>
+                    <span>Kéo chuột chọn nhóm</span>
                   )}
                 </span>
+
+                {/* Direct Click-to-Connect Tool Buttons */}
+                <div className="flex items-center gap-0.5 pl-1 border-l border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleConnectMode('line_solid')}
+                    className={`px-1.5 py-0.5 rounded font-bold transition border text-[10.5px] ${
+                      connectMode === 'line_solid'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                        : 'bg-slate-50 hover:bg-blue-50 text-slate-700 border-slate-200'
+                    }`}
+                    title="Chế độ nhấp nối các đối tượng bằng đường thẳng nét liền"
+                  >
+                    ─── Nối Liền
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleConnectMode('line_dashed')}
+                    className={`px-1.5 py-0.5 rounded font-bold transition border text-[10.5px] ${
+                      connectMode === 'line_dashed'
+                        ? 'bg-slate-700 text-white border-slate-700 shadow-2xs'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                    }`}
+                    title="Chế độ nhấp nối các đối tượng bằng đường thẳng nét đứt"
+                  >
+                    ┄ Nối Đứt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleConnectMode('arrow_straight')}
+                    className={`px-1.5 py-0.5 rounded font-bold transition border text-[10.5px] ${
+                      connectMode === 'arrow_straight'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                        : 'bg-slate-50 hover:bg-emerald-50 text-emerald-700 border-slate-200'
+                    }`}
+                    title="Chế độ nhấp nối các đối tượng bằng mũi tên"
+                  >
+                    ➜ Mũi Tên
+                  </button>
+                  {connectMode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConnectMode(null);
+                        setConnectFromId(null);
+                        setConnectCursorPt(null);
+                      }}
+                      className="px-1.5 py-0.5 bg-red-50 hover:bg-red-100 text-red-600 rounded font-bold border border-red-200 text-[10px]"
+                      title="Thoát chế độ nối (Esc)"
+                    >
+                      Xong
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-1">
@@ -1923,6 +2375,24 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   >
                     <Unlink className="w-3 h-3" /> Rã nhóm
                   </button>
+                )}
+                {selectedIds.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => handleMirrorSelected('horizontal', false)}
+                      className="px-1.5 py-0.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded font-bold transition border border-violet-200 flex items-center gap-0.5"
+                      title="Lật gương ngang (Trái ↔ Phải)"
+                    >
+                      <FlipHorizontal2 className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => handleMirrorSelected('vertical', false)}
+                      className="px-1.5 py-0.5 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded font-bold transition border border-violet-200 flex items-center gap-0.5"
+                      title="Lật gương dọc (Trên ↕ Dưới)"
+                    >
+                      <FlipVertical2 className="w-3 h-3" />
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={() => setEnableSmartSnap((v) => !v)}
@@ -1951,6 +2421,14 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                 )}
               </div>
             </div>
+
+            {connectMode && (
+              <div className="w-full max-w-[620px] mb-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[10.5px] text-emerald-800 font-medium flex items-center justify-between shrink-0">
+                <span>
+                  ✏️ Nhấp lần lượt các hình trên sân để nối liên tiếp ({connectMode === 'line_solid' ? 'Nét liền' : connectMode === 'line_dashed' ? 'Nét đứt' : 'Mũi tên'}) · Nhấp khoảng trống để ngắt chuỗi · Phím Esc để thoát.
+                </span>
+              </div>
+            )}
 
             {/* Interactive SVG Canvas */}
             <div className="relative border-2 border-slate-300 rounded-xl shadow-md overflow-hidden bg-white max-w-[620px] max-h-[calc(90vh-270px)] w-full aspect-[640/430] select-none">
@@ -2066,10 +2544,26 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                     <g
                       key={el.id}
                       onPointerDown={(e) => handlePointerDownElement(e, el.id)}
-                      className="cursor-move"
+                      className={connectMode ? 'cursor-pointer' : 'cursor-move'}
                     >
                       {/* Selection Box / Halo */}
                       {isSelected && (() => {
+                        if (isLineLikeElement(el)) {
+                          const x2 = el.endX ?? el.x + 80;
+                          const y2 = el.endY ?? el.y;
+                          return (
+                            <line
+                              x1={el.x}
+                              y1={el.y}
+                              x2={x2}
+                              y2={y2}
+                              stroke="#3b82f6"
+                              strokeOpacity="0.28"
+                              strokeWidth="12"
+                              strokeLinecap="round"
+                            />
+                          );
+                        }
                         const isRectHalo =
                           el.type === 'grid_box' ||
                           el.type === 'parallel_lines' ||
@@ -2114,13 +2608,17 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                       {/* Element Type Render */}
                       {el.type === 'gv' && (
                         <g
-                          transform={`translate(${el.x}, ${el.y}) scale(${el.scale ?? 1})`}
+                          transform={`translate(${el.x}, ${el.y})`}
                           filter="url(#shadowStudio)"
                         >
-                          <polygon points="0,-18 -16,14 16,14" fill={el.color || '#dc2626'} />
+                          <g
+                            transform={`rotate(${el.rotation || 0}) scale(${(el.flipX ? -1 : 1) * (el.scale ?? 1)}, ${(el.flipY ? -1 : 1) * (el.scale ?? 1)})`}
+                          >
+                            <polygon points="0,-18 -16,14 16,14" fill={el.color || '#dc2626'} />
+                          </g>
                           <text
                             x="0"
-                            y="28"
+                            y={Math.round(28 * (el.scale ?? 1))}
                             fontFamily="sans-serif"
                             fontSize="13"
                             fontWeight="bold"
@@ -2209,16 +2707,20 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'cone' && (
                         <g
-                          transform={`translate(${el.x}, ${el.y}) scale(${el.scale ?? 1})`}
+                          transform={`translate(${el.x}, ${el.y})`}
                           filter="url(#shadowStudio)"
                         >
-                          <polygon points="0,-16 -12,12 12,12" fill={el.color || '#ea580c'} />
-                          <rect x="-14" y="10" width="28" height="4" rx="2" fill={el.color || '#c2410c'} />
-                          <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6" />
+                          <g
+                            transform={`rotate(${el.rotation || 0}) scale(${(el.flipX ? -1 : 1) * (el.scale ?? 1)}, ${(el.flipY ? -1 : 1) * (el.scale ?? 1)})`}
+                          >
+                            <polygon points="0,-16 -12,12 12,12" fill={el.color || '#ea580c'} />
+                            <rect x="-14" y="10" width="28" height="4" rx="2" fill={el.color || '#c2410c'} />
+                            <polygon points="0,-6 -6,6 6,6" fill="#ffffff" opacity="0.6" />
+                          </g>
                           {el.label && (
                             <text
                               x="0"
-                              y="24"
+                              y={Math.round(24 * (el.scale ?? 1))}
                               fontFamily="sans-serif"
                               fontSize="11"
                               fontWeight="bold"
@@ -2233,7 +2735,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'marker' && (
                         <g
-                          transform={`translate(${el.x}, ${el.y}) scale(${el.scale ?? 1})`}
+                          transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0}) scale(${el.scale ?? 1})`}
                           filter="url(#shadowStudio)"
                         >
                           <ellipse cx="0" cy="0" rx="14" ry="7" fill={el.color || '#eab308'} stroke="#ca8a04" strokeWidth="1.5" />
@@ -2260,9 +2762,9 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                           {el.label && (
                             <text
                               x="0"
-                              y={(el.radius || 20) + 14}
+                              y={el.label.length <= 2 ? 4 : (el.radius || 20) + 14}
                               fontFamily="sans-serif"
-                              fontSize="10"
+                              fontSize={el.label.length <= 2 ? '10.5' : '10'}
                               fontWeight="bold"
                               fill={el.color || '#0891b2'}
                               textAnchor="middle"
@@ -2274,7 +2776,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                       )}
 
                       {el.type === 'stick' && (
-                        <g transform={`translate(${el.x}, ${el.y})`} filter="url(#shadowStudio)">
+                        <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
                           <rect x={-((el.width || 40) / 2)} y={-((el.height || 7) / 2)} width={el.width || 40} height={el.height || 7} rx="3" fill={el.color || '#d97706'} stroke="#b45309" strokeWidth="1.2" />
                           {el.label && (
                             <text
@@ -2294,15 +2796,19 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'flag' && (
                         <g
-                          transform={`translate(${el.x}, ${el.y}) scale(${el.scale ?? 1})`}
+                          transform={`translate(${el.x}, ${el.y})`}
                           filter="url(#shadowStudio)"
                         >
-                          <line x1="0" y1="16" x2="0" y2="-18" stroke="#334155" strokeWidth="2.5" />
-                          <polygon points="0,-18 18,-11 0,-4" fill={el.color || '#dc2626'} />
+                          <g
+                            transform={`rotate(${el.rotation || 0}) scale(${(el.flipX ? -1 : 1) * (el.scale ?? 1)}, ${(el.flipY ? -1 : 1) * (el.scale ?? 1)})`}
+                          >
+                            <line x1="0" y1="16" x2="0" y2="-18" stroke="#334155" strokeWidth="2.5" />
+                            <polygon points="0,-18 18,-11 0,-4" fill={el.color || '#dc2626'} />
+                          </g>
                           {el.label && (
                             <text
                               x="0"
-                              y="28"
+                              y={Math.round(28 * (el.scale ?? 1))}
                               fontFamily="sans-serif"
                               fontSize="10.5"
                               fontWeight="bold"
@@ -2317,6 +2823,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'line_solid' && (
                         <g>
+                          <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 80} y2={el.endY ?? el.y} stroke="transparent" strokeWidth="14" strokeLinecap="round" />
                           <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 80} y2={el.endY ?? el.y} stroke={el.color || '#dc2626'} strokeWidth="3" strokeLinecap="round" />
                           {el.label && (
                             <text
@@ -2336,6 +2843,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'line_dashed' && (
                         <g>
+                          <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 80} y2={el.endY ?? el.y} stroke="transparent" strokeWidth="14" strokeLinecap="round" />
                           <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 80} y2={el.endY ?? el.y} stroke={el.color || '#64748b'} strokeWidth="2.5" strokeDasharray="6,4" strokeLinecap="round" />
                           {el.label && (
                             <text
@@ -2355,6 +2863,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
 
                       {el.type === 'arrow_straight' && (
                         <g>
+                          <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 70} y2={el.endY ?? el.y} stroke="transparent" strokeWidth="14" strokeLinecap="round" />
                           <line x1={el.x} y1={el.y} x2={el.endX ?? el.x + 70} y2={el.endY ?? el.y} stroke={el.color || '#16a34a'} strokeWidth="2.8" strokeDasharray="5,3" markerEnd="url(#arrowMarkerStudio)" />
                           {el.label && (
                             <text
@@ -2372,27 +2881,47 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                         </g>
                       )}
 
-                      {el.type === 'arrow_curved' && (
-                        <g>
-                          <path d={`M ${el.x} ${el.y} Q ${((el.x + (el.endX ?? el.x + 70)) / 2)} ${el.y - 35} ${el.endX ?? el.x + 70} ${el.endY ?? el.y}`} fill="none" stroke={el.color || '#ea580c'} strokeWidth="2.5" strokeDasharray="5,3" markerEnd="url(#arrowMarkerOrangeStudio)" />
-                          {el.label && (
-                            <text
-                              x={((el.x + (el.endX ?? el.x + 70)) / 2)}
-                              y={el.y - 40}
-                              fontFamily="sans-serif"
-                              fontSize="10"
-                              fontWeight="bold"
-                              fill={el.color || '#ea580c'}
-                              textAnchor="middle"
-                            >
-                              {el.label}
-                            </text>
-                          )}
-                        </g>
-                      )}
+                      {el.type === 'arrow_curved' && (() => {
+                        const x2 = el.endX ?? el.x + 70;
+                        const y2 = el.endY ?? el.y;
+                        const midX = (el.x + x2) / 2;
+                        const ctrlY = el.flipY ? Math.max(el.y, y2) + 35 : Math.min(el.y, y2) - 35;
+                        const textY = el.flipY ? ctrlY + 14 : ctrlY - 5;
+                        return (
+                          <g>
+                            <path
+                              d={`M ${el.x} ${el.y} Q ${midX} ${ctrlY} ${x2} ${y2}`}
+                              fill="none"
+                              stroke="transparent"
+                              strokeWidth="14"
+                            />
+                            <path
+                              d={`M ${el.x} ${el.y} Q ${midX} ${ctrlY} ${x2} ${y2}`}
+                              fill="none"
+                              stroke={el.color || '#ea580c'}
+                              strokeWidth="2.5"
+                              strokeDasharray="5,3"
+                              markerEnd="url(#arrowMarkerOrangeStudio)"
+                            />
+                            {el.label && (
+                              <text
+                                x={midX}
+                                y={textY}
+                                fontFamily="sans-serif"
+                                fontSize="10"
+                                fontWeight="bold"
+                                fill={el.color || '#ea580c'}
+                                textAnchor="middle"
+                              >
+                                {el.label}
+                              </text>
+                            )}
+                          </g>
+                        );
+                      })()}
 
                       {el.type === 'shape_rect' && (
-                        <g transform={`translate(${el.x}, ${el.y})`}>
+                        <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`}>
                           <rect x={-((el.width || 160) / 2)} y={-((el.height || 90) / 2)} width={el.width || 160} height={el.height || 90} rx="10" fill={el.color || '#3b82f6'} fillOpacity="0.08" stroke={el.color || '#3b82f6'} strokeWidth="2" strokeDasharray="6,4" />
                           {el.label && (
                             <text
@@ -2430,7 +2959,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                       )}
 
                       {el.type === 'sgk_board' && (
-                        <g transform={`translate(${el.x}, ${el.y})`} filter="url(#shadowStudio)">
+                        <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
                           <rect x={-((el.width || 140) / 2)} y={-((el.height || 60) / 2)} width={el.width || 140} height={el.height || 60} rx="8" fill="#fef3c7" stroke={el.color || '#d97706'} strokeWidth="2" />
                           <text
                             x="0"
@@ -2457,7 +2986,7 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                       )}
 
                       {el.type === 'text' && (
-                        <g transform={`translate(${el.x}, ${el.y})`}>
+                        <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`}>
                           <text
                             x="0"
                             y="0"
@@ -2589,6 +3118,134 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   );
                 })()}
 
+                {/* Active Connect-Mode Live Preview Line & Start Node Halo */}
+                {connectMode && connectFromId && (() => {
+                  const fromEl = elements.find((item) => item.id === connectFromId);
+                  if (!fromEl) return null;
+                  const strokeColor =
+                    connectMode === 'line_solid'
+                      ? '#2563eb'
+                      : connectMode === 'line_dashed'
+                      ? '#475569'
+                      : '#16a34a';
+                  return (
+                    <g pointerEvents="none">
+                      <circle
+                        cx={fromEl.x}
+                        cy={fromEl.y}
+                        r={Math.max(18, (fromEl.radius || 14) + 6)}
+                        fill="#10b981"
+                        fillOpacity="0.16"
+                        stroke="#059669"
+                        strokeWidth="2.4"
+                        strokeDasharray="4,3"
+                      />
+                      {connectCursorPt && (
+                        <line
+                          x1={fromEl.x}
+                          y1={fromEl.y}
+                          x2={connectCursorPt.x}
+                          y2={connectCursorPt.y}
+                          stroke={strokeColor}
+                          strokeWidth="2.5"
+                          strokeDasharray={connectMode === 'line_solid' ? 'none' : '6,4'}
+                          strokeOpacity="0.8"
+                          markerEnd={
+                            connectMode === 'arrow_straight' ? 'url(#arrowMarkerStudio)' : undefined
+                          }
+                        />
+                      )}
+                    </g>
+                  );
+                })()}
+
+                {/* Draggable Start/End Handles + Live Angle/Length Badge for Selected Single Line / Arrow */}
+                {!connectMode &&
+                  selectedIds.length === 1 &&
+                  primarySelectedElement &&
+                  isLineLikeElement(primarySelectedElement) && (() => {
+                    const x1 = primarySelectedElement.x;
+                    const y1 = primarySelectedElement.y;
+                    const x2 = primarySelectedElement.endX ?? primarySelectedElement.x + 80;
+                    const y2 = primarySelectedElement.endY ?? primarySelectedElement.y;
+                    const { angle, length, midX, midY } = getLineMetrics(primarySelectedElement);
+                    const snapNode = draggingLineEnd?.snapNodeId
+                      ? elements.find((item) => item.id === draggingLineEnd.snapNodeId)
+                      : null;
+                    return (
+                      <g>
+                        {snapNode && (
+                          <circle
+                            cx={snapNode.x}
+                            cy={snapNode.y}
+                            r={Math.max(18, (snapNode.radius || 14) + 6)}
+                            fill="#10b981"
+                            fillOpacity="0.18"
+                            stroke="#059669"
+                            strokeWidth="2.2"
+                            pointerEvents="none"
+                          />
+                        )}
+                        <g pointerEvents="none">
+                          <rect
+                            x={Math.max(20, Math.min(545, midX - 38))}
+                            y={Math.max(54, midY - 26)}
+                            width={76}
+                            height={18}
+                            rx="5"
+                            fill="#1e293b"
+                            fillOpacity="0.88"
+                          />
+                          <text
+                            x={Math.max(58, Math.min(583, midX))}
+                            y={Math.max(66, midY - 14)}
+                            fill="#ffffff"
+                            fontSize="9.5"
+                            fontWeight="bold"
+                            fontFamily="sans-serif"
+                            textAnchor="middle"
+                          >
+                            {angle}° · {length}px
+                          </text>
+                        </g>
+                        {/* Start Handle */}
+                        <g
+                          onPointerDown={(e) =>
+                            handlePointerDownLineEnd(e, primarySelectedElement.id, 'start')
+                          }
+                          className="cursor-grab"
+                        >
+                          <circle cx={x1} cy={y1} r="12" fill="transparent" />
+                          <circle
+                            cx={x1}
+                            cy={y1}
+                            r="6"
+                            fill="#ffffff"
+                            stroke="#2563eb"
+                            strokeWidth="2.5"
+                          />
+                        </g>
+                        {/* End Handle */}
+                        <g
+                          onPointerDown={(e) =>
+                            handlePointerDownLineEnd(e, primarySelectedElement.id, 'end')
+                          }
+                          className="cursor-grab"
+                        >
+                          <circle cx={x2} cy={y2} r="12" fill="transparent" />
+                          <circle
+                            cx={x2}
+                            cy={y2}
+                            r="6"
+                            fill="#ffffff"
+                            stroke="#059669"
+                            strokeWidth="2.5"
+                          />
+                        </g>
+                      </g>
+                    );
+                  })()}
+
                 {/* Active Marquee Drag Box */}
                 {isMarqueeSelecting && marqueeStart && marqueeCurrent && (
                   <rect
@@ -2667,6 +3324,89 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   </button>
                 </div>
 
+                {/* Batch Connect Selected Objects with Solid / Dashed / Arrow Lines */}
+                {elements.filter((el) => selectedIds.includes(el.id) && !isLineLikeElement(el)).length >= 2 && (
+                  <div className="p-2.5 bg-sky-50/85 rounded-xl border border-sky-200 space-y-1.5">
+                    <span className="font-bold text-sky-900 block text-[11px]">
+                      🔗 Nối Các Đối Tượng Đang Chọn
+                    </span>
+                    <div className="grid grid-cols-3 gap-1 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => handleBatchConnectSelected('line_solid')}
+                        className="bg-white hover:bg-blue-600 hover:text-white text-blue-800 font-bold py-1 px-1 rounded-md border border-sky-300 transition"
+                        title="Nối lần lượt các đối tượng đang chọn bằng đường thẳng nét liền"
+                      >
+                        ─── Liền
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchConnectSelected('line_dashed')}
+                        className="bg-white hover:bg-slate-700 hover:text-white text-slate-700 font-bold py-1 px-1 rounded-md border border-slate-300 transition"
+                        title="Nối lần lượt các đối tượng đang chọn bằng đường thẳng nét đứt"
+                      >
+                        ┄ Đứt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchConnectSelected('arrow_straight')}
+                        className="bg-white hover:bg-emerald-600 hover:text-white text-emerald-700 font-bold py-1 px-1 rounded-md border border-emerald-300 transition"
+                        title="Nối lần lượt các đối tượng đang chọn bằng mũi tên"
+                      >
+                        ➜ Mũi tên
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-1.5 text-[10px] text-sky-900 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={connectClosedLoop}
+                        onChange={(e) => setConnectClosedLoop(e.target.checked)}
+                        className="rounded border-sky-300"
+                      />
+                      <span>Khép kín (nối điểm cuối về điểm đầu)</span>
+                    </label>
+                  </div>
+                )}
+
+                {/* Rotate Whole Group by Custom Angle */}
+                <div className="p-2.5 bg-amber-50/85 rounded-xl border border-amber-200 space-y-1.5">
+                  <span className="font-bold text-amber-900 text-[11px] flex items-center gap-1">
+                    <RotateCw className="w-3.5 h-3.5 text-amber-600" /> Xoay Cả Nhóm Theo Góc
+                  </span>
+                  <div className="grid grid-cols-5 gap-1 text-[10px]">
+                    {[-45, -15, 15, 45, 90].map((deg) => (
+                      <button
+                        key={deg}
+                        type="button"
+                        onClick={() => handleRotateGroup(deg)}
+                        className="bg-white hover:bg-amber-600 hover:text-white text-amber-900 font-bold py-1 rounded-md border border-amber-200 transition"
+                        title={`Xoay cả nhóm ${deg > 0 ? '+' : ''}${deg}°`}
+                      >
+                        {deg > 0 ? `+${deg}°` : `${deg}°`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={-360}
+                      max={360}
+                      value={groupRotateInput}
+                      onChange={(e) => setGroupRotateInput(parseInt(e.target.value, 10) || 0)}
+                      className="w-16 bg-white border border-amber-300 rounded px-1.5 py-0.5 font-bold text-center text-[11px]"
+                      title="Nhập góc xoay tùy ý (độ)"
+                    />
+                    <span className="text-[10.5px] font-bold text-amber-800">°</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRotateGroup(groupRotateInput)}
+                      className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold py-0.5 px-2 rounded-md text-[10.5px] transition"
+                    >
+                      Xoay Nhóm
+                    </button>
+                  </div>
+                </div>
+
                 {/* Proportional Group Resize / Shrink */}
                 <div className="p-2.5 bg-indigo-50/80 rounded-xl border border-indigo-200 space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -2711,6 +3451,49 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   <p className="text-[10px] text-indigo-700/90 leading-tight">
                     Mẹo: Có thể kéo trực tiếp 4 ô vuông ở góc khung nhóm trên sân để thu gọn tự do.
                   </p>
+                </div>
+
+                {/* Mirror / Flip Group */}
+                <div className="p-2.5 bg-violet-50/80 rounded-xl border border-violet-200 space-y-1.5">
+                  <span className="font-bold text-violet-900 block text-[11px]">
+                    🪞 Lật Gương (Mirror) &amp; Đối Xứng
+                  </span>
+                  <div className="grid grid-cols-2 gap-1 text-[10.5px]">
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('horizontal', false)}
+                      className="bg-white hover:bg-violet-600 hover:text-white text-violet-800 font-bold py-1 px-1.5 rounded-md border border-violet-200 flex items-center justify-center gap-1 transition"
+                      title="Lật ngược nhóm từ trái sang phải tại chỗ"
+                    >
+                      <FlipHorizontal2 className="w-3.5 h-3.5" /> Lật Ngang
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('vertical', false)}
+                      className="bg-white hover:bg-violet-600 hover:text-white text-violet-800 font-bold py-1 px-1.5 rounded-md border border-violet-200 flex items-center justify-center gap-1 transition"
+                      title="Lật ngược nhóm từ trên xuống dưới tại chỗ"
+                    >
+                      <FlipVertical2 className="w-3.5 h-3.5" /> Lật Dọc
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('horizontal', true)}
+                      className="bg-violet-600 hover:bg-violet-700 text-white font-bold py-1 px-1.5 rounded-md flex items-center justify-center gap-1 transition shadow-2xs"
+                      title="Nhân bản và lật đối xứng sang bên cạnh (tạo 2 nửa đối xứng nhau)"
+                    >
+                      <FlipHorizontal2 className="w-3 h-3" /> Đối Xứng ↔
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('vertical', true)}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-1 px-1.5 rounded-md flex items-center justify-center gap-1 transition shadow-2xs"
+                      title="Nhân bản và lật đối xứng xuống bên dưới"
+                    >
+                      <FlipVertical2 className="w-3 h-3" /> Đối Xứng ↕
+                    </button>
+                  </div>
                 </div>
 
                 {/* Full Alignment & Distribution Suite */}
@@ -2906,6 +3689,39 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   </div>
                 </div>
 
+                {/* Single Element Mirror / Flip Controls */}
+                <div className="p-2 bg-violet-50/75 rounded-xl border border-violet-200 space-y-1.5">
+                  <span className="font-bold text-violet-900 block text-[10.5px]">
+                    🪞 Lật Gương (Mirror)
+                  </span>
+                  <div className="grid grid-cols-3 gap-1 text-[10px]">
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('horizontal', false)}
+                      className="bg-white hover:bg-violet-600 hover:text-white text-violet-800 font-bold py-1 px-1 rounded-md border border-violet-200 flex items-center justify-center gap-0.5 transition"
+                      title="Lật ngang đối tượng (Trái ↔ Phải)"
+                    >
+                      <FlipHorizontal2 className="w-3 h-3" /> Ngang
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('vertical', false)}
+                      className="bg-white hover:bg-violet-600 hover:text-white text-violet-800 font-bold py-1 px-1 rounded-md border border-violet-200 flex items-center justify-center gap-0.5 transition"
+                      title="Lật dọc đối tượng (Trên ↕ Dưới)"
+                    >
+                      <FlipVertical2 className="w-3 h-3" /> Dọc
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleMirrorSelected('horizontal', true)}
+                      className="bg-violet-600 hover:bg-violet-700 text-white font-bold py-1 px-1 rounded-md flex items-center justify-center gap-0.5 transition"
+                      title="Tạo 1 bản sao đối xứng bên cạnh"
+                    >
+                      + Đối xứng
+                    </button>
+                  </div>
+                </div>
+
                 {/* Grid Box Live Inspector */}
                 {primarySelectedElement.type === 'grid_box' && (
                   <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 space-y-2">
@@ -3088,41 +3904,48 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   </div>
                 )}
 
-                {/* Rotation & Size Controls for Special Symbols / Shapes / Lines */}
-                {(primarySelectedElement.type === 'foot_left' ||
-                  primarySelectedElement.type === 'foot_right' ||
-                  primarySelectedElement.type === 'feet_pair' ||
-                  primarySelectedElement.type === 'hand_left' ||
-                  primarySelectedElement.type === 'hand_right' ||
-                  primarySelectedElement.type === 'hands_pair' ||
-                  primarySelectedElement.type === 'mat' ||
-                  primarySelectedElement.type === 'hurdle' ||
-                  primarySelectedElement.type === 'goal_gate' ||
-                  primarySelectedElement.type === 'zigzag_path' ||
-                  primarySelectedElement.type === 'jump_arc' ||
-                  primarySelectedElement.type === 'star_target' ||
-                  primarySelectedElement.type === 'grid_box' ||
-                  primarySelectedElement.type === 'parallel_lines' ||
-                  primarySelectedElement.type === 'stick' ||
-                  primarySelectedElement.type === 'shape_rect' ||
-                  primarySelectedElement.type === 'shape_circle') && (
+                {/* Rotation & Size Controls for All Non-Line Single Elements */}
+                {!isLineLikeElement(primarySelectedElement) && (
                   <div className="p-2.5 bg-amber-50/70 rounded-xl border border-amber-200 space-y-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-1">
                       <span className="font-bold text-amber-900 text-[11px] flex items-center gap-1">
-                        <RotateCw className="w-3 h-3" /> Xoay &amp; Kích Thước
+                        <RotateCw className="w-3 h-3" /> Xoay Góc &amp; Kích Thước
                       </span>
-                      <span className="text-[10px] font-bold text-amber-700">
-                        {primarySelectedElement.rotation || 0}°
-                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={359}
+                          value={((primarySelectedElement.rotation || 0) % 360 + 360) % 360}
+                          onChange={(e) => {
+                            const raw = parseInt(e.target.value, 10);
+                            const deg = Number.isNaN(raw) ? 0 : ((raw % 360) + 360) % 360;
+                            handleUpdateSingleSelected({ rotation: deg });
+                          }}
+                          className="w-12 bg-white border border-amber-300 rounded px-1 py-0.5 text-[10.5px] font-bold text-center text-amber-900"
+                          title="Nhập góc xoay tùy ý (0 - 359°)"
+                        />
+                        <span className="text-[10.5px] font-bold text-amber-800">°</span>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-5 gap-1 text-[10px]">
-                      {[0, 90, 180, 270].map((deg) => (
+                    <input
+                      type="range"
+                      min={0}
+                      max={359}
+                      value={((primarySelectedElement.rotation || 0) % 360 + 360) % 360}
+                      onChange={(e) =>
+                        handleUpdateSingleSelected({ rotation: parseInt(e.target.value, 10) || 0 })
+                      }
+                      className="w-full accent-amber-600"
+                    />
+                    <div className="grid grid-cols-4 gap-1 text-[10px]">
+                      {[0, 45, 90, 135, 180, 270].map((deg) => (
                         <button
                           key={deg}
                           type="button"
                           onClick={() => handleUpdateSingleSelected({ rotation: deg })}
                           className={`py-0.5 rounded font-bold border transition ${
-                            (primarySelectedElement.rotation || 0) === deg
+                            (((primarySelectedElement.rotation || 0) % 360) + 360) % 360 === deg
                               ? 'bg-amber-600 text-white border-amber-600'
                               : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
                           }`}
@@ -3134,13 +3957,25 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                         type="button"
                         onClick={() =>
                           handleUpdateSingleSelected({
-                            rotation: ((primarySelectedElement.rotation || 0) + 45) % 360
+                            rotation: (((primarySelectedElement.rotation || 0) - 15) % 360 + 360) % 360
                           })
                         }
                         className="py-0.5 rounded font-bold border bg-white text-amber-800 border-amber-300 hover:bg-amber-100"
-                        title="Xoay thêm 45 độ"
+                        title="Xoay ngược 15 độ"
                       >
-                        +45°
+                        −15°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleUpdateSingleSelected({
+                            rotation: ((primarySelectedElement.rotation || 0) + 15) % 360
+                          })
+                        }
+                        className="py-0.5 rounded font-bold border bg-white text-amber-800 border-amber-300 hover:bg-amber-100"
+                        title="Xoay thêm 15 độ"
+                      >
+                        +15°
                       </button>
                     </div>
                     {(primarySelectedElement.type === 'foot_left' ||
@@ -3150,13 +3985,16 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                       primarySelectedElement.type === 'hand_right' ||
                       primarySelectedElement.type === 'hands_pair' ||
                       primarySelectedElement.type === 'star_target' ||
+                      primarySelectedElement.type === 'mini_square' ||
+                      primarySelectedElement.type === 'mini_triangle' ||
+                      primarySelectedElement.type === 'hoop' ||
                       primarySelectedElement.type === 'shape_circle') && (
                       <div className="flex items-center gap-2 text-[10.5px]">
                         <span className="text-slate-600 whitespace-nowrap">Cỡ:</span>
                         <input
                           type="range"
-                          min={10}
-                          max={primarySelectedElement.type === 'shape_circle' ? 140 : 34}
+                          min={8}
+                          max={primarySelectedElement.type === 'shape_circle' ? 140 : 40}
                           value={primarySelectedElement.radius || 16}
                           onChange={(e) =>
                             handleUpdateSingleSelected({ radius: parseInt(e.target.value, 10) || 16 })
@@ -3238,61 +4076,169 @@ export const FormationStudioModal: React.FC<FormationStudioModalProps> = ({
                   </div>
                 )}
 
-                {/* Quick Orientation for single Line / Arrow */}
-                {(primarySelectedElement.type === 'line_solid' ||
-                  primarySelectedElement.type === 'line_dashed' ||
-                  primarySelectedElement.type === 'arrow_straight' ||
-                  primarySelectedElement.type === 'arrow_curved') && (
-                  <div className="p-2 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
-                    <span className="font-bold text-slate-700 block text-[10.5px]">
-                      📏 Đổi Hướng Đường / Mũi Tên
-                    </span>
-                    <div className="grid grid-cols-2 gap-1 text-[10px]">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const len = Math.max(
-                            60,
-                            Math.round(
-                              Math.hypot(
-                                (primarySelectedElement.endX ?? primarySelectedElement.x + 100) - primarySelectedElement.x,
-                                (primarySelectedElement.endY ?? primarySelectedElement.y) - primarySelectedElement.y
+                {/* Full Custom Angle, Length & Style Controls for Single Line / Arrow */}
+                {isLineLikeElement(primarySelectedElement) && (() => {
+                  const metrics = getLineMetrics(primarySelectedElement);
+                  return (
+                    <div className="p-2.5 bg-sky-50/80 rounded-xl border border-sky-200 space-y-2">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-bold text-sky-900 text-[11px] flex items-center gap-1">
+                          <RotateCw className="w-3 h-3 text-sky-600" /> Xoay Góc Đường Thẳng
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <input
+                            type="number"
+                            min={0}
+                            max={359}
+                            value={metrics.angle}
+                            onChange={(e) => {
+                              const raw = parseInt(e.target.value, 10);
+                              const deg = Number.isNaN(raw) ? 0 : ((raw % 360) + 360) % 360;
+                              handleUpdateSingleSelected(
+                                rotateLineToAngle(primarySelectedElement, deg)
+                              );
+                            }}
+                            className="w-12 bg-white border border-sky-300 rounded px-1 py-0.5 text-[10.5px] font-bold text-center text-sky-900"
+                            title="Nhập góc xoay chính xác (ví dụ: 45°)"
+                          />
+                          <span className="text-[10.5px] font-bold text-sky-800">°</span>
+                        </div>
+                      </div>
+
+                      <input
+                        type="range"
+                        min={0}
+                        max={359}
+                        value={metrics.angle}
+                        onChange={(e) =>
+                          handleUpdateSingleSelected(
+                            rotateLineToAngle(
+                              primarySelectedElement,
+                              parseInt(e.target.value, 10) || 0
+                            )
+                          )
+                        }
+                        className="w-full accent-sky-600"
+                      />
+
+                      <div className="grid grid-cols-4 gap-1 text-[10px]">
+                        {[0, 30, 45, 60, 90, 135].map((deg) => (
+                          <button
+                            key={deg}
+                            type="button"
+                            onClick={() =>
+                              handleUpdateSingleSelected(
+                                rotateLineToAngle(primarySelectedElement, deg)
+                              )
+                            }
+                            className={`py-0.5 rounded font-bold border transition ${
+                              metrics.angle === deg
+                                ? 'bg-sky-600 text-white border-sky-600'
+                                : 'bg-white text-slate-700 border-sky-200 hover:bg-sky-100'
+                            }`}
+                          >
+                            {deg}°
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateSingleSelected(
+                              rotateLineToAngle(
+                                primarySelectedElement,
+                                (metrics.angle + 15) % 360
                               )
                             )
-                          );
-                          handleUpdateSingleSelected({
-                            endX: Math.min(615, primarySelectedElement.x + len),
-                            endY: primarySelectedElement.y
-                          });
-                        }}
-                        className="py-1 rounded bg-white hover:bg-blue-50 border border-slate-300 font-bold text-slate-700"
-                      >
-                        ── Nằm Ngang
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const len = Math.max(
-                            60,
-                            Math.round(
-                              Math.hypot(
-                                (primarySelectedElement.endX ?? primarySelectedElement.x + 100) - primarySelectedElement.x,
-                                (primarySelectedElement.endY ?? primarySelectedElement.y) - primarySelectedElement.y
+                          }
+                          className="py-0.5 rounded font-bold border bg-white text-sky-800 border-sky-300 hover:bg-sky-100"
+                          title="Xoay thêm 15 độ"
+                        >
+                          +15°
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleUpdateSingleSelected(
+                              rotateLineToAngle(
+                                primarySelectedElement,
+                                (metrics.angle + 45) % 360
                               )
                             )
-                          );
-                          handleUpdateSingleSelected({
-                            endX: primarySelectedElement.x,
-                            endY: Math.min(405, primarySelectedElement.y + len)
-                          });
-                        }}
-                        className="py-1 rounded bg-white hover:bg-blue-50 border border-slate-300 font-bold text-slate-700"
-                      >
-                        │ Thẳng Đứng
-                      </button>
+                          }
+                          className="py-0.5 rounded font-bold border bg-white text-sky-800 border-sky-300 hover:bg-sky-100"
+                          title="Xoay thêm 45 độ"
+                        >
+                          +45°
+                        </button>
+                      </div>
+
+                      {/* Exact Length */}
+                      <div className="flex items-center gap-2 text-[10.5px]">
+                        <span className="text-slate-600 whitespace-nowrap font-medium">
+                          Độ dài:
+                        </span>
+                        <input
+                          type="number"
+                          min={16}
+                          max={560}
+                          value={metrics.length}
+                          onChange={(e) => {
+                            const nextLen = Math.max(
+                              16,
+                              Math.min(560, parseInt(e.target.value, 10) || metrics.length)
+                            );
+                            handleUpdateSingleSelected(
+                              rotateLineToAngle(primarySelectedElement, metrics.angle, nextLen)
+                            );
+                          }}
+                          className="w-16 bg-white border border-sky-300 rounded px-1.5 py-0.5 font-bold text-center text-sky-900"
+                        />
+                        <span className="text-[10px] text-slate-500">px</span>
+                      </div>
+
+                      {/* Quick Line Style Switcher */}
+                      <div className="grid grid-cols-3 gap-1 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSingleSelected({ type: 'line_solid' })}
+                          className={`py-1 rounded font-bold border transition ${
+                            primarySelectedElement.type === 'line_solid'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-blue-50'
+                          }`}
+                        >
+                          ─── Liền
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSingleSelected({ type: 'line_dashed' })}
+                          className={`py-1 rounded font-bold border transition ${
+                            primarySelectedElement.type === 'line_dashed'
+                              ? 'bg-slate-700 text-white border-slate-700'
+                              : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          ┄ Đứt
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSingleSelected({ type: 'arrow_straight' })}
+                          className={`py-1 rounded font-bold border transition ${
+                            primarySelectedElement.type === 'arrow_straight'
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white text-emerald-700 border-slate-300 hover:bg-emerald-50'
+                          }`}
+                        >
+                          ➜ Mũi tên
+                        </button>
+                      </div>
+
+                      <p className="text-[9.5px] text-sky-800/90 leading-tight">
+                        Mẹo: Kéo 2 chấm tròn ở 2 đầu đường trên sân để xoay tự do hoặc bắt dính vào đối tượng khác.
+                      </p>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Array Repetition (Sao chép hàng loạt) */}
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">

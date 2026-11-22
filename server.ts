@@ -915,7 +915,9 @@ app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) =>
     'goal_gate',
     'zigzag_path',
     'jump_arc',
-    'star_target'
+    'star_target',
+    'mini_square',
+    'mini_triangle'
   ]);
 
   const clamp = (val: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(val)));
@@ -944,6 +946,8 @@ app.post('/api/ai/game-image-to-diagram', async (req: Request, res: Response) =>
         const s = Number(el.scale);
         if (Number.isFinite(s)) item.scale = Math.max(0.4, Math.min(2.2, Number(s.toFixed(2))));
       }
+      if (el.flipX === true) item.flipX = true;
+      if (el.flipY === true) item.flipY = true;
       if (type === 'grid_box') {
         item.rows = clamp(Number(el.rows) || 3, 1, 8);
         item.cols = clamp(Number(el.cols) || 3, 1, 8);

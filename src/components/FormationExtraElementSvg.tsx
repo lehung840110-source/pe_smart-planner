@@ -209,10 +209,13 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
   if (el.type === 'foot_left' || el.type === 'foot_right') {
     const s = (el.radius || 16) / 16;
     const col = el.color || '#2563eb';
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
         <circle cx="0" cy="0" r={16 * s} fill="transparent" />
-        <FootVector color={col} mirrorX={el.type === 'foot_right'} scale={s} />
+        <g transform={`scale(1, ${fy})`}>
+          <FootVector color={col} mirrorX={el.type === 'foot_right'} scale={s} />
+        </g>
         {el.label && (
           <text
             x="0"
@@ -233,14 +236,17 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
   if (el.type === 'feet_pair') {
     const s = (el.radius || 15) / 16;
     const col = el.color || '#2563eb';
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
         <rect x={-18 * s} y={-16 * s} width={36 * s} height={32 * s} fill="transparent" />
-        <g transform={`translate(${-9 * s}, 0)`}>
-          <FootVector color={col} mirrorX={false} scale={s * 0.88} />
-        </g>
-        <g transform={`translate(${9 * s}, 0)`}>
-          <FootVector color={col} mirrorX={true} scale={s * 0.88} />
+        <g transform={`scale(1, ${fy})`}>
+          <g transform={`translate(${-9 * s}, 0)`}>
+            <FootVector color={col} mirrorX={false} scale={s * 0.88} />
+          </g>
+          <g transform={`translate(${9 * s}, 0)`}>
+            <FootVector color={col} mirrorX={true} scale={s * 0.88} />
+          </g>
         </g>
         {el.label && (
           <text
@@ -262,10 +268,13 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
   if (el.type === 'hand_left' || el.type === 'hand_right') {
     const s = (el.radius || 16) / 16;
     const col = el.color || '#ea580c';
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
         <circle cx="0" cy="0" r={16 * s} fill="transparent" />
-        <HandVector color={col} mirrorX={el.type === 'hand_right'} scale={s} />
+        <g transform={`scale(1, ${fy})`}>
+          <HandVector color={col} mirrorX={el.type === 'hand_right'} scale={s} />
+        </g>
         {el.label && (
           <text
             x="0"
@@ -286,14 +295,17 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
   if (el.type === 'hands_pair') {
     const s = (el.radius || 15) / 16;
     const col = el.color || '#ea580c';
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
         <rect x={-22 * s} y={-16 * s} width={44 * s} height={32 * s} fill="transparent" />
-        <g transform={`translate(${-11 * s}, 0)`}>
-          <HandVector color={col} mirrorX={false} scale={s * 0.85} />
-        </g>
-        <g transform={`translate(${11 * s}, 0)`}>
-          <HandVector color={col} mirrorX={true} scale={s * 0.85} />
+        <g transform={`scale(1, ${fy})`}>
+          <g transform={`translate(${-11 * s}, 0)`}>
+            <HandVector color={col} mirrorX={false} scale={s * 0.85} />
+          </g>
+          <g transform={`translate(${11 * s}, 0)`}>
+            <HandVector color={col} mirrorX={true} scale={s * 0.85} />
+          </g>
         </g>
         {el.label && (
           <text
@@ -374,28 +386,32 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
     const w = el.width || 64;
     const h = el.height || 28;
     const col = el.color || '#16a34a';
+    const fx = el.flipX ? -1 : 1;
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
-        <rect
-          x={-w / 2}
-          y={-h / 2}
-          width={w}
-          height={h}
-          rx="3"
-          fill={col}
-          fillOpacity="0.1"
-          stroke={col}
-          strokeWidth="1.2"
-          strokeDasharray="3,3"
-        />
-        <path
-          d={`M ${-w / 2},${h / 2} L ${-w / 2},${-h / 2} L ${w / 2},${-h / 2} L ${w / 2},${h / 2}`}
-          fill="none"
-          stroke={col}
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
+        <g transform={`scale(${fx}, ${fy})`}>
+          <rect
+            x={-w / 2}
+            y={-h / 2}
+            width={w}
+            height={h}
+            rx="3"
+            fill={col}
+            fillOpacity="0.1"
+            stroke={col}
+            strokeWidth="1.2"
+            strokeDasharray="3,3"
+          />
+          <path
+            d={`M ${-w / 2},${h / 2} L ${-w / 2},${-h / 2} L ${w / 2},${-h / 2} L ${w / 2},${h / 2}`}
+            fill="none"
+            stroke={col}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </g>
         {el.label && (
           <text
             x="0"
@@ -417,21 +433,25 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
     const w = el.width || 160;
     const h = el.height || 40;
     const col = el.color || '#16a34a';
+    const fx = el.flipX ? -1 : 1;
+    const fy = el.flipY ? -1 : 1;
     const x0 = -w / 2;
     const seg = w / 4;
     const pts = `${x0},0 ${x0 + seg * 0.7},${-h / 2} ${x0 + seg * 1.8},${h / 2} ${x0 + seg * 2.9},${-h / 2} ${w / 2},0`;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`}>
         <rect x={-w / 2 - 4} y={-h / 2 - 6} width={w + 8} height={h + 12} fill="transparent" />
-        <polyline
-          points={pts}
-          fill="none"
-          stroke={col}
-          strokeWidth="2.6"
-          strokeDasharray="5,3"
-          strokeLinejoin="round"
-          markerEnd="url(#arrowMarkerStudio)"
-        />
+        <g transform={`scale(${fx}, ${fy})`}>
+          <polyline
+            points={pts}
+            fill="none"
+            stroke={col}
+            strokeWidth="2.6"
+            strokeDasharray="5,3"
+            strokeLinejoin="round"
+            markerEnd="url(#arrowMarkerStudio)"
+          />
+        </g>
         {el.label && (
           <text
             x="0"
@@ -453,17 +473,21 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
     const w = el.width || 90;
     const h = el.height || 34;
     const col = el.color || '#ea580c';
+    const fx = el.flipX ? -1 : 1;
+    const fy = el.flipY ? -1 : 1;
     return (
       <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`}>
         <rect x={-w / 2 - 4} y={-h / 2 - 6} width={w + 8} height={h + 12} fill="transparent" />
-        <path
-          d={`M ${-w / 2},${h / 3} Q ${-w / 4},${-h} 0,${h / 3} Q ${w / 4},${-h} ${w / 2},${h / 3}`}
-          fill="none"
-          stroke={col}
-          strokeWidth="2.5"
-          strokeDasharray="5,3"
-          markerEnd="url(#arrowMarkerOrangeStudio)"
-        />
+        <g transform={`scale(${fx}, ${fy})`}>
+          <path
+            d={`M ${-w / 2},${h / 3} Q ${-w / 4},${-h} 0,${h / 3} Q ${w / 4},${-h} ${w / 2},${h / 3}`}
+            fill="none"
+            stroke={col}
+            strokeWidth="2.5"
+            strokeDasharray="5,3"
+            markerEnd="url(#arrowMarkerOrangeStudio)"
+          />
+        </g>
         {el.label && (
           <text
             x="0"
@@ -500,6 +524,80 @@ export const FormationExtraElementSvg: React.FC<{ el: FormationElement }> = ({ e
             y={r + 13}
             fontFamily="sans-serif"
             fontSize="10.5"
+            fontWeight="bold"
+            fill={col}
+            textAnchor="middle"
+          >
+            {el.label}
+          </text>
+        )}
+      </g>
+    );
+  }
+
+  if (el.type === 'mini_square') {
+    const r = el.radius || 15;
+    const col = el.color || '#2563eb';
+    const fx = el.flipX ? -1 : 1;
+    const fy = el.flipY ? -1 : 1;
+    return (
+      <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
+        <g transform={`scale(${fx}, ${fy})`}>
+          <rect
+            x={-r}
+            y={-r}
+            width={r * 2}
+            height={r * 2}
+            rx="3.5"
+            fill={col}
+            fillOpacity="0.14"
+            stroke={col}
+            strokeWidth="3.2"
+          />
+        </g>
+        {el.label && (
+          <text
+            x="0"
+            y="4"
+            fontFamily="sans-serif"
+            fontSize="10.5"
+            fontWeight="bold"
+            fill={col}
+            textAnchor="middle"
+          >
+            {el.label}
+          </text>
+        )}
+      </g>
+    );
+  }
+
+  if (el.type === 'mini_triangle') {
+    const r = el.radius || 16;
+    const col = el.color || '#ea580c';
+    const fx = el.flipX ? -1 : 1;
+    const fy = el.flipY ? -1 : 1;
+    const h = r * 1.1;
+    const w = r * 1.15;
+    const pts = `0,${(-h).toFixed(1)} ${w.toFixed(1)},${(h * 0.82).toFixed(1)} ${(-w).toFixed(1)},${(h * 0.82).toFixed(1)}`;
+    return (
+      <g transform={`translate(${el.x}, ${el.y}) rotate(${el.rotation || 0})`} filter="url(#shadowStudio)">
+        <g transform={`scale(${fx}, ${fy})`}>
+          <polygon
+            points={pts}
+            fill={col}
+            fillOpacity="0.14"
+            stroke={col}
+            strokeWidth="3.2"
+            strokeLinejoin="round"
+          />
+        </g>
+        {el.label && (
+          <text
+            x="0"
+            y="5"
+            fontFamily="sans-serif"
+            fontSize="10"
             fontWeight="bold"
             fill={col}
             textAnchor="middle"
