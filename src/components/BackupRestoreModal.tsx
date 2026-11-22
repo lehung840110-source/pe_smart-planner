@@ -22,8 +22,31 @@ import {
 } from 'lucide-react';
 import { User as FirebaseGoogleUser } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
-import { SgkImageItem, ScenarioItem, SchoolSettings, LessonRow } from '../types/gdtc';
+import {
+  SgkImageItem,
+  ScenarioItem,
+  SchoolSettings,
+  LessonRow,
+  UserCustomTemplate
+} from '../types/gdtc';
 import { MasterPlanItem } from '../data/masterTemplateTuan8';
+import {
+  FormationDiagram,
+  GradeFormationStyleMap,
+  CUSTOM_FORMATIONS_CHANGED_EVENT,
+  getSavedCustomFormations,
+  getSavedCustomFormationsAsync,
+  getGradeFormationStyles,
+  saveGradeFormationStyles,
+  mergeCustomFormationsIntoStorage,
+  saveCustomFormationsList
+} from '../data/formationDiagrams';
+import { PlanVersionStore, savePlanVersionStoreDB } from '../utils/planVersionHistory';
+import {
+  SgkTreeLessonOverride,
+  getSgkTreeOverrides,
+  saveSgkTreeLessonOverride
+} from '../data/sgkCurriculumTree';
 import {
   CloudSyncStatusInfo,
   CLOUD_SYNC_IMAGES_FILENAME,
@@ -34,7 +57,6 @@ import {
   saveImagesDB,
   getAllScenariosDB,
   saveScenariosDB,
-  getAppStateDB,
   setAppStateDB,
   getStorageEstimate
 } from '../utils/db';
@@ -48,6 +70,9 @@ interface BackupRestoreModalProps {
   allMasterPlans: Record<string, MasterPlanItem>;
   currentMasterPlan: MasterPlanItem;
   lessonRows: LessonRow[];
+  planVersionStore?: PlanVersionStore;
+  userCustomTemplates?: UserCustomTemplate[];
+  activeCustomTemplateId?: string | null;
   activeWeek: number;
   activeGrade: number;
   activeLessonNum: number;
@@ -73,6 +98,10 @@ interface BackupRestoreModalProps {
     allMasterPlans?: Record<string, MasterPlanItem>;
     currentMasterPlan?: MasterPlanItem;
     lessonRows?: LessonRow[];
+    planVersionStore?: PlanVersionStore;
+    userCustomTemplates?: UserCustomTemplate[];
+    activeCustomTemplateId?: string | null;
+    customFormationsCount?: number;
     activeWeek?: number;
     activeGrade?: number;
     activeLessonNum?: number;
@@ -89,10 +118,16 @@ export interface BackupDataPackage {
   exportDate: string;
   schoolSettings: SchoolSettings;
   images: SgkImageItem[];
+  customFormations?: FormationDiagram[];
+  gradeFormationStyles?: GradeFormationStyleMap;
   scenarios: ScenarioItem[];
   allMasterPlans: Record<string, MasterPlanItem>;
   currentMasterPlan: MasterPlanItem;
   lessonRows: LessonRow[];
+  planVersionStore?: PlanVersionStore;
+  userCustomTemplates?: UserCustomTemplate[];
+  activeCustomTemplateId?: string | null;
+  sgkTreeOverrides?: Record<string, SgkTreeLessonOverride>;
   activeState: {
     week: number;
     grade: number;
@@ -111,6 +146,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   allMasterPlans,
   currentMasterPlan,
   lessonRows,
+  planVersionStore,
+  userCustomTemplates = [],
+  activeCustomTemplateId = null,
   activeWeek,
   activeGrade,
   activeLessonNum,
@@ -130,6 +168,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     usedMB: '0.00',
     quotaMB: '...'
   });
+  const [customFormationsCount, setCustomFormationsCount] = useState<number>(
+    () => getSavedCustomFormations().length
+  );
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isForceSaving, setIsForceSaving] = useState<boolean>(false);
@@ -157,46 +198,65 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     await onRunCloudSync({
       silent: false,
       interactiveSignIn: true,
-      enableAutoSyncAfter: true
+      enableAutoSyncAfter: true,
+      forcePushWorkspace: true
     });
   };
 
   useEffect(() => {
     if (isOpen) {
       getStorageEstimate().then(setStorageInfo);
+      getSavedCustomFormationsAsync().then((list) => setCustomFormationsCount(list.length));
       setLastSyncTime(new Date().toLocaleTimeString('vi-VN'));
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    const onFormationsChanged = () => {
+      setCustomFormationsCount(getSavedCustomFormations().length);
+    };
+    window.addEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onFormationsChanged);
+    return () => window.removeEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onFormationsChanged);
+  }, []);
+
   if (!isOpen) return null;
 
-  // 1. Export entire application data into a single .json file
+  // 1. Export entire application data (Images + Custom Formations + Plans + Versions + Templates) into a single .json file
   const handleExportBackup = async () => {
     setIsExporting(true);
-    showToast('📦 Đang thu thập và đóng gói toàn bộ dữ liệu (Kho ảnh, Kế hoạch bài dạy, Kịch bản)...');
+    showToast('📦 Đang thu thập và đóng gói toàn bộ hệ thống (Kho ảnh, Kho sơ đồ tự vẽ, Giáo án, Kịch bản, Mẫu riêng)...');
 
     try {
-      // Ensure we fetch latest images directly from IndexedDB in case some were just added
       const dbImages = await getAllImagesDB();
       const exportImages = dbImages && dbImages.length > 0 ? dbImages : images;
 
       const dbScenarios = await getAllScenariosDB();
       const exportScenarios = dbScenarios && dbScenarios.length > 0 ? dbScenarios : scenarios;
 
+      const exportCustomFormations = await getSavedCustomFormationsAsync();
+      const exportGradeFormationStyles = getGradeFormationStyles();
+      const exportSgkTreeOverrides = getSgkTreeOverrides();
+
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
 
       const backupPackage: BackupDataPackage = {
-        version: 2,
-        generator: 'SmartPlan GDTC Pro - GDPT 2018',
+        version: 3,
+        generator: 'SmartPlan GDTC Pro - Full System Backup (GDPT 2018)',
         timestamp: Date.now(),
         exportDate: now.toLocaleString('vi-VN'),
         schoolSettings,
         images: exportImages,
+        customFormations: exportCustomFormations,
+        gradeFormationStyles: exportGradeFormationStyles,
         scenarios: exportScenarios,
         allMasterPlans,
         currentMasterPlan,
         lessonRows,
+        planVersionStore,
+        userCustomTemplates,
+        activeCustomTemplateId,
+        sgkTreeOverrides: exportSgkTreeOverrides,
         activeState: {
           week: activeWeek,
           grade: activeGrade,
@@ -213,13 +273,15 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       const a = document.createElement('a');
       a.href = url;
       const safeTeacher = (schoolSettings.teacherName || 'GiaoVien').replace(/\s+/g, '_');
-      a.download = `Sao_Luu_SmartPlan_GDTC_${safeTeacher}_${dateStr}.json`;
+      a.download = `Sao_Luu_Toan_He_Thong_SmartPlan_GDTC_${safeTeacher}_${dateStr}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      showToast(`✅ Đã xuất thành công file sao lưu chứa ${exportImages.length} ảnh và toàn bộ giáo án!`);
+      showToast(
+        `✅ Đã xuất file sao lưu toàn hệ thống: ${exportImages.length} ảnh · ${exportCustomFormations.length} sơ đồ tự thiết kế · ${Object.keys(allMasterPlans).length} giáo án!`
+      );
     } catch (err: any) {
       showToast('Lỗi khi xuất file sao lưu: ' + err?.message);
     } finally {
@@ -240,13 +302,41 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
 
         let parsed: BackupDataPackage;
         if (Array.isArray(rawParsed)) {
+          // Detect whether array is custom formations or image library
+          const looksLikeFormations =
+            rawParsed.length > 0 && rawParsed[0] && typeof rawParsed[0].svgDataUrl === 'string';
           parsed = {
-            version: 2,
-            generator: 'SmartPlan GDTC Pro - Gói Kho Ảnh JSON',
+            version: 3,
+            generator: looksLikeFormations
+              ? 'SmartPlan GDTC Pro - Gói Kho Sơ Đồ JSON'
+              : 'SmartPlan GDTC Pro - Gói Kho Ảnh JSON',
             timestamp: Date.now(),
             exportDate: new Date().toLocaleString('vi-VN'),
             schoolSettings,
-            images: rawParsed,
+            images: looksLikeFormations ? [] : rawParsed,
+            customFormations: looksLikeFormations ? rawParsed : undefined,
+            scenarios,
+            allMasterPlans,
+            currentMasterPlan,
+            lessonRows,
+            activeState: {
+              week: activeWeek,
+              grade: activeGrade,
+              lessonNum: activeLessonNum,
+              topic: activeTopic,
+              title: activeTitle
+            }
+          };
+        } else if (rawParsed && rawParsed.type === 'gdtc_custom_formations_backup' && Array.isArray(rawParsed.customFormations)) {
+          parsed = {
+            version: 3,
+            generator: 'SmartPlan GDTC Pro - Gói Kho Sơ Đồ Đội Hình JSON',
+            timestamp: rawParsed.timestamp || Date.now(),
+            exportDate: rawParsed.exportDate || new Date().toLocaleString('vi-VN'),
+            schoolSettings,
+            images: [],
+            customFormations: rawParsed.customFormations,
+            gradeFormationStyles: rawParsed.gradeFormationStyles,
             scenarios,
             allMasterPlans,
             currentMasterPlan,
@@ -263,32 +353,40 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           parsed = rawParsed as BackupDataPackage;
         }
 
-        if (!parsed.images && !parsed.allMasterPlans && !parsed.schoolSettings) {
+        if (
+          !parsed.images &&
+          !parsed.customFormations &&
+          !parsed.allMasterPlans &&
+          !parsed.schoolSettings
+        ) {
           throw new Error('Định dạng file sao lưu không hợp lệ.');
         }
 
         setPreviewBackup(parsed);
-        showToast(`📄 Đã đọc tệp sao lưu (${parsed.images?.length || 0} ảnh). Bấm "Xác Nhận Khôi Phục" để nạp ngay.`);
+        const fCount = parsed.customFormations?.length || 0;
+        showToast(
+          `📄 Đã đọc tệp sao lưu (${parsed.images?.length || 0} ảnh · ${fCount} sơ đồ tự thiết kế). Bấm "Xác Nhận Khôi Phục" để nạp ngay.`
+        );
       } catch (err: any) {
         showToast('Lỗi đọc tệp sao lưu: ' + err?.message);
         setPreviewBackup(null);
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
-  // 3. Confirm and restore into IndexedDB + State
+  // 3. Confirm and restore into IndexedDB + localStorage + React State
   const handleConfirmRestore = async () => {
     if (!previewBackup) return;
 
     setIsImporting(true);
-    showToast('🔄 Đang nạp dữ liệu vào cơ sở dữ liệu IndexedDB của trình duyệt...');
+    showToast('🔄 Đang nạp toàn bộ dữ liệu vào cơ sở dữ liệu trình duyệt...');
 
     try {
       let restoredImages: SgkImageItem[] | undefined = undefined;
-      if (previewBackup.images && Array.isArray(previewBackup.images)) {
+      if (previewBackup.images && Array.isArray(previewBackup.images) && previewBackup.images.length > 0) {
         const mergedMap = new Map<string, SgkImageItem>();
-        // Keep current built-in defaults first, then overlay all backed-up images (e.g., all 193 images)
         images.forEach((img) => {
           if (img?.id) mergedMap.set(img.id, img);
         });
@@ -299,6 +397,19 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         });
         restoredImages = Array.from(mergedMap.values());
         await saveImagesDB(restoredImages);
+      }
+
+      let restoredFormationsCount = customFormationsCount;
+      if (Array.isArray(previewBackup.customFormations) && previewBackup.customFormations.length > 0) {
+        const { merged } = mergeCustomFormationsIntoStorage(previewBackup.customFormations, {
+          source: 'backup_restore'
+        });
+        restoredFormationsCount = merged.length;
+        setCustomFormationsCount(merged.length);
+      }
+
+      if (previewBackup.gradeFormationStyles && typeof previewBackup.gradeFormationStyles === 'object') {
+        saveGradeFormationStyles(previewBackup.gradeFormationStyles);
       }
 
       if (previewBackup.scenarios && Array.isArray(previewBackup.scenarios)) {
@@ -321,6 +432,24 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         await setAppStateDB('current_lesson_rows', previewBackup.lessonRows);
       }
 
+      if (previewBackup.planVersionStore && previewBackup.planVersionStore.versionsByPlanKey) {
+        await savePlanVersionStoreDB(previewBackup.planVersionStore);
+      }
+
+      if (Array.isArray(previewBackup.userCustomTemplates) && previewBackup.userCustomTemplates.length > 0) {
+        await setAppStateDB('user_custom_templates', previewBackup.userCustomTemplates);
+      }
+
+      if (previewBackup.activeCustomTemplateId) {
+        await setAppStateDB('active_custom_template_id', previewBackup.activeCustomTemplateId);
+      }
+
+      if (previewBackup.sgkTreeOverrides && typeof previewBackup.sgkTreeOverrides === 'object') {
+        Object.entries(previewBackup.sgkTreeOverrides).forEach(([lessonId, ov]) => {
+          if (ov) saveSgkTreeLessonOverride(lessonId, ov);
+        });
+      }
+
       if (previewBackup.activeState) {
         await setAppStateDB('active_week', previewBackup.activeState.week);
         await setAppStateDB('active_grade', previewBackup.activeState.grade);
@@ -329,13 +458,13 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         await setAppStateDB('active_title', previewBackup.activeState.title);
       }
 
-      // Also store backup mirror in localStorage for fail-safe
       try {
         localStorage.setItem(
           'gdtc_backup_metadata',
           JSON.stringify({
             timestamp: Date.now(),
-            imageCount: restoredImages?.length || previewBackup.images?.length || 0,
+            imageCount: restoredImages?.length || images.length,
+            formationsCount: restoredFormationsCount,
             plansCount: Object.keys(previewBackup.allMasterPlans || {}).length,
             teacher: previewBackup.schoolSettings?.teacherName
           })
@@ -345,12 +474,16 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       }
 
       onRestoreSuccess({
-        images: restoredImages || previewBackup.images,
+        images: restoredImages,
         scenarios: previewBackup.scenarios,
         schoolSettings: previewBackup.schoolSettings,
         allMasterPlans: previewBackup.allMasterPlans,
         currentMasterPlan: previewBackup.currentMasterPlan,
         lessonRows: previewBackup.lessonRows,
+        planVersionStore: previewBackup.planVersionStore,
+        userCustomTemplates: previewBackup.userCustomTemplates,
+        activeCustomTemplateId: previewBackup.activeCustomTemplateId,
+        customFormationsCount: restoredFormationsCount,
         activeWeek: previewBackup.activeState?.week,
         activeGrade: previewBackup.activeState?.grade,
         activeLessonNum: previewBackup.activeState?.lessonNum,
@@ -358,7 +491,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         activeTitle: previewBackup.activeState?.title
       });
 
-      showToast(`🎉 Đã khôi phục hoàn tất! Thư viện hiện có ${restoredImages?.length || images.length} ảnh.`);
+      showToast(
+        `🎉 Đã khôi phục hoàn tất! Hiện có ${restoredImages?.length || images.length} ảnh · ${restoredFormationsCount} sơ đồ tự thiết kế.`
+      );
       setPreviewBackup(null);
       onClose();
     } catch (err: any) {
@@ -368,27 +503,33 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     }
   };
 
-  // 4. Force Save right now (IndexedDB + Mirror)
+  // 4. Force Save right now (IndexedDB + Mirror including custom formations)
   const handleForceSave = async () => {
     setIsForceSaving(true);
     try {
       await saveImagesDB(images);
       await saveScenariosDB(scenarios);
+      const latestFormations = await getSavedCustomFormationsAsync();
+      saveCustomFormationsList(latestFormations, { silentEvent: true });
+      saveGradeFormationStyles(getGradeFormationStyles(), { silentEvent: true });
       await setAppStateDB('school_settings', schoolSettings);
       await setAppStateDB('gdtc_all_master_plans', allMasterPlans);
       await setAppStateDB('master_plan', currentMasterPlan);
       await setAppStateDB('current_lesson_rows', lessonRows);
+      if (planVersionStore) await savePlanVersionStoreDB(planVersionStore);
+      if (userCustomTemplates) await setAppStateDB('user_custom_templates', userCustomTemplates);
       await setAppStateDB('active_week', activeWeek);
       await setAppStateDB('active_grade', activeGrade);
       await setAppStateDB('active_lesson_num', activeLessonNum);
       await setAppStateDB('active_topic', activeTopic);
       await setAppStateDB('active_title', activeTitle);
 
+      setCustomFormationsCount(latestFormations.length);
       const estimate = await getStorageEstimate();
       setStorageInfo(estimate);
       const timeStr = new Date().toLocaleTimeString('vi-VN');
       setLastSyncTime(timeStr);
-      showToast(`💾 Đã lưu dữ liệu tức thì thành công lúc ${timeStr}!`);
+      showToast(`💾 Đã lưu tức thì toàn bộ hệ thống (${images.length} ảnh · ${latestFormations.length} sơ đồ tự vẽ) lúc ${timeStr}!`);
     } catch (err: any) {
       showToast('Lỗi khi lưu: ' + err?.message);
     } finally {
@@ -437,7 +578,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                       Tự Động Đồng Bộ AI Studio ↔ Vercel ↔ Điện Thoại (Google Drive)
                     </h4>
                     <p className="text-[11px] text-blue-100 mt-0.5">
-                      Hợp nhất thông minh toàn bộ {images.length} ảnh SGK & giáo án — không bao giờ ghi đè mất ảnh
+                      Hợp nhất thông minh {images.length} ảnh SGK · {customFormationsCount} sơ đồ tự thiết kế &amp; giáo án — không bao giờ ghi đè mất dữ liệu
                     </p>
                   </div>
                 </div>
@@ -456,7 +597,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 {!cloudGoogleUser || !cloudSessionConsented ? (
                   <div className="space-y-3">
                     <p className="text-[11.5px] text-slate-600 leading-relaxed">
-                      Kết nối <strong>cùng 1 tài khoản Google</strong> trên cả AI Studio và Vercel để tự động đồng bộ 2 chiều toàn bộ kho ảnh ({images.length} ảnh), giáo án 5 khối, kịch bản và tên trò chơi đã chỉnh sửa qua thư mục <strong>SmartPlan GDTC Pro</strong> trên Google Drive của bạn.
+                      Kết nối <strong>cùng 1 tài khoản Google</strong> trên cả AI Studio và Vercel để tự động đồng bộ 2 chiều toàn bộ kho ảnh ({images.length} ảnh), <strong>kho sơ đồ đội hình tự thiết kế ({customFormationsCount} sơ đồ)</strong>, giáo án 5 khối, kịch bản và tên trò chơi qua thư mục <strong>SmartPlan GDTC Pro</strong> trên Google Drive.
                     </p>
 
                     {!showCloudSyncConfirm ? (
@@ -492,8 +633,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                           Hệ thống sẽ đăng nhập Google và tạo/cập nhật 2 tệp đồng bộ (
                           <code className="bg-white/80 px-1 rounded">{CLOUD_SYNC_WORKSPACE_FILENAME}</code> và{' '}
                           <code className="bg-white/80 px-1 rounded">{CLOUD_SYNC_IMAGES_FILENAME}</code>) trong thư mục{' '}
-                          <strong>SmartPlan GDTC Pro</strong> để hợp nhất {images.length} ảnh và{' '}
-                          {Object.keys(allMasterPlans).length} bài giáo án giữa các thiết bị của bạn.
+                          <strong>SmartPlan GDTC Pro</strong> để hợp nhất {images.length} ảnh,{' '}
+                          <strong>{customFormationsCount} sơ đồ tự thiết kế</strong> và{' '}
+                          {Object.keys(allMasterPlans).length} bài giáo án giữa AI Studio &amp; Vercel.
                         </p>
                         <div className="flex items-center justify-end gap-2 pt-1">
                           <button
@@ -577,10 +719,10 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                       <label className="flex items-center justify-between gap-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
                         <div>
                           <span className="font-bold text-slate-800 block text-xs">
-                            Tự động đồng bộ nền mỗi khi thêm ảnh hoặc sửa giáo án
+                            Tự động đồng bộ nền mỗi khi thêm ảnh, lưu sơ đồ mới hoặc sửa giáo án
                           </span>
                           <span className="text-[10.5px] text-slate-500">
-                            Tự đẩy sau 4 giây khi chỉnh sửa và tự kéo bản mới nhất khi chuyển giữa AI Studio ↔ Vercel
+                            Tự đẩy sau 4 giây khi chỉnh sửa (bao gồm toàn bộ Kho Sơ Đồ tự vẽ) và tự kéo bản mới nhất khi chuyển AI Studio ↔ Vercel
                           </span>
                         </div>
                         <input
@@ -670,10 +812,14 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2.5 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
               <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-[10px] text-slate-500 block">Kho hình ảnh</span>
                 <span className="text-sm font-bold text-blue-600">{images.length} ảnh</span>
+              </div>
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Kho sơ đồ tự vẽ</span>
+                <span className="text-sm font-bold text-indigo-600">{customFormationsCount} sơ đồ</span>
               </div>
               <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
                 <span className="text-[10px] text-slate-500 block">Kế hoạch bài dạy</span>
@@ -712,7 +858,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   1. Xuất Toàn Bộ Dữ Liệu Ra File (.json)
                 </h4>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  Tải về 1 file sao lưu duy nhất chứa toàn bộ {images.length} ảnh (kể cả ảnh Thầy vẽ lại, ảnh scan) và tất cả giáo án đã soạn.
+                  Tải về 1 file sao lưu toàn hệ thống duy nhất chứa <strong>{images.length} ảnh</strong>, <strong>{customFormationsCount} sơ đồ tự thiết kế</strong>, kịch bản, mẫu riêng và tất cả giáo án đã soạn.
                 </p>
               </div>
 
@@ -722,7 +868,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                 className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition"
               >
                 <Download className="w-4 h-4" />
-                <span>{isExporting ? 'Đang Đóng Gói...' : '📥 Tải File Sao Lưu Về Máy'}</span>
+                <span>{isExporting ? 'Đang Đóng Gói...' : '📥 Tải File Sao Lưu Toàn Hệ Thống'}</span>
               </button>
             </div>
 
@@ -734,7 +880,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   2. Khôi Phục Dữ Liệu Từ File (.json)
                 </h4>
                 <p className="text-[11px] text-slate-600 mt-1">
-                  Chọn file <code>.json</code> đã sao lưu trước đó để nạp lại đầy đủ hình ảnh và giáo án trên Vercel hay máy tính mới.
+                  Chọn file <code>.json</code> toàn hệ thống (hoặc file kho sơ đồ / kho ảnh) để nạp đầy đủ sang Vercel hay máy tính mới.
                 </p>
               </div>
 
@@ -771,15 +917,15 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
                 <div className="bg-white p-2 rounded border border-emerald-200">
-                  <span className="text-[10px] text-slate-500 block">Giáo viên</span>
-                  <span className="font-bold text-slate-800 truncate block">
-                    {previewBackup.schoolSettings?.teacherName || 'Chưa đặt'}
-                  </span>
-                </div>
-                <div className="bg-white p-2 rounded border border-emerald-200">
                   <span className="text-[10px] text-slate-500 block">Số hình ảnh</span>
                   <span className="font-bold text-blue-600">
                     {previewBackup.images?.length || 0} ảnh
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded border border-emerald-200">
+                  <span className="text-[10px] text-slate-500 block">Kho sơ đồ tự vẽ</span>
+                  <span className="font-bold text-indigo-600">
+                    {previewBackup.customFormations?.length || 0} sơ đồ
                   </span>
                 </div>
                 <div className="bg-white p-2 rounded border border-emerald-200">
@@ -789,9 +935,9 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   </span>
                 </div>
                 <div className="bg-white p-2 rounded border border-emerald-200">
-                  <span className="text-[10px] text-slate-500 block">Trường</span>
+                  <span className="text-[10px] text-slate-500 block">Giáo viên</span>
                   <span className="font-bold text-slate-800 truncate block">
-                    {previewBackup.schoolSettings?.schoolName || 'Tiểu học'}
+                    {previewBackup.schoolSettings?.teacherName || 'Chưa đặt'}
                   </span>
                 </div>
               </div>

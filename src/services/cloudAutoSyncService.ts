@@ -10,6 +10,11 @@ import {
 import { MasterPlanItem, normalizeMasterPlan } from '../data/masterTemplateTuan8';
 import { PlanVersionStore, LessonPlanVersion } from '../utils/planVersionHistory';
 import { SgkTreeLessonOverride } from '../data/sgkCurriculumTree';
+import {
+  FormationDiagram,
+  GradeFormationStyleMap,
+  mergeCustomFormationsLists
+} from '../data/formationDiagrams';
 
 const DRIVE_API_BASE = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_BASE = 'https://www.googleapis.com/upload/drive/v3';
@@ -24,6 +29,10 @@ export interface CloudWorkspacePayload {
   sourceHost: string;
   imagesCount: number;
   imagesFingerprint: string;
+  customFormationsCount?: number;
+  customFormationsFingerprint?: string;
+  customFormations?: FormationDiagram[];
+  gradeFormationStyles?: GradeFormationStyleMap;
   schoolSettings: SchoolSettings;
   allMasterPlans: Record<string, MasterPlanItem>;
   planVersionStore: PlanVersionStore;
@@ -51,6 +60,8 @@ export interface CloudImagesPayload {
 
 export interface LocalSyncSnapshot {
   images: SgkImageItem[];
+  customFormations: FormationDiagram[];
+  gradeFormationStyles?: GradeFormationStyleMap;
   scenarios: ScenarioItem[];
   schoolSettings: SchoolSettings;
   allMasterPlans: Record<string, MasterPlanItem>;
@@ -73,6 +84,7 @@ export interface CloudSyncStatusInfo {
   lastSyncedAt: number | null;
   syncedImageCount: number;
   syncedPlanCount: number;
+  syncedFormationCount?: number;
   lastSummary: string;
   errorMessage: string | null;
   unauthorizedDomain: string | null;
@@ -84,10 +96,34 @@ export interface TwoWaySyncResult {
   didPushWorkspace: boolean;
   didPushImages: boolean;
   addedImagesFromCloud: number;
+  addedFormationsFromCloud: number;
   pushedImageCount: number;
+  pushedFormationCount: number;
   syncedAt: number;
   cloudWorkspaceModifiedTime?: string;
   cloudImagesModifiedTime?: string;
+}
+
+export function computeCustomFormationsFingerprint(formations: FormationDiagram[]): string {
+  if (!Array.isArray(formations) || formations.length === 0) return 'empty_0';
+  const sorted = [...formations]
+    .map((f) => {
+      const svgLen = f.svgDataUrl ? f.svgDataUrl.length : 0;
+      const svgTail = f.svgDataUrl ? f.svgDataUrl.slice(-20) : '';
+      const elCount = Array.isArray(f.elements) ? f.elements.length : 0;
+      return `${f.id}|${f.name || ''}|${f.phase || ''}|${f.grade || 'all'}|${f.updatedAt || 0}|${elCount}|${svgLen}|${svgTail}`;
+    })
+    .sort();
+
+  let hash = 2166136261;
+  for (let i = 0; i < sorted.length; i++) {
+    const str = sorted[i];
+    for (let j = 0; j < str.length; j++) {
+      hash ^= str.charCodeAt(j);
+      hash = Math.imul(hash, 16777619);
+    }
+  }
+  return `f1_${formations.length}_${(hash >>> 0).toString(16)}`;
 }
 
 /**
@@ -550,6 +586,19 @@ export async function performTwoWayCloudSync(
   const mergedImages = imgMerge.merged;
   const mergedImagesFingerprint = computeImagesFingerprint(mergedImages);
 
+  // 3B. Smart Merge Custom Formations (Union-merge so Vercel & AI Studio never lose drawings)
+  const formMerge = mergeCustomFormationsLists(
+    local.customFormations || [],
+    cloudWorkspace?.customFormations || []
+  );
+  const mergedFormations = formMerge.merged;
+  const mergedFormationsFingerprint = computeCustomFormationsFingerprint(mergedFormations);
+
+  const mergedGradeFormationStyles: GradeFormationStyleMap | undefined =
+    cloudWorkspace?.gradeFormationStyles && cloudIsNewer
+      ? { ...(local.gradeFormationStyles || {}), ...cloudWorkspace.gradeFormationStyles } as GradeFormationStyleMap
+      : local.gradeFormationStyles || cloudWorkspace?.gradeFormationStyles;
+
   // 4. Smart Merge Workspace components
   const verMerge = smartMergePlanVersionStore(local.planVersionStore, cloudWorkspace?.planVersionStore);
   const plansMerge = smartMergeAllMasterPlans(
@@ -578,15 +627,18 @@ export async function performTwoWayCloudSync(
 
   const didPullChanges =
     imgMerge.changedLocally ||
+    formMerge.changedLocally ||
     verMerge.changed ||
     plansMerge.changed ||
     tplMerge.changed ||
     scMerge.changed ||
     treeMerge.changed ||
-    (cloudIsNewer && Boolean(cloudWorkspace?.schoolSettings));
+    (cloudIsNewer && Boolean(cloudWorkspace?.schoolSettings || cloudWorkspace?.gradeFormationStyles));
 
   const mergedSnapshot: LocalSyncSnapshot = {
     images: mergedImages,
+    customFormations: mergedFormations,
+    gradeFormationStyles: mergedGradeFormationStyles,
     scenarios: scMerge.merged,
     schoolSettings: mergedSettings,
     allMasterPlans: plansMerge.merged,
@@ -633,21 +685,31 @@ export async function performTwoWayCloudSync(
       didPushImages = true;
     }
 
-    // Push Workspace bundle if Drive has no workspace file yet, or local had changes/forced/images updated
+    // Push Workspace bundle if Drive has no workspace file yet, or custom formations/images/workspace differ
+    const cloudFormationsFp = cloudWorkspace?.customFormationsFingerprint || '';
+    const formationsChangedVsCloud =
+      cloudFormationsFp !== mergedFormationsFingerprint ||
+      (cloudWorkspace?.customFormationsCount ?? -1) !== mergedFormations.length;
+
     const needPushWorkspace =
       options?.forcePushWorkspace ||
       !wsMeta ||
       didPushImages ||
+      formationsChangedVsCloud ||
       !cloudWorkspace ||
       !cloudIsNewer;
 
     if (needPushWorkspace) {
       const wsPayload: CloudWorkspacePayload = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         updatedAt: now,
         sourceHost,
         imagesCount: mergedImages.length,
         imagesFingerprint: mergedImagesFingerprint,
+        customFormationsCount: mergedFormations.length,
+        customFormationsFingerprint: mergedFormationsFingerprint,
+        customFormations: mergedFormations,
+        gradeFormationStyles: mergedSnapshot.gradeFormationStyles,
         schoolSettings: mergedSnapshot.schoolSettings,
         allMasterPlans: mergedSnapshot.allMasterPlans,
         planVersionStore: mergedSnapshot.planVersionStore,
@@ -675,7 +737,9 @@ export async function performTwoWayCloudSync(
     didPushWorkspace,
     didPushImages,
     addedImagesFromCloud: imgMerge.addedFromCloud,
+    addedFormationsFromCloud: formMerge.addedFromRemote,
     pushedImageCount: didPushImages ? mergedImages.length : 0,
+    pushedFormationCount: didPushWorkspace ? mergedFormations.length : 0,
     syncedAt: now,
     cloudWorkspaceModifiedTime,
     cloudImagesModifiedTime

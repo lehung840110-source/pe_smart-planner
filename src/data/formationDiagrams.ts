@@ -7,9 +7,20 @@ export interface FormationDiagram {
   svgDataUrl: string;
   grade?: 1 | 2 | 3 | 4 | 5 | 'all';
   elements?: FormationElement[];
+  updatedAt?: number;
 }
 
 import { FormationElement, formationStudioPresets, renderFormationSvgString } from '../utils/formationStudioUtils';
+import { getAppStateDB, setAppStateDB } from '../utils/db';
+
+export const CUSTOM_FORMATIONS_CHANGED_EVENT = 'gdtc_custom_formations_changed';
+export const OPEN_BACKUP_RESTORE_EVENT = 'gdtc_open_backup_restore_modal';
+export const TRIGGER_CLOUD_SYNC_EVENT = 'gdtc_trigger_cloud_sync_now';
+const CUSTOM_FORMATIONS_STORAGE_KEY = 'gdtc_custom_formations';
+const GRADE_STYLES_STORAGE_KEY = 'gdtc_grade_formation_styles';
+const MAX_CUSTOM_FORMATIONS = 250;
+
+let memoryCustomFormationsCache: FormationDiagram[] | null = null;
 
 const escXml = (str: string) =>
   (str || '')
@@ -1856,63 +1867,231 @@ function safeDiagramStorageSet(key: string, val: string): void {
   }
 }
 
-export function saveGradeFormationStyles(styles: GradeFormationStyleMap): void {
-  safeDiagramStorageSet('gdtc_grade_formation_styles', JSON.stringify(styles));
+function dispatchCustomFormationsChanged(detail?: { count?: number; source?: string }): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(CUSTOM_FORMATIONS_CHANGED_EVENT, { detail }));
+  } catch {
+    // ignore event dispatch errors
+  }
+}
+
+export function saveGradeFormationStyles(
+  styles: GradeFormationStyleMap,
+  options?: { silentEvent?: boolean }
+): void {
+  safeDiagramStorageSet(GRADE_STYLES_STORAGE_KEY, JSON.stringify(styles));
+  setAppStateDB(GRADE_STYLES_STORAGE_KEY, styles).catch(() => {});
+  if (!options?.silentEvent) {
+    dispatchCustomFormationsChanged({ source: 'grade_styles' });
+  }
+}
+
+export function sanitizeCustomFormationsList(raw: unknown): FormationDiagram[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: FormationDiagram[] = [];
+
+  raw.forEach((item: any, idx: number) => {
+    if (!item || typeof item !== 'object') return;
+    let svg = item.svgDataUrl;
+    if (
+      !svg ||
+      typeof svg !== 'string' ||
+      (!svg.startsWith('data:image/svg+xml') && !svg.startsWith('data:image/png') && !svg.startsWith('data:image/jpeg') && !svg.startsWith('data:image/webp'))
+    ) {
+      svg = createFormationSvg(item.name || 'SƠ ĐỒ TỰ CHỌN', 'Tự thiết kế', 'dong_loat');
+    }
+    const rawId = String(item.id || `custom_${idx}_${Date.now()}`);
+    const cleanId = rawId.startsWith('custom_') ? rawId : `custom_${rawId}`;
+    if (seen.has(cleanId)) return;
+    seen.add(cleanId);
+
+    out.push({
+      id: cleanId,
+      name: item.name || 'Sơ đồ tự thiết kế',
+      code: item.code || 'DH_TU_CHON',
+      phase: item.phase || 'dong_loat',
+      description: item.description || 'Sơ đồ đội hình phục vụ giảng dạy GDTC.',
+      svgDataUrl: svg,
+      grade: item.grade || 'all',
+      elements: Array.isArray(item.elements) ? item.elements : undefined,
+      updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : undefined
+    } as FormationDiagram);
+  });
+
+  return out.slice(0, MAX_CUSTOM_FORMATIONS);
+}
+
+export function mergeCustomFormationsLists(
+  localList: FormationDiagram[],
+  remoteList: FormationDiagram[]
+): { merged: FormationDiagram[]; addedFromRemote: number; changedLocally: boolean } {
+  const safeLocal = sanitizeCustomFormationsList(localList);
+  const safeRemote = sanitizeCustomFormationsList(remoteList);
+
+  const byId = new Map<string, FormationDiagram>();
+  const contentKeys = new Set<string>();
+
+  const makeContentKey = (f: FormationDiagram) =>
+    `${(f.name || '').trim().toLowerCase()}|${f.grade || 'all'}|${f.phase}|${(f.svgDataUrl || '').length}|${(f.svgDataUrl || '').slice(-32)}`;
+
+  for (const item of safeLocal) {
+    byId.set(item.id, item);
+    contentKeys.add(makeContentKey(item));
+  }
+
+  let addedFromRemote = 0;
+  let updatedFromRemote = 0;
+
+  for (const rItem of safeRemote) {
+    const existing = byId.get(rItem.id);
+    if (!existing) {
+      const cKey = makeContentKey(rItem);
+      if (contentKeys.has(cKey)) continue;
+      byId.set(rItem.id, rItem);
+      contentKeys.add(cKey);
+      addedFromRemote++;
+    } else {
+      const rTime = rItem.updatedAt || 0;
+      const lTime = existing.updatedAt || 0;
+      const rHasElements = Array.isArray(rItem.elements) && rItem.elements.length > 0;
+      const lHasElements = Array.isArray(existing.elements) && existing.elements.length > 0;
+      if (rTime > lTime || (rTime === lTime && rHasElements && !lHasElements)) {
+        byId.set(rItem.id, { ...existing, ...rItem });
+        updatedFromRemote++;
+      }
+    }
+  }
+
+  const merged = Array.from(byId.values())
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    .slice(0, MAX_CUSTOM_FORMATIONS);
+
+  return {
+    merged,
+    addedFromRemote,
+    changedLocally: addedFromRemote > 0 || updatedFromRemote > 0
+  };
 }
 
 export function getSavedCustomFormations(): FormationDiagram[] {
   try {
-    const raw = localStorage.getItem('gdtc_custom_formations');
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    
-    // Sanitize: ensure valid SVG data URL so broken icons never appear and ID is uniquely prefixed
-    return parsed.map((item, idx) => {
-      let svg = item.svgDataUrl;
-      if (!svg || typeof svg !== 'string' || (!svg.startsWith('data:image/svg+xml') && !svg.startsWith('data:image/png'))) {
-        svg = createFormationSvg(item.name || 'SƠ ĐỒ TỰ CHỌN', 'Tự thiết kế', 'dong_loat');
-      }
-      const rawId = String(item.id || `custom_${idx}_${Date.now()}`);
-      const cleanId = rawId.startsWith('custom_') ? rawId : `custom_${rawId}`;
-      return {
-        id: cleanId,
-        name: item.name || 'Sơ đồ tự thiết kế',
-        code: item.code || 'DH_TU_CHON',
-        phase: item.phase || 'dong_loat',
-        description: item.description || 'Sơ đồ đội hình phục vụ giảng dạy GDTC.',
-        svgDataUrl: svg,
-        grade: item.grade || 'all',
-        elements: Array.isArray(item.elements) ? item.elements : undefined
-      } as FormationDiagram;
-    });
+    const raw = localStorage.getItem(CUSTOM_FORMATIONS_STORAGE_KEY);
+    const fromLs = raw ? sanitizeCustomFormationsList(JSON.parse(raw)) : [];
+    if (memoryCustomFormationsCache && memoryCustomFormationsCache.length > 0) {
+      if (fromLs.length === 0) return memoryCustomFormationsCache;
+      const { merged } = mergeCustomFormationsLists(memoryCustomFormationsCache, fromLs);
+      memoryCustomFormationsCache = merged;
+      return merged;
+    }
+    memoryCustomFormationsCache = fromLs;
+    return fromLs;
   } catch {
-    return [];
+    return memoryCustomFormationsCache || [];
   }
+}
+
+export function saveCustomFormationsList(
+  formations: FormationDiagram[],
+  options?: { silentEvent?: boolean; source?: string }
+): FormationDiagram[] {
+  const sanitized = sanitizeCustomFormationsList(formations);
+  memoryCustomFormationsCache = sanitized;
+  safeDiagramStorageSet(CUSTOM_FORMATIONS_STORAGE_KEY, JSON.stringify(sanitized));
+  setAppStateDB(CUSTOM_FORMATIONS_STORAGE_KEY, sanitized).catch(() => {});
+  if (!options?.silentEvent) {
+    dispatchCustomFormationsChanged({ count: sanitized.length, source: options?.source || 'save_list' });
+  }
+  return sanitized;
+}
+
+export async function hydrateCustomFormationsFromDB(): Promise<FormationDiagram[]> {
+  try {
+    const localLs = getSavedCustomFormations();
+    const idbRaw = await getAppStateDB<FormationDiagram[]>(CUSTOM_FORMATIONS_STORAGE_KEY, []);
+    const fromIdb = sanitizeCustomFormationsList(idbRaw);
+
+    const { merged, addedFromRemote } = mergeCustomFormationsLists(localLs, fromIdb);
+    memoryCustomFormationsCache = merged;
+
+    if (merged.length > 0) {
+      safeDiagramStorageSet(CUSTOM_FORMATIONS_STORAGE_KEY, JSON.stringify(merged));
+      if (merged.length !== fromIdb.length) {
+        await setAppStateDB(CUSTOM_FORMATIONS_STORAGE_KEY, merged);
+      }
+    }
+
+    // Also hydrate grade formation styles from IndexedDB if missing in localStorage
+    try {
+      const hasLsStyles = Boolean(localStorage.getItem(GRADE_STYLES_STORAGE_KEY));
+      const idbStyles = await getAppStateDB<GradeFormationStyleMap | null>(GRADE_STYLES_STORAGE_KEY, null);
+      if (!hasLsStyles && idbStyles && typeof idbStyles === 'object') {
+        safeDiagramStorageSet(GRADE_STYLES_STORAGE_KEY, JSON.stringify({ ...DEFAULT_GRADE_FORMATION_STYLES, ...idbStyles }));
+      }
+    } catch {
+      // ignore style hydration error
+    }
+
+    if (addedFromRemote > 0) {
+      dispatchCustomFormationsChanged({ count: merged.length, source: 'hydrate_idb' });
+    }
+    return merged;
+  } catch {
+    return getSavedCustomFormations();
+  }
+}
+
+export async function getSavedCustomFormationsAsync(): Promise<FormationDiagram[]> {
+  return hydrateCustomFormationsFromDB();
 }
 
 export function saveCustomFormationToStorage(formation: FormationDiagram) {
   const current = getSavedCustomFormations();
   const rawId = String(formation.id || `custom_${Date.now()}`);
   const cleanId = rawId.startsWith('custom_') ? rawId : `custom_${rawId}`;
-  const cleanFormation = { ...formation, id: cleanId };
-  const updated = [cleanFormation, ...current.filter((item) => item.id !== cleanId)].slice(0, 40);
-  safeDiagramStorageSet('gdtc_custom_formations', JSON.stringify(updated));
+  const cleanFormation: FormationDiagram = {
+    ...formation,
+    id: cleanId,
+    updatedAt: Date.now()
+  };
+  const updated = [cleanFormation, ...current.filter((item) => item.id !== cleanId)].slice(
+    0,
+    MAX_CUSTOM_FORMATIONS
+  );
+  saveCustomFormationsList(updated, { source: 'save_single' });
+}
+
+export function mergeCustomFormationsIntoStorage(
+  incoming: FormationDiagram[],
+  options?: { silentEvent?: boolean; source?: string }
+): { merged: FormationDiagram[]; addedCount: number } {
+  const current = getSavedCustomFormations();
+  const { merged, addedFromRemote, changedLocally } = mergeCustomFormationsLists(current, incoming);
+  if (changedLocally || merged.length !== current.length) {
+    saveCustomFormationsList(merged, {
+      silentEvent: options?.silentEvent,
+      source: options?.source || 'merge_import'
+    });
+  }
+  return { merged, addedCount: addedFromRemote };
 }
 
 export function deleteCustomFormationFromStorage(id: string): FormationDiagram[] {
   const current = getSavedCustomFormations();
   const updated = current.filter((item) => item.id !== id);
-  safeDiagramStorageSet('gdtc_custom_formations', JSON.stringify(updated));
-  return updated;
+  return saveCustomFormationsList(updated, { source: 'delete_single' });
 }
 
 export function resetCustomFormations(): void {
+  memoryCustomFormationsCache = [];
   try {
-    localStorage.removeItem('gdtc_custom_formations');
+    localStorage.removeItem(CUSTOM_FORMATIONS_STORAGE_KEY);
   } catch {
     // ignore
   }
+  setAppStateDB(CUSTOM_FORMATIONS_STORAGE_KEY, []).catch(() => {});
+  dispatchCustomFormationsChanged({ count: 0, source: 'reset' });
 }
 
 

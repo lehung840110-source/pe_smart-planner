@@ -21,7 +21,20 @@ import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { AuthModal } from './components/AuthModal';
 import { LockedFeatureGate } from './components/LockedFeatureGate';
 import { GlobalFloatingTextCaseBar } from './components/TextCaseToolbar';
-import { FormationDiagram, saveCustomFormationToStorage, standardFormationDiagrams } from './data/formationDiagrams';
+import {
+  FormationDiagram,
+  CUSTOM_FORMATIONS_CHANGED_EVENT,
+  OPEN_BACKUP_RESTORE_EVENT,
+  TRIGGER_CLOUD_SYNC_EVENT,
+  getSavedCustomFormations,
+  getGradeFormationStyles,
+  saveCustomFormationToStorage,
+  saveCustomFormationsList,
+  saveGradeFormationStyles,
+  hydrateCustomFormationsFromDB,
+  mergeCustomFormationsIntoStorage,
+  standardFormationDiagrams
+} from './data/formationDiagrams';
 import { ParsedLessonFileResult, parseLessonFile, customTemplateToMasterPlan } from './utils/documentParser';
 import { exportWordDocument, buildWordExportPackage } from './utils/exportUtils';
 import {
@@ -316,6 +329,9 @@ export default function App() {
         const storedSettings = await getAppStateDB('school_settings', defaultSchoolSettings);
         setSchoolSettings(storedSettings);
 
+        // Hydrate all custom formations & grade formation presets from IndexedDB mirror
+        await hydrateCustomFormationsFromDB();
+
         const loadedVersionStore = await loadPlanVersionStoreDB();
         planVersionStoreRef.current = loadedVersionStore;
         setPlanVersionStore(loadedVersionStore);
@@ -480,10 +496,12 @@ export default function App() {
   }, [images]);
 
   const buildWorkspaceSnapshot = () => ({
-    version: 2,
+    version: 3,
     updatedAt: Date.now(),
     schoolSettings: schoolSettingsRef.current,
     images: imagesRef.current,
+    customFormations: getSavedCustomFormations(),
+    gradeFormationStyles: getGradeFormationStyles(),
     planVersionStore: planVersionStoreRef.current,
     allMasterPlans: allMasterPlansRef.current,
     userCustomTemplates: userCustomTemplatesRef.current,
@@ -514,6 +532,18 @@ export default function App() {
         await saveImagesDB(mergedImages);
         changed = true;
       }
+    }
+
+    if (Array.isArray(serverWs.customFormations) && serverWs.customFormations.length > 0) {
+      const { addedCount } = mergeCustomFormationsIntoStorage(serverWs.customFormations, {
+        silentEvent: true,
+        source: 'server_pull'
+      });
+      if (addedCount > 0) changed = true;
+    }
+
+    if (serverWs.gradeFormationStyles && typeof serverWs.gradeFormationStyles === 'object') {
+      saveGradeFormationStyles(serverWs.gradeFormationStyles, { silentEvent: true });
     }
 
     if (serverWs.schoolSettings && typeof serverWs.schoolSettings === 'object') {
@@ -625,6 +655,8 @@ export default function App() {
     }).catch(() => {});
   }, [authUser?.id]);
 
+  const [customFormationsNonce, setCustomFormationsNonce] = useState<number>(0);
+
   // Debounced automatic server sync when authenticated
   const autoSyncTimerRef = useRef<number | null>(null);
   useEffect(() => {
@@ -641,7 +673,7 @@ export default function App() {
         window.clearTimeout(autoSyncTimerRef.current);
       }
     };
-  }, [authUser?.id, planVersionStore, userCustomTemplates, schoolSettings, activeCustomTemplateId]);
+  }, [authUser?.id, planVersionStore, userCustomTemplates, schoolSettings, activeCustomTemplateId, customFormationsNonce]);
 
   // =========================================================================
   // 2-WAY GOOGLE DRIVE CLOUD AUTO-SYNC (AI STUDIO <-> VERCEL <-> MOBILE)
@@ -700,15 +732,26 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Track SGK curriculum tree custom game/lesson title edits so they auto-sync too
+  // Track SGK curriculum tree edits AND custom formation library edits so they auto-sync too
   useEffect(() => {
     const onTreeOverride = () => setSgkOverridesNonce((n) => n + 1);
+    const onFormationsChanged = () => setCustomFormationsNonce((n) => n + 1);
+    const onOpenBackupRestore = () => setIsBackupRestoreOpen(true);
+
     window.addEventListener(SGK_TREE_OVERRIDES_EVENT, onTreeOverride);
-    return () => window.removeEventListener(SGK_TREE_OVERRIDES_EVENT, onTreeOverride);
+    window.addEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onFormationsChanged);
+    window.addEventListener(OPEN_BACKUP_RESTORE_EVENT, onOpenBackupRestore);
+    return () => {
+      window.removeEventListener(SGK_TREE_OVERRIDES_EVENT, onTreeOverride);
+      window.removeEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onFormationsChanged);
+      window.removeEventListener(OPEN_BACKUP_RESTORE_EVENT, onOpenBackupRestore);
+    };
   }, []);
 
   const buildLocalCloudSyncSnapshot = (): LocalSyncSnapshot => ({
     images: imagesRef.current,
+    customFormations: getSavedCustomFormations(),
+    gradeFormationStyles: getGradeFormationStyles(),
     scenarios: scenariosRef.current,
     schoolSettings: schoolSettingsRef.current,
     allMasterPlans: allMasterPlansRef.current,
@@ -732,6 +775,16 @@ export default function App() {
     imagesRef.current = merged.images;
     setImages(merged.images);
     await saveImagesDB(merged.images);
+
+    if (Array.isArray(merged.customFormations)) {
+      saveCustomFormationsList(merged.customFormations, {
+        silentEvent: true,
+        source: 'cloud_sync_pull'
+      });
+    }
+    if (merged.gradeFormationStyles && typeof merged.gradeFormationStyles === 'object') {
+      saveGradeFormationStyles(merged.gradeFormationStyles, { silentEvent: true });
+    }
 
     scenariosRef.current = merged.scenarios;
     setScenarios(merged.scenarios);
@@ -851,36 +904,44 @@ export default function App() {
 
       lastCloudSyncedAtRef.current = result.syncedAt;
       const totalPlans = Object.keys(result.merged.allMasterPlans || {}).length;
+      const totalFormations = result.merged.customFormations?.length || 0;
       const summaryParts: string[] = [];
       if (result.addedImagesFromCloud > 0) {
         summaryParts.push(`+${result.addedImagesFromCloud} ảnh mới từ Drive`);
       }
+      if (result.addedFormationsFromCloud > 0) {
+        summaryParts.push(`+${result.addedFormationsFromCloud} sơ đồ tự vẽ từ Drive`);
+      }
       if (result.didPushImages) {
         summaryParts.push(`đã đẩy ${result.merged.images.length} ảnh lên Drive`);
       }
-      if (result.didPullChanges && result.addedImagesFromCloud === 0) {
-        summaryParts.push('đã cập nhật giáo án mới từ Drive');
-      }
-      if (result.didPushWorkspace && !result.didPushImages) {
+      if (result.didPushWorkspace && totalFormations > 0) {
+        summaryParts.push(`đã đồng bộ ${totalFormations} sơ đồ tự thiết kế`);
+      } else if (result.didPushWorkspace && !result.didPushImages) {
         summaryParts.push('đã cập nhật giáo án lên Drive');
+      } else if (result.didPullChanges && result.addedImagesFromCloud === 0 && result.addedFormationsFromCloud === 0) {
+        summaryParts.push('đã cập nhật giáo án mới từ Drive');
       }
       const summaryText =
         summaryParts.length > 0
           ? summaryParts.join(' · ')
-          : `Đã đồng bộ khít (${result.merged.images.length} ảnh · ${totalPlans} giáo án)`;
+          : `Đã đồng bộ khít (${result.merged.images.length} ảnh · ${totalFormations} sơ đồ · ${totalPlans} giáo án)`;
 
       setCloudSyncStatus({
         phase: 'synced',
         lastSyncedAt: result.syncedAt,
         syncedImageCount: result.merged.images.length,
         syncedPlanCount: totalPlans,
+        syncedFormationCount: totalFormations,
         lastSummary: summaryText,
         errorMessage: null,
         unauthorizedDomain: null
       });
 
       if (!opts?.silent) {
-        showToast(`☁️ Đồng bộ 2 nền tảng thành công! ${summaryText} (Tổng ${result.merged.images.length} ảnh).`);
+        showToast(
+          `☁️ Đồng bộ 2 nền tảng thành công! ${summaryText} (${result.merged.images.length} ảnh · ${totalFormations} sơ đồ tự vẽ).`
+        );
       }
       return true;
     } catch (err: any) {
@@ -981,8 +1042,25 @@ export default function App() {
     userCustomTemplates,
     scenarios,
     schoolSettings,
-    sgkOverridesNonce
+    sgkOverridesNonce,
+    customFormationsNonce
   ]);
+
+  // Allow any child modal (e.g., SelectFormationModal) to trigger immediate 2-way Cloud Sync
+  const runTwoWayCloudSyncRef = useRef(runTwoWayCloudSync);
+  runTwoWayCloudSyncRef.current = runTwoWayCloudSync;
+  useEffect(() => {
+    const onTriggerCloudSync = () => {
+      runTwoWayCloudSyncRef.current({
+        silent: false,
+        interactiveSignIn: true,
+        enableAutoSyncAfter: true,
+        forcePushWorkspace: true
+      }).catch(() => {});
+    };
+    window.addEventListener(TRIGGER_CLOUD_SYNC_EVENT, onTriggerCloudSync);
+    return () => window.removeEventListener(TRIGGER_CLOUD_SYNC_EVENT, onTriggerCloudSync);
+  }, []);
 
   // Automatic background pull when returning to tab (switching AI Studio <-> Vercel <-> Mobile)
   useEffect(() => {
@@ -2819,6 +2897,9 @@ export default function App() {
           allMasterPlans={allMasterPlans}
           currentMasterPlan={currentMasterPlan}
           lessonRows={lessonRows}
+          planVersionStore={planVersionStore}
+          userCustomTemplates={userCustomTemplates}
+          activeCustomTemplateId={activeCustomTemplateId}
           activeWeek={week}
           activeGrade={grade}
           activeLessonNum={lessonNum}
@@ -2838,11 +2919,24 @@ export default function App() {
             if (data.allMasterPlans) setAllMasterPlans(data.allMasterPlans);
             if (data.currentMasterPlan) setCurrentMasterPlan(data.currentMasterPlan);
             if (data.lessonRows) setLessonRows(data.lessonRows);
+            if (data.planVersionStore) {
+              planVersionStoreRef.current = data.planVersionStore;
+              setPlanVersionStore(data.planVersionStore);
+            }
+            if (data.userCustomTemplates) {
+              userCustomTemplatesRef.current = data.userCustomTemplates;
+              setUserCustomTemplates(data.userCustomTemplates);
+            }
+            if (data.activeCustomTemplateId !== undefined) {
+              setActiveCustomTemplateId(data.activeCustomTemplateId);
+            }
             if (data.activeWeek) setWeek(data.activeWeek);
             if (data.activeGrade) setGrade(data.activeGrade);
             if (data.activeLessonNum) setLessonNum(data.activeLessonNum);
             if (data.activeTopic) setTopic(data.activeTopic);
             if (data.activeTitle) setTitle(data.activeTitle);
+            setVersionRefreshNonce((n) => n + 1);
+            setCustomFormationsNonce((n) => n + 1);
           }}
           showToast={showToast}
         />

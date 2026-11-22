@@ -1,10 +1,11 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   X,
   Check,
   Users,
   Sparkles,
   Download,
+  Upload,
   Search,
   Edit3,
   Palette,
@@ -16,16 +17,25 @@ import {
   Maximize2,
   RefreshCw,
   Plus,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Cloud,
+  Database
 } from 'lucide-react';
 import {
   standardFormationDiagrams,
   FormationDiagram,
   createFormationSvg,
   getSavedCustomFormations,
+  getSavedCustomFormationsAsync,
+  getGradeFormationStyles,
+  saveGradeFormationStyles,
   saveCustomFormationToStorage,
+  mergeCustomFormationsIntoStorage,
   deleteCustomFormationFromStorage,
-  resetCustomFormations
+  resetCustomFormations,
+  CUSTOM_FORMATIONS_CHANGED_EVENT,
+  OPEN_BACKUP_RESTORE_EVENT,
+  TRIGGER_CLOUD_SYNC_EVENT
 } from '../data/formationDiagrams';
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { FormationStudioModal } from './FormationStudioModal';
@@ -75,10 +85,12 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
   // Row selection (Dòng 1 đến 5)
   const [selectedRow, setSelectedRow] = useState<number>(targetRowIndex >= 0 ? targetRowIndex : 2);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const importFormationsInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setCustomList(getSavedCustomFormations());
+      getSavedCustomFormationsAsync().then((hydrated) => setCustomList(hydrated));
       if (targetRowIndex >= 0) {
         setSelectedRow(targetRowIndex);
       }
@@ -90,11 +102,94 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
     }
   }, [isOpen, targetRowIndex, grade]);
 
+  // Live refresh when Cloud Auto-Sync or Backup Restore updates custom formations
+  useEffect(() => {
+    const onChanged = () => {
+      setCustomList(getSavedCustomFormations());
+    };
+    window.addEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(CUSTOM_FORMATIONS_CHANGED_EVENT, onChanged);
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
     }, 3200);
+  };
+
+  const handleExportCustomFormationsJson = async () => {
+    const latest = await getSavedCustomFormationsAsync();
+    if (latest.length === 0) {
+      showToast('Chưa có sơ đồ tự thiết kế nào để xuất.');
+      return;
+    }
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const payload = {
+      type: 'gdtc_custom_formations_backup',
+      version: 1,
+      timestamp: Date.now(),
+      exportDate: now.toLocaleString('vi-VN'),
+      count: latest.length,
+      gradeFormationStyles: getGradeFormationStyles(),
+      customFormations: latest
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Kho_So_Do_GDTC_${latest.length}_SoDo_${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast(`📥 Đã xuất ${latest.length} sơ đồ tự thiết kế ra file JSON! Có thể nạp ngay sang Vercel hoặc máy khác.`);
+  };
+
+  const handleImportCustomFormationsJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const parsed = JSON.parse(String(ev.target?.result || ''));
+        const list: FormationDiagram[] = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray(parsed?.customFormations)
+          ? parsed.customFormations
+          : [];
+        if (list.length === 0) {
+          showToast('⚠️ File không chứa sơ đồ đội hình tự thiết kế nào.');
+          return;
+        }
+        if (parsed?.gradeFormationStyles && typeof parsed.gradeFormationStyles === 'object') {
+          saveGradeFormationStyles(parsed.gradeFormationStyles);
+        }
+        const { merged, addedCount } = mergeCustomFormationsIntoStorage(list, { source: 'formation_modal_import' });
+        setCustomList(merged);
+        setSelectedPhase('custom');
+        showToast(
+          `✅ Đã nhập kho sơ đồ thành công! Thêm mới ${addedCount} sơ đồ (Tổng ${merged.length} sơ đồ tự thiết kế).`
+        );
+      } catch (err: any) {
+        showToast('⚠️ Không đọc được file JSON kho sơ đồ: ' + (err?.message || 'Định dạng không hợp lệ'));
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleTriggerVercelAutoSync = () => {
+    window.dispatchEvent(new CustomEvent(TRIGGER_CLOUD_SYNC_EVENT, { detail: { source: 'formation_library' } }));
+    showToast(`☁️ Đang đồng bộ tự động ${customList.length} sơ đồ tự thiết kế & toàn bộ dữ liệu lên Google Drive ↔ Vercel...`);
+  };
+
+  const handleOpenFullSystemBackup = () => {
+    onClose();
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent(OPEN_BACKUP_RESTORE_EVENT, { detail: { source: 'formation_library' } }));
+    }, 80);
   };
 
   const allDiagrams = useMemo(() => {
@@ -723,31 +818,87 @@ export const SelectFormationModal: React.FC<SelectFormationModalProps> = ({
           </div>
         )}
 
-        {/* Modal Footer */}
-        <div className="p-3 bg-white border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-slate-500 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap text-slate-600">
-            <span>Chuẩn hóa sư phạm GDPT 2018 · CV 5512 · Tự động chèn sơ đồ vào Cột 4 (Hoạt động học sinh)</span>
-            {customList.length > 0 && (
+        {/* Modal Footer with 1-Click Vercel Auto-Sync & Full System Backup */}
+        <div className="p-3 bg-white border-t border-slate-200 flex flex-col gap-2.5 text-xs text-slate-500 shrink-0">
+          {/* Quick Sync & Backup Action Strip */}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => {
-                  if (confirm('Bạn có chắc chắn muốn làm mới kho sơ đồ tự thiết kế về mặc định không?')) {
-                    resetCustomFormations();
-                    setCustomList([]);
-                    showToast('Đã làm mới kho sơ đồ về chuẩn ban đầu!');
-                  }
-                }}
-                className="text-rose-600 hover:underline font-semibold ml-2 cursor-pointer"
+                type="button"
+                onClick={handleTriggerVercelAutoSync}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-[11.5px] shadow-2xs transition cursor-pointer"
+                title="Đồng bộ 2 chiều tự động toàn bộ Kho Sơ Đồ tự thiết kế + Ảnh + Giáo án lên Google Drive ↔ Vercel"
               >
-                (Làm mới kho tự vẽ)
+                <Cloud className="w-3.5 h-3.5 text-sky-200 shrink-0" />
+                <span>Đồng Bộ Tự Động Lên Vercel ({customList.length} Sơ Đồ)</span>
               </button>
-            )}
+
+              <button
+                type="button"
+                onClick={handleOpenFullSystemBackup}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-[11.5px] shadow-2xs transition cursor-pointer"
+                title="Mở trình Sao Lưu & Khôi Phục Toàn Bộ Hệ Thống (308+ ảnh + toàn bộ sơ đồ tự vẽ + tất cả giáo án)"
+              >
+                <Database className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                <span>Sao Lưu Toàn Hệ Thống</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={handleExportCustomFormationsJson}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 font-bold text-[11px] transition cursor-pointer"
+                title="Xuất riêng kho sơ đồ tự thiết kế ra file JSON"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Xuất Sơ Đồ (.json)</span>
+              </button>
+
+              <input
+                ref={importFormationsInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleImportCustomFormationsJson}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => importFormationsInputRef.current?.click()}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px] transition cursor-pointer"
+                title="Nhập file JSON kho sơ đồ hoặc file sao lưu toàn hệ thống để hợp nhất sơ đồ tự vẽ"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Nhập Sơ Đồ (.json)</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition cursor-pointer"
-          >
-            Đóng
-          </button>
+
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap text-slate-600">
+              <span>Chuẩn hóa sư phạm GDPT 2018 · CV 5512 · Tự động lưu IndexedDB &amp; đồng bộ sang Vercel khi bật Google Drive</span>
+              {customList.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm('Bạn có chắc chắn muốn làm mới kho sơ đồ tự thiết kế về mặc định không?')) {
+                      resetCustomFormations();
+                      setCustomList([]);
+                      showToast('Đã làm mới kho sơ đồ về chuẩn ban đầu!');
+                    }
+                  }}
+                  className="text-rose-600 hover:underline font-semibold ml-1 cursor-pointer"
+                >
+                  (Làm mới kho tự vẽ)
+                </button>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold transition cursor-pointer shrink-0"
+            >
+              Đóng
+            </button>
+          </div>
         </div>
       </div>
     </div>
