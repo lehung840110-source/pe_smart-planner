@@ -2144,7 +2144,7 @@ export default function App() {
                 Còn {authUser.daysRemaining} ngày Full
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Giai đoạn trải nghiệm miễn phí trọn 1 học kỳ kết thúc ngày <strong>{formatVnDate(authUser.trialEndsAt)}</strong> · Cam kết <strong>không mất giáo án cũ</strong>. Thầy/cô có thể ủng hộ tùy tâm hoặc xem các gói tính năng khi cần.
+                Giai đoạn trải nghiệm miễn phí trọn 1 học kỳ kết thúc ngày <strong>{formatVnDate(authUser.trialEndsAt)}</strong> · Cam kết <strong>không mất giáo án cũ</strong>. Thầy/cô có thể bấm <strong>Tham khảo tính năng</strong> hoặc nhập mã kích hoạt khi cần.
               </span>
             </div>
             <button
@@ -2153,23 +2153,23 @@ export default function App() {
               className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
             >
               <Coffee className="w-3.5 h-3.5" />
-              <span>Ủng Hộ &amp; Duy Trì</span>
+              <span>Tham Khảo Tính Năng</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Expired Trial -> Friendly Freemium Basic Mode Banner */}
+      {/* Expired Trial -> Friendly Basic Mode Banner */}
       {isSubscriptionExpired && authUser && (
         <div className="bg-gradient-to-r from-amber-50 via-rose-50/70 to-orange-50 border-b border-amber-300 no-print">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-start sm:items-center gap-2 text-slate-800">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-bold text-[10.5px] shrink-0 mt-0.5 sm:mt-0">
                 <Lock className="w-3 h-3" />
-                Chế Độ Cơ Bản
+                Tính Năng Cơ Bản
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ · Toàn bộ giáo án cũ vẫn giữ nguyên &amp; tiếp tục xem/tra cứu miễn phí. Nhập mã kích hoạt hoặc xem các gói tính năng để tiếp tục mở khóa đầy đủ.
+                Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ · Toàn bộ giáo án cũ vẫn giữ nguyên &amp; tiếp tục xem/tra cứu ở chế độ Tính năng cơ bản. Bấm <strong>Tham khảo tính năng</strong> hoặc nhập mã kích hoạt để mở Tính năng nâng cao.
               </span>
             </div>
             <button
@@ -2178,7 +2178,7 @@ export default function App() {
               className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
             >
               <Coffee className="w-3.5 h-3.5" />
-              <span>Ủng Hộ / Nhập Mã</span>
+              <span>Tham Khảo Tính Năng</span>
             </button>
           </div>
         </div>

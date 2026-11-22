@@ -501,7 +501,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-800 hover:text-blue-800 border border-slate-200 hover:border-blue-300 text-xs font-bold flex items-center gap-1.5 transition"
             >
               <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-              <span>{showFeaturePlans ? 'Ẩn các gói tính năng' : 'Xem các gói tính năng'}</span>
+              <span>{showFeaturePlans ? 'Ẩn tham khảo tính năng' : 'Tham khảo tính năng'}</span>
               {showFeaturePlans ? (
                 <ChevronUp className="w-3.5 h-3.5" />
               ) : (
@@ -534,7 +534,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
               <div className="font-bold text-slate-800 flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10.5px] uppercase">Cơ bản</span>
-                <span>Chế Độ Cơ Bản &amp; Cam Kết Dữ Liệu</span>
+                <span>Tính năng cơ bản</span>
               </div>
               <ul className="space-y-1.5 text-slate-600">
                 <li className="flex items-start gap-2">
@@ -547,19 +547,19 @@ export const TabIntro: React.FC<TabIntroProps> = ({
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                  <span>Không khóa cứng dữ liệu, luôn trân trọng thành quả soạn giảng của giáo viên.</span>
+                  <span>Không khóa cứng dữ liệu, luôn trân trọng và bảo toàn thành quả soạn giảng của giáo viên.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                  <span>Thông báo nhắc nhẹ trước 7 ngày khi kết thúc giai đoạn trải nghiệm 1 học kỳ.</span>
+                  <span>Sử dụng ổn định hằng ngày cho nhu cầu xem, tra cứu và đối chiếu giáo án GDTC.</span>
                 </li>
               </ul>
             </div>
 
             <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-4 space-y-2">
               <div className="font-bold text-emerald-950 flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Full Tính Năng · 1 Học Kỳ</span>
-                <span>Mở Khóa 100% Tính Năng Không Rào Cản</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Nâng cao</span>
+                <span>Tính năng nâng cao</span>
               </div>
               <ul className="space-y-1.5 text-emerald-900">
                 <li className="flex items-start gap-2">
@@ -572,11 +572,11 @@ export const TabIntro: React.FC<TabIntroProps> = ({
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                  <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp mẫu riêng, chốt lịch sử &amp; <strong>kết nối Google Docs / Drive</strong>, xuất Word/PDF.</span>
+                  <span>Chỉnh sửa trực tiếp giáo án mẫu 4 cột (Tab 3), nạp mẫu riêng, chốt lịch sử &amp; <strong>kết nối Google Docs / Drive</strong>, xuất Word/PDF.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                  <span><strong>Chia sẻ vì cộng đồng GDTC:</strong> mở miễn phí trọn 1 học kỳ, hỗ trợ kích hoạt linh hoạt theo cá nhân hoặc Tổ/Nhóm chuyên môn (không ràng buộc chi phí).</span>
+                  <span>Đồng bộ toàn bộ dữ liệu trên tài khoản cá nhân &amp; sao lưu/khôi phục linh hoạt trên mọi thiết bị.</span>
                 </li>
               </ul>
             </div>

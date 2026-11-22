@@ -25,52 +25,52 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
   {
     id: 'week_1',
     codePrefix: 'W1',
-    name: 'Gói Tuần (7 ngày)',
-    shortLabel: '1 Tuần',
+    name: 'Tính năng nâng cao (7 ngày)',
+    shortLabel: '7 ngày',
     durationDays: 7,
-    priceVnd: 20000,
-    priceText: '20.000đ',
-    perMonthText: 'Linh hoạt theo tuần',
-    tagline: 'Mở khóa toàn bộ tính năng soạn giảng theo tuần'
+    priceVnd: 0,
+    priceText: '',
+    perMonthText: '',
+    tagline: 'Mở khóa toàn bộ tính năng nâng cao trong 7 ngày'
   },
   {
     id: 'month_1',
     codePrefix: 'M1',
-    name: 'Gói Tháng (30 ngày)',
-    shortLabel: '1 Tháng',
+    name: 'Tính năng nâng cao (30 ngày)',
+    shortLabel: '30 ngày',
     durationDays: 30,
-    priceVnd: 49000,
-    priceText: '49.000đ',
-    perMonthText: 'Linh hoạt theo tháng',
-    tagline: 'Phù hợp giai đoạn cao điểm & chuyên đề thao giảng'
+    priceVnd: 0,
+    priceText: '',
+    perMonthText: '',
+    tagline: 'Mở khóa toàn bộ tính năng nâng cao trong 30 ngày'
   },
   {
     id: 'semester_1',
     codePrefix: 'S1',
-    name: 'Gói Học Kỳ (4–5 tháng)',
+    name: 'Tính năng nâng cao (1 Học kỳ)',
     shortLabel: '1 Học kỳ',
     durationDays: 135,
-    priceVnd: 129000,
-    priceText: '129.000đ',
-    perMonthText: 'Trọn nhịp 1 học kỳ',
-    tagline: 'Đồng bộ xuyên suốt 1 học kỳ · Ổn định & đầy đủ',
+    priceVnd: 0,
+    priceText: '',
+    perMonthText: '',
+    tagline: 'Mở khóa toàn bộ tính năng nâng cao trọn 1 học kỳ',
     popular: true
   },
   {
     id: 'year_1',
     codePrefix: 'Y1',
-    name: 'Gói Năm Học (12 tháng)',
+    name: 'Tính năng nâng cao (1 Năm học)',
     shortLabel: '1 Năm học',
     durationDays: 365,
-    priceVnd: 199000,
-    priceText: '199.000đ',
-    perMonthText: 'Trọn vẹn cả năm học',
-    tagline: 'Toàn quyền tính năng & lưu trữ suốt cả năm học',
+    priceVnd: 0,
+    priceText: '',
+    perMonthText: '',
+    tagline: 'Mở khóa toàn bộ tính năng nâng cao trọn 1 năm học',
     bestValue: true
   }
 ];
 
-export const GROUP_DISCOUNT_LABEL = 'Gói Tổ / Nhóm chuyên môn (3–5 giáo viên): Kích hoạt đồng bộ cho cả tổ bộ môn GDTC';
+export const GROUP_DISCOUNT_LABEL = 'Hỗ trợ Tổ / Nhóm chuyên môn GDTC kích hoạt đồng bộ tính năng nâng cao';
 
 export const DONATION_BANK_INFO = {
   bankCode: 'VCB',
