@@ -615,7 +615,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
               <FeatheredDivider />
 
               <p className="font-serif text-xs sm:text-sm leading-relaxed text-[#2D3E31]">
-                Phóng to vào từng ô bảng 4 cột để gõ sửa trực tiếp, đổi tranh động tác SGK hoặc chọn nhanh sơ đồ từ Khối 1 đến Khối 5 mà không làm xô lệch định dạng.
+                Phóng to vào bảng 4 cột để sửa trực tiếp, đổi nhanh từ kho <strong>308+ ảnh SGK (Khối 1–5)</strong> hoặc dùng <strong>Studio Đội Hình linh hoạt</strong> (vẽ lưới ô, nối đường nét liền/đứt, xoay góc tùy ý, lật Mirror, nhóm &amp; canh thẳng hàng).
               </p>
 
               <div className="inline-flex rounded-lg bg-[#E5EFE3] p-1 border border-[#C6D8C0] text-[11px] font-semibold w-fit">
@@ -804,9 +804,9 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {[
-                  { value: '173', label: 'hình ảnh đã bóc tách' },
-                  { value: '80', label: 'kế hoạch bài dạy' },
-                  { value: '150,85 MB', label: 'dữ liệu tích lũy' }
+                  { value: '308+', label: 'hình ảnh SGK từ Khối 1 đến Khối 5' },
+                  { value: '67+', label: 'mẫu sơ đồ & Studio tự vẽ linh hoạt' },
+                  { value: 'All-in-1', label: 'tích hợp PPCT, Google Docs & Word A4' }
                 ].map((stat) => (
                   <div
                     key={stat.label}
@@ -999,7 +999,13 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                 </h3>
                 <FeatheredDivider light />
                 <p className="font-serif text-xs sm:text-sm leading-relaxed text-[#E7F1E5]">
-                  Từ trang giáo án dang dở lúc 22:45 đến bản in A4 chuẩn Công văn 5512 xuất Word/PDF chỉ trong vài phút — để thầy cô dành trọn tâm huyết cho sân bãi và học sinh.
+                  Tích hợp tự động kho 308+ ảnh SGK (Khối 1–5), Studio vẽ sơ đồ linh hoạt, kết nối trực tiếp Google Docs / Google Drive và xuất Word/PDF A4 chỉ trong vài phút — giúp Quý thầy cô tiết kiệm thời gian, nâng cao chất lượng dạy học động tác GDTC.
+                </p>
+                <p className="text-[11px] text-[#B8D7B2]">
+                  Mọi ý kiến đóng góp xin gửi về hộp thư cá nhân:{' '}
+                  <a href="mailto:lehung840110@gmail.com" className="underline font-bold text-white">
+                    lehung840110@gmail.com
+                  </a>
                 </p>
               </div>
 

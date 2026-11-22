@@ -2946,6 +2946,161 @@ app.put('/api/workspace', (req: Request, res: Response) => {
 });
 
 // ============================================================================
+// USER FEEDBACK & REVIEWS SPACE (/api/feedback)
+// ============================================================================
+const FEEDBACK_FILE = path.join(DATA_DIR, 'feedback.json');
+
+interface StoredFeedbackItem {
+  id: string;
+  authorName: string;
+  schoolName: string;
+  role: string;
+  email?: string;
+  category: 'review' | 'feature' | 'bug' | 'resource';
+  ratings: {
+    usefulness: number;
+    curriculum: number;
+    easeOfUse: number;
+    innovation: number;
+    dedication: number;
+  };
+  averageRating: number;
+  strengths: string;
+  suggestion: string;
+  comment: string;
+  helpfulCount: number;
+  createdAt: number;
+  userId?: string;
+}
+
+function readFeedbackList(): StoredFeedbackItem[] {
+  ensureAuthStorage();
+  if (!fs.existsSync(FEEDBACK_FILE)) return [];
+  try {
+    const raw = JSON.parse(fs.readFileSync(FEEDBACK_FILE, 'utf8'));
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFeedbackList(items: StoredFeedbackItem[]) {
+  ensureAuthStorage();
+  const tmpPath = `${FEEDBACK_FILE}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(items, null, 2), 'utf8');
+  fs.renameSync(tmpPath, FEEDBACK_FILE);
+}
+
+app.get('/api/feedback', (_req: Request, res: Response) => {
+  const items = readFeedbackList().sort((a, b) => b.createdAt - a.createdAt);
+  return res.json({ success: true, items });
+});
+
+app.post('/api/feedback', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  const body = req.body || {};
+
+  const authorName = String(body.authorName || authUser?.fullName || '').trim().slice(0, 100);
+  const schoolName = String(body.schoolName || authUser?.schoolName || '').trim().slice(0, 140);
+  const role = String(body.role || 'Giáo viên GDTC Tiểu học').trim().slice(0, 80);
+  const email = String(body.email || authUser?.email || '').trim().slice(0, 120);
+  const allowedCategories = ['review', 'feature', 'bug', 'resource'] as const;
+  const category = allowedCategories.includes(body.category) ? body.category : 'review';
+
+  const clampStar = (val: unknown) => {
+    const num = Number(val);
+    if (!Number.isFinite(num)) return 5;
+    return Math.max(1, Math.min(5, Math.round(num)));
+  };
+
+  const ratings = {
+    usefulness: clampStar(body.ratings?.usefulness),
+    curriculum: clampStar(body.ratings?.curriculum),
+    easeOfUse: clampStar(body.ratings?.easeOfUse),
+    innovation: clampStar(body.ratings?.innovation),
+    dedication: clampStar(body.ratings?.dedication)
+  };
+  const averageRating = Number(
+    (
+      (ratings.usefulness +
+        ratings.curriculum +
+        ratings.easeOfUse +
+        ratings.innovation +
+        ratings.dedication) /
+      5
+    ).toFixed(1)
+  );
+
+  const strengths = String(body.strengths || '').trim().slice(0, 1200);
+  const suggestion = String(body.suggestion || '').trim().slice(0, 1200);
+  const comment = String(body.comment || '').trim().slice(0, 2000);
+
+  if (!authorName) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập họ tên thầy/cô.' });
+  }
+  if (!comment && !strengths && !suggestion) {
+    return res.status(400).json({
+      success: false,
+      error: 'Vui lòng nhập ít nhất một nội dung nhận xét hoặc góp ý.'
+    });
+  }
+
+  const newItem: StoredFeedbackItem = {
+    id: `fb_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`,
+    authorName,
+    schoolName: schoolName || 'Giáo viên GDTC',
+    role,
+    email: email || undefined,
+    category,
+    ratings,
+    averageRating,
+    strengths,
+    suggestion,
+    comment,
+    helpfulCount: 0,
+    createdAt: Date.now(),
+    userId: authUser?.id
+  };
+
+  const list = readFeedbackList();
+  list.unshift(newItem);
+  writeFeedbackList(list.slice(0, 500));
+
+  return res.json({ success: true, item: newItem });
+});
+
+app.post('/api/feedback/:id/helpful', (req: Request, res: Response) => {
+  const { id } = req.params;
+  const list = readFeedbackList();
+  const idx = list.findIndex((it) => it.id === id);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy đánh giá.' });
+  }
+  list[idx].helpfulCount = (list[idx].helpfulCount || 0) + 1;
+  writeFeedbackList(list);
+  return res.json({ success: true, item: list[idx] });
+});
+
+app.delete('/api/feedback/:id', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  const { id } = req.params;
+  const list = readFeedbackList();
+  const target = list.find((it) => it.id === id);
+  if (!target) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy đánh giá.' });
+  }
+  const isAdmin =
+    authUser?.role === 'admin' ||
+    authUser?.email?.toLowerCase() === 'lehung840110@gmail.com';
+  const isOwner = Boolean(authUser?.id && target.userId && authUser.id === target.userId);
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({ success: false, error: 'Bạn không có quyền xóa đánh giá này.' });
+  }
+  writeFeedbackList(list.filter((it) => it.id !== id));
+  return res.json({ success: true });
+});
+
+// ============================================================================
 // MULTI-TASK LESSON PLAN ANALYZER (EXTRACT FULL 5512 CUSTOM USER TEMPLATE)
 // ============================================================================
 app.post('/api/ai/analyze-lesson-template', async (req: Request, res: Response) => {

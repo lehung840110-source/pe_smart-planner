@@ -7,6 +7,7 @@ import { TabScenarioLibrary } from './components/TabScenarioLibrary';
 import { TabGenerator } from './components/TabGenerator';
 import { TabExportPrint } from './components/TabExportPrint';
 import { TabIntro } from './components/TabIntro';
+import { TabFeedback } from './components/TabFeedback';
 import { SettingsModal } from './components/SettingsModal';
 import { SelectCellModal } from './components/SelectCellModal';
 import { ScenarioModal } from './components/ScenarioModal';
@@ -2092,7 +2093,7 @@ export default function App() {
                 Chế Độ Khách
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Đăng nhập miễn phí để mở khóa 100% tính năng (Quét SGK, Sửa trực tiếp, Lưu phiên bản, Studio Sơ đồ &amp; Xuất Word/PDF).
+                Đăng ký miễn phí để mở khóa trọn bộ: <strong>308+ ảnh SGK (K1–K5)</strong>, <strong>Studio Sơ đồ linh hoạt</strong> (nối nét, xoay góc, Mirror), tích hợp <strong>Google Docs / Drive</strong> &amp; xuất Word/PDF.
               </span>
             </div>
             <div className="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
@@ -2433,6 +2434,15 @@ export default function App() {
                 0
               )
             }}
+          />
+        )}
+
+        {activeTab === 'tab-feedback' && (
+          <TabFeedback
+            authUser={authUser}
+            defaultTeacherName={schoolSettings.teacherName}
+            defaultSchoolName={schoolSettings.schoolName}
+            showToast={showToast}
           />
         )}
       </main>

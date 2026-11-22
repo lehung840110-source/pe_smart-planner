@@ -24,7 +24,11 @@ import {
   Lock,
   LogIn,
   Presentation,
-  UserPlus
+  UserPlus,
+  Mail,
+  Cloud,
+  Shapes,
+  MessageSquareHeart
 } from 'lucide-react';
 import { IntroSlideDeck, IntroSlideLiveStats } from './IntroSlideDeck';
 
@@ -94,8 +98,8 @@ export const TabIntro: React.FC<TabIntroProps> = ({
     },
     {
       badge: 'Tab 2',
-      title: 'Thư Viện Ảnh & Làm Sạch Ảnh',
-      desc: 'Lưu trữ tập trung toàn bộ ảnh đã bóc tách trong cơ sở dữ liệu trình duyệt, hỗ trợ tẩy nền/xóa chi tiết thừa và chèn thẳng vào đúng cột của bài dạy.',
+      title: 'Thư Viện 308+ Ảnh SGK (Khối 1–5)',
+      desc: 'Kho tài nguyên lên tới 308 hình ảnh chuẩn SGK từ Khối 1 đến Khối 5 phân loại theo 6 thư mục, hỗ trợ làm sạch nền và tự động chèn chính xác sau tiêu đề động tác, trò chơi.',
       icon: Images,
       actionLabel: 'Mở Tab 2',
       onClick: () => onNavigateTab('tab-img-library')
@@ -120,15 +124,15 @@ export const TabIntro: React.FC<TabIntroProps> = ({
     {
       badge: 'Tab 5',
       title: 'Sinh Giáo Án Tuần Mới & Rà Soát 100%',
-      desc: 'Tự nhận diện động tác mới vs ôn tập theo PPCT, cân bằng 11 dòng tiến trình, chèn ảnh/sơ đồ ngay tại con trỏ và chấm điểm mức độ khớp chuẩn SGK.',
+      desc: 'Tự nhận diện động tác mới vs ôn tập theo PPCT tích hợp, đổi chữ hoa/thường nhanh, tự động chèn ảnh SGK chuẩn và chấm điểm mức độ khớp chương trình.',
       icon: Wand2,
       actionLabel: 'Mở Tab 5',
       onClick: () => onNavigateTab('tab-generator')
     },
     {
       badge: 'Tab 6',
-      title: 'Xem Trước A4, Sửa & Xuất Word / PDF',
-      desc: 'Xem gộp cả 5 khối kèm lịch dạy tuần 7 cột hoặc xem riêng từng khối/mẫu người dùng; tùy chỉnh cỡ chữ, cỡ ảnh và xuất Word (.DOC/.DOCX) hoặc in PDF A4 nguyên vẹn.',
+      title: 'Xem Trước A4, Google Docs & Xuất Word / PDF',
+      desc: 'Xem gộp cả 5 khối kèm lịch tuần 7 cột; kết nối tài liệu Google Docs / Google Drive trực tiếp, xuất Word (.DOC/.DOCX) hoặc in PDF A4 nguyên vẹn.',
       icon: Printer,
       actionLabel: 'Mở Tab 6',
       onClick: () => onNavigateTab('tab-export')
@@ -136,16 +140,16 @@ export const TabIntro: React.FC<TabIntroProps> = ({
     {
       badge: 'Công cụ',
       memberOnly: true,
-      title: 'Studio Tự Vẽ & Đổi Kiểu Đội Hình K1–K5',
-      desc: 'Thiết kế sơ đồ mới từ hình ảnh trò chơi tham chiếu hoặc tùy chọn kiểu đội hình đặc trưng riêng cho từng khối (Khối 1, 2, 3, 4, 5) tránh trùng lặp.',
+      title: 'Studio Tạo Sơ Đồ Đội Hình Mạnh Mẽ & Linh Hoạt',
+      desc: 'Tự vẽ lưới ô vuông (3x3, 1x5...), đường song song, nhóm hình theo mẫu (tròn, tam giác, gấp khúc), nối đối tượng nét liền/nét đứt/mũi tên, xoay góc tùy ý (45°...), lật gương Mirror & canh thẳng hàng tự động.',
       icon: Palette,
       actionLabel: 'Mở Studio Đội Hình',
       onClick: () => (onOpenFormationStudio ? onOpenFormationStudio() : onNavigateTab('tab-export'))
     },
     {
       badge: 'Hệ thống',
-      title: 'Tài Khoản Giáo Viên & Lịch Sử Phiên Bản',
-      desc: 'Đăng ký/Đăng nhập để đồng bộ giáo án, thiết lập trường lớp và các mẫu người dùng vừa nạp lên máy chủ; lưu vết mọi lần sửa để khôi phục bất kỳ lúc nào.',
+      title: 'Tài Khoản Giáo Viên & Kết Nối Google Drive',
+      desc: 'Đăng ký miễn phí để mở khóa toàn bộ kho 308+ ảnh, Studio đội hình chuyên sâu, đồng bộ tài liệu Google Docs/Drive và lưu lịch sử mọi phiên bản giáo án.',
       icon: UserCheck,
       actionLabel: 'Mở Tài Khoản',
       onClick: () => (onOpenAuth ? onOpenAuth() : onNavigateTab('tab-generator'))
@@ -228,8 +232,24 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             </h2>
 
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
-              Ứng dụng được xây dựng từ thực tiễn giảng dạy môn Giáo dục Thể chất tại trường phổ thông, giúp thầy cô giải quyết trọn vẹn từ khâu bóc tách hình ảnh SGK, thiết kế sơ đồ đội hình từng khối, soạn giáo án đúng chuẩn Công văn 5512 đến xuất file Word và in A4 đồng loạt cả 5 khối trong vài phút.
+              Giải pháp soạn Kế hoạch bài dạy thông minh <strong>“Tất cả trong 1”</strong> dành riêng cho giáo viên Giáo dục Thể chất: tích hợp tự động PPCT cả 5 khối, sở hữu bộ thư viện lên tới <strong>308 hình ảnh SGK từ Khối 1 đến Khối 5</strong>, <strong>Studio vẽ sơ đồ đội hình mạnh mẽ &amp; linh hoạt</strong>, kết nối trực tiếp tài liệu <strong>Google Docs / Google Drive</strong> và xuất Word/PDF A4 — giúp Quý thầy cô tiết kiệm tối đa thời gian, công sức soạn giảng và nâng cao vượt trội chất lượng dạy học động tác.
             </p>
+
+            {/* Key Value Stats Strip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div className="bg-white/10 border border-white/15 rounded-xl px-3.5 py-2.5">
+                <div className="text-base sm:text-lg font-extrabold text-emerald-300 tabular-nums">308+ Hình Ảnh</div>
+                <div className="text-[11px] text-blue-100/85">Thư viện chuẩn SGK từ Khối 1 đến Khối 5</div>
+              </div>
+              <div className="bg-white/10 border border-white/15 rounded-xl px-3.5 py-2.5">
+                <div className="text-base sm:text-lg font-extrabold text-sky-300">Studio Sơ Đồ Pro</div>
+                <div className="text-[11px] text-blue-100/85">Nối nét liền/đứt, xoay góc, Mirror, lưới ô</div>
+              </div>
+              <div className="bg-white/10 border border-white/15 rounded-xl px-3.5 py-2.5">
+                <div className="text-base sm:text-lg font-extrabold text-amber-300">Tích Hợp Tự Động</div>
+                <div className="text-[11px] text-blue-100/85">Kết nối Google Docs / Drive &amp; Word A4</div>
+              </div>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2.5 pt-2">
               <button
@@ -246,7 +266,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
                 className="bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
               >
                 <Printer className="w-4 h-4 text-sky-300" />
-                <span>Xem Trước & Xuất Word (Tab 6)</span>
+                <span>Xem Trước &amp; Xuất Word (Tab 6)</span>
               </button>
               {onOpenImport && (
                 <button
@@ -267,6 +287,14 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               >
                 <Presentation className="w-4 h-4 text-emerald-300" />
                 <span>Xem Slide Trình Chiếu (10 Trang)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigateTab('tab-feedback')}
+                className="bg-amber-500/90 hover:bg-amber-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition"
+              >
+                <MessageSquareHeart className="w-4 h-4 text-white" />
+                <span>Đánh Giá &amp; Góp Ý (Tab 8)</span>
               </button>
             </div>
           </div>
@@ -291,7 +319,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               <div className="flex items-start gap-2">
                 <School className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Chức danh & Đơn vị:</strong> Giáo viên Trường TH&amp;THCS Nghĩa Hiệp
+                  <strong>Chức danh &amp; Đơn vị:</strong> Giáo viên Trường TH&amp;THCS Nghĩa Hiệp
                 </span>
               </div>
               <div className="flex items-start gap-2">
@@ -303,10 +331,100 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               <div className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Mục tiêu sản phẩm:</strong> Chuẩn hóa giáo án trực quan, giảm tải giấy tờ cho đồng nghiệp GDTC.
+                  <strong>Sứ mệnh:</strong> Tiết kiệm tối đa thời gian soạn giảng, nâng cao chất lượng dạy học động tác GDTC.
+                </span>
+              </div>
+              <div className="flex items-start gap-2 pt-1.5 border-t border-slate-100">
+                <Mail className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="break-all">
+                  <strong>Đóng góp ý kiến:</strong>{' '}
+                  <a
+                    href="mailto:lehung840110@gmail.com"
+                    className="text-blue-700 hover:underline font-semibold"
+                  >
+                    lehung840110@gmail.com
+                  </a>
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 1A. Unique All-in-One Competitive Advantages */}
+      <section className="bg-gradient-to-br from-emerald-50/80 via-white to-sky-50/80 rounded-2xl border border-emerald-200/80 p-5 sm:p-6 shadow-xs space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1 max-w-3xl">
+            <span className="inline-flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100/90 px-2.5 py-0.5 rounded-md">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              Ưu Điểm Nổi Trội Độc Quyền Trong Một Ứng Dụng Duy Nhất
+            </span>
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
+              Vì Sao SmartPlan GDTC Pro Khác Biệt Hoàn Toàn So Với Các Công Cụ Soạn Thảo Thông Thường?
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Không có ứng dụng đơn lẻ nào tích hợp trọn vẹn từ kho ảnh SGK chuẩn, công cụ vẽ sơ đồ đội hình chuyên sâu, sinh giáo án tự động theo PPCT đến kết nối trực tiếp tài liệu Google Docs &amp; Google Drive ngay trong cùng một không gian làm việc.
+            </p>
+          </div>
+          {isGuest && (
+            <button
+              type="button"
+              onClick={() => (onOpenAuthMode ? onOpenAuthMode('register') : onOpenAuth?.())}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition shrink-0"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Đăng Ký Mở Khóa Miễn Phí</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 text-xs">
+          <div className="bg-white rounded-xl border border-emerald-200/80 p-4 space-y-2 shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <Images className="w-5 h-5" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 leading-snug">
+              Thư viện lên tới 308 hình ảnh SGK (Khối 1 → Khối 5)
+            </h4>
+            <p className="text-slate-600 leading-relaxed text-[11.5px]">
+              Kho hình ảnh động tác &amp; trò chơi đầy đủ cả 5 khối lớp, được phân loại khoa học và tự động gán đúng vị trí sau tiêu đề động tác giúp giờ dạy trực quan, sinh động hơn hẳn.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-blue-200/80 p-4 space-y-2 shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
+              <Shapes className="w-5 h-5" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 leading-snug">
+              Studio tạo sơ đồ đội hình mạnh mẽ &amp; cực kỳ linh hoạt
+            </h4>
+            <p className="text-slate-600 leading-relaxed text-[11.5px]">
+              Hỗ trợ vẽ vùng lưới ô vuông (3x3, 1x5...), đường song song dọc/ngang, nhóm hình tròn/tam giác/gấp khúc, <strong>nối đối tượng bằng đường nét liền – nét đứt – mũi tên</strong>, <strong>xoay góc tùy chỉnh (45°, 90°...)</strong>, lật gương <strong>Mirror</strong>, nhóm &amp; thu nhỏ tỷ lệ, canh thẳng hàng tức thì.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-indigo-200/80 p-4 space-y-2 shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 leading-snug">
+              Tích hợp tự động &amp; kết nối tài liệu Google Docs / Drive
+            </h4>
+            <p className="text-slate-600 leading-relaxed text-[11.5px]">
+              Kết nối đồng bộ trực tiếp với <strong>Google Docs &amp; Google Drive</strong>, nạp tệp mẫu Word/PDF đa nhiệm, tự động sinh giáo án theo PPCT tích hợp và xuất file Word/PDF chuẩn Công văn 5512 chỉ trong 1 chạm.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-amber-200/80 p-4 space-y-2 shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+              <Award className="w-5 h-5" />
+            </div>
+            <h4 className="font-extrabold text-slate-900 leading-snug">
+              Tiết kiệm công sức, nâng cao chất lượng dạy học động tác
+            </h4>
+            <p className="text-slate-600 leading-relaxed text-[11.5px]">
+              Giải phóng Quý thầy cô khỏi việc cắt dán, căn chỉnh thủ công lặp đi lặp lại mỗi tuần để dành trọn tâm huyết hướng dẫn kỹ thuật động tác chính xác, an toàn cho học sinh GDTC.
+            </p>
           </div>
         </div>
       </section>
@@ -428,19 +546,19 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             <ul className="space-y-1.5 text-emerald-900">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Quét &amp; bóc tách ảnh SGK (Tab 1), xử lý ảnh thông minh, Gemini Vision &amp; AI.</span>
+                <span><strong>Thư viện lên tới 308 hình ảnh SGK (Khối 1–5)</strong>, quét bóc tách SGK (Tab 1) &amp; làm sạch ảnh thông minh.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp &amp; phân tích mẫu giáo án riêng.</span>
+                <span><strong>Studio Tạo Sơ Đồ Đội Hình Mạnh Mẽ &amp; Linh Hoạt:</strong> vẽ lưới ô vuông, đường song song, nhóm hình theo mẫu, nối nét liền/đứt/mũi tên, xoay góc tùy ý, lật gương Mirror &amp; canh thẳng hàng.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Lưu phiên bản cuối, Lịch sử sửa, Studio Đội Hình &amp; Đổi kiểu K1–K5.</span>
+                <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp &amp; phân tích mẫu giáo án riêng, chốt Lịch sử phiên bản.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Xuất file Word (.DOC/.DOCX), lưu PDF/in A4, Google Drive &amp; đồng bộ tài khoản.</span>
+                <span><strong>Kết nối trực tiếp Google Docs / Google Drive</strong>, xuất Word (.DOC/.DOCX), lưu PDF/in A4 &amp; đồng bộ tài khoản.</span>
               </li>
             </ul>
           </div>
@@ -621,16 +739,30 @@ export const TabIntro: React.FC<TabIntroProps> = ({
         </div>
       </section>
 
-      {/* 5. Footer Author Attribution */}
-      <footer className="bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
-        <div className="flex items-center gap-2.5">
-          <School className="w-4 h-4 text-blue-600 shrink-0" />
-          <span>
-            <strong className="text-slate-900">Tác giả phát triển:</strong> Lê Quốc Hưng — Giáo viên Trường TH&amp;THCS Nghĩa Hiệp
-          </span>
+      {/* 5. Footer Author Attribution & Feedback Mailbox */}
+      <footer className="bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <School className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              <strong className="text-slate-900">Tác giả phát triển:</strong> Lê Quốc Hưng — Giáo viên Trường TH&amp;THCS Nghĩa Hiệp
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-slate-700">
+            <Mail className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>
+              Mọi ý kiến đóng góp xin gửi qua hộp thư cá nhân:{' '}
+              <a
+                href="mailto:lehung840110@gmail.com"
+                className="font-bold text-blue-700 hover:underline"
+              >
+                lehung840110@gmail.com
+              </a>
+            </span>
+          </div>
         </div>
-        <span className="text-[11px] text-slate-500">
-          SmartPlan GDTC Pro · Bộ công cụ hỗ trợ giảng dạy môn Giáo dục Thể chất Tiểu học
+        <span className="text-[11px] text-slate-500 sm:text-right">
+          SmartPlan GDTC Pro · Giải pháp tạo Kế hoạch bài dạy thông minh môn Giáo dục Thể chất
         </span>
       </footer>
     </div>

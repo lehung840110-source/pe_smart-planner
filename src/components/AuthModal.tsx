@@ -1064,11 +1064,50 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   )}
 
                   {mode === 'register' && (
-                    <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[11px] leading-relaxed flex items-start gap-2">
-                      <Mail className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                      <span>
-                        Sau khi tạo tài khoản, hệ thống sẽ tạo <strong>mã xác nhận đăng ký</strong> và mở hộp thoại gửi thông báo xác nhận tới email quản trị <strong>{ADMIN_NOTIFICATION_EMAIL}</strong>.
-                      </span>
+                    <div className="space-y-2.5">
+                      {/* Standout Benefits Showcase when Registering */}
+                      <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50 via-white to-sky-50 border border-emerald-200 space-y-2">
+                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-900 text-[11.5px]">
+                          <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>Đặc quyền nổi trội khi đăng ký tài khoản SmartPlan GDTC Pro:</span>
+                        </div>
+                        <ul className="space-y-1.5 text-[11px] text-slate-700 leading-relaxed">
+                          <li className="flex items-start gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Studio tạo sơ đồ đội hình mạnh mẽ &amp; linh hoạt:</strong> vẽ lưới ô vuông (3x3, 1x5...), đường song song, nhóm hình tròn/tam giác/gấp khúc, <strong>nối đối tượng nét liền – nét đứt – mũi tên</strong>, <strong>xoay góc tùy chỉnh (45°, 90°...)</strong>, lật gương Mirror &amp; canh thẳng hàng tự động.
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Thư viện lên tới 308 hình ảnh SGK (Khối 1 → Khối 5):</strong> phân loại chuẩn theo động tác &amp; trò chơi, tự động gắn chính xác giúp nâng cao chất lượng dạy học động tác GDTC.
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                            <span>
+                              <strong>Tích hợp tự động “Tất cả trong 1” duy nhất:</strong> kết nối trực tiếp tài liệu <strong>Google Docs / Google Drive</strong>, sinh giáo án chuẩn PPCT, xuất Word/PDF A4 &amp; đồng bộ phiên bản — tiết kiệm tối đa thời gian, công sức soạn giảng cho Quý thầy cô.
+                            </span>
+                          </li>
+                        </ul>
+                        <p className="text-[10.5px] text-slate-600 pt-1.5 border-t border-emerald-200/70">
+                          💌 Mọi ý kiến đóng góp xin gửi qua hộp thư cá nhân:{' '}
+                          <a
+                            href={`mailto:${ADMIN_NOTIFICATION_EMAIL}`}
+                            className="font-bold text-blue-700 hover:underline"
+                          >
+                            {ADMIN_NOTIFICATION_EMAIL}
+                          </a>
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10.5px] leading-relaxed flex items-start gap-2">
+                        <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                        <span>
+                          Sau khi tạo tài khoản, hệ thống tạo <strong>mã xác nhận đăng ký</strong> và mở hộp thoại gửi thông báo xác nhận tới <strong>{ADMIN_NOTIFICATION_EMAIL}</strong>.
+                        </span>
+                      </div>
                     </div>
                   )}
 

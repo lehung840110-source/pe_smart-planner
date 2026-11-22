@@ -23,7 +23,8 @@ import {
   Menu,
   X,
   LayoutGrid,
-  ChevronRight
+  ChevronRight,
+  MessageSquareHeart
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 import type { AuthUser } from '../contexts/AuthContext';
@@ -77,6 +78,7 @@ export const Header: React.FC<HeaderProps> = ({
     { id: 'tab-generator', label: '5. Sinh Giáo Án Tuần Mới', shortLabel: 'Sinh GA', icon: Wand2, memberOnly: false },
     { id: 'tab-export', label: '6. Xem Trước & In', shortLabel: 'Xem & In', icon: Printer, memberOnly: false },
     { id: 'tab-intro', label: '7. Giới Thiệu & Hướng Dẫn', shortLabel: 'Hướng dẫn', icon: Info, memberOnly: false },
+    { id: 'tab-feedback', label: '8. Đánh Giá & Góp Ý', shortLabel: 'Đánh giá', icon: MessageSquareHeart, memberOnly: false },
   ];
 
   const mobileBottomTabs = [
@@ -97,7 +99,10 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const isDrawerTabActive =
-    activeTab === 'tab-scan' || activeTab === 'tab-extract' || activeTab === 'tab-intro';
+    activeTab === 'tab-scan' ||
+    activeTab === 'tab-extract' ||
+    activeTab === 'tab-intro' ||
+    activeTab === 'tab-feedback';
 
   return (
     <>
