@@ -83,6 +83,9 @@ import { SelectFormationModal } from './SelectFormationModal';
 import { ClassifiedImagePickerModal, ImageClassificationCategory } from './ClassifiedImagePickerModal';
 import { PpctManagerModal } from './PpctManagerModal';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
+import { useResizableTableColumns } from '../utils/tableColumnWidths';
+import { ColumnResizeHandle, ColumnWidthToolbar } from './ResizableColumnControls';
+import { LvdDualInput } from './LvdDualInput';
 import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
 import { isCalisthenicsMovementLesson, extractContextSearchKeywords } from '../utils/keywordImageMatcher';
 import { getStoredPpctData, saveStoredPpctData, getPpctPeriodItem } from '../data/defaultPpctData';
@@ -218,6 +221,10 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   const [selectedWeek, setSelectedWeek] = useState<number>(() => {
     return initialWeek || currentMasterPlan?.week || 9;
   });
+
+  // Mouse-draggable column widths (auto-persisted & synced with Tab 5, A4 Print & Word export)
+  const scheduleCols = useResizableTableColumns('weeklySchedule');
+  const lessonCols = useResizableTableColumns('lessonPlan');
 
   // Calculate dynamic dates for current week
   const weekInfo = getWeekDateInfo(selectedWeek);
@@ -461,7 +468,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   // Typography & Styling controls
   const [fontFamily, setFontFamily] = useState<'Times New Roman' | 'Arial' | 'Roboto' | 'Calibri'>('Times New Roman');
   const [fontSize, setFontSize] = useState<'11pt' | '12pt' | '13pt' | '14pt'>('12pt');
-  const [imageHeight, setImageHeight] = useState<number>(95); // Chuẩn 95px theo đúng kích thước thầy vừa điều chỉnh trong file PDF
+  const [imageHeight, setImageHeight] = useState<number>(120); // Chuẩn 120px tương ứng ảnh lớn sắc nét (~154x95pt Cột 1, ~134x89pt Cột 4) theo bản mẫu PDF thầy đã căn chỉnh
   const [showImageCaptions, setShowImageCaptions] = useState<boolean>(false); // Mặc định tắt ghi chú dưới hình theo chuẩn giáo án GDTC tiểu học
   const [isExportingWord, setIsExportingWord] = useState(false);
 
@@ -2800,7 +2807,9 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
         format,
         approvalDate: customApprovalDate,
         dateRange: customDateRange,
-        imageMaxHeightPt: Math.min(68, Math.round(imageHeight * 0.7))
+        imageMaxHeightPt: Math.max(82, Math.min(130, Math.round(imageHeight * 0.88))),
+        lessonPlanColWidths: lessonCols.widths,
+        scheduleColWidths: scheduleCols.widths
       });
 
       showToast(`✅ Đã xuất file Word (.${format.toUpperCase()}): "${filename}"! Hình ảnh hiển thị 100%, sẵn sàng in trực tiếp.`);
@@ -3524,23 +3533,23 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
               />
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setImageHeight(80)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] ${imageHeight === 80 ? 'bg-blue-600 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
-                >
-                  Gọn (80px)
-                </button>
-                <button
                   onClick={() => setImageHeight(95)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${imageHeight === 95 ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'}`}
-                  title="Kích thước chuẩn sau khi thầy đã căn chỉnh hoàn hảo trên file Word/PDF"
+                  className={`px-1.5 py-0.5 rounded text-[10px] ${imageHeight === 95 ? 'bg-blue-600 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                 >
-                  ⭐ Chuẩn (95px)
+                  Gọn (95px)
                 </button>
                 <button
-                  onClick={() => setImageHeight(115)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] ${imageHeight === 115 ? 'bg-blue-600 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+                  onClick={() => setImageHeight(120)}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${imageHeight === 120 ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'}`}
+                  title="Kích thước chuẩn in A4/Word khớp bản mẫu PDF thầy đã căn chỉnh (không cần chỉnh ảnh lại)"
                 >
-                  Vừa (115px)
+                  ⭐ Chuẩn in (120px)
+                </button>
+                <button
+                  onClick={() => setImageHeight(145)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] ${imageHeight === 145 ? 'bg-blue-600 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+                >
+                  Lớn (145px)
                 </button>
               </div>
             </div>
@@ -3764,18 +3773,41 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
 
               {/* Desktop, Edit Mode, & A4 Print 7-Column Table */}
               <div className={`${!isEditMode ? 'hidden md:block print:block' : 'block'} overflow-x-auto print:overflow-visible`}>
-                <table className="w-full min-w-[720px] print:min-w-0 border-collapse border border-slate-600 text-xs mt-2">
+                <ColumnWidthToolbar
+                  tableKey="weeklySchedule"
+                  widths={scheduleCols.widths}
+                  isCustomized={scheduleCols.isCustomized}
+                  onReset={scheduleCols.resetWidths}
+                  className="mb-1.5"
+                />
+                <table className="w-full table-fixed min-w-[720px] print:min-w-0 border-collapse border border-slate-600 text-xs mt-1">
+                  <colgroup>
+                    {scheduleCols.widths.map((w, idx) => (
+                      <col key={idx} style={{ width: `${w}%` }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-600 text-center">
-                      <th className="border border-slate-600 p-2 w-[11%]">Thứ</th>
-                      <th className="border border-slate-600 p-1 w-[6%]">Tiết</th>
-                    <th className="border border-slate-600 p-1.5 w-[7%]">Lớp</th>
-                    <th className="border border-slate-600 p-2 w-[31%]">Bài học</th>
-                    <th className="border border-slate-600 p-1 w-[6%]">PPCT</th>
-                    <th className="border border-slate-600 p-2 w-[27%]">ND Tích hợp/điều chỉnh</th>
-                    <th className="border border-slate-600 p-2 w-[12%]">ĐDDH</th>
-                  </tr>
-                </thead>
+                      {['Thứ', 'Tiết', 'Lớp', 'Bài học', 'PPCT', 'ND Tích hợp/điều chỉnh', 'ĐDDH'].map((label, colIdx) => (
+                        <th
+                          key={label}
+                          className={`relative border border-slate-600 ${colIdx === 1 || colIdx === 4 ? 'p-1' : colIdx === 2 ? 'p-1.5' : 'p-2'} select-none`}
+                        >
+                          {label}
+                          {colIdx < 6 && (
+                            <ColumnResizeHandle
+                              colIndex={colIdx}
+                              widths={scheduleCols.widths}
+                              activeDividerIndex={scheduleCols.activeDividerIndex}
+                              onStartResize={scheduleCols.startResize}
+                              onReset={scheduleCols.resetWidths}
+                              variant="header"
+                            />
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
                 <tbody>
                   {filteredWeeklyScheduleRows.map((row) => (
                     <tr key={row.id} className="hover:bg-slate-50/50">
@@ -4674,13 +4706,44 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     Vuốt ngang sang phải để chỉnh sửa đầy đủ 4 cột giáo án.
                   </p>
                 )}
-                <table className="w-full min-w-[740px] print:min-w-0 border-collapse border border-slate-400 text-xs mt-2">
+                <ColumnWidthToolbar
+                  tableKey="lessonPlan"
+                  widths={lessonCols.widths}
+                  isCustomized={lessonCols.isCustomized}
+                  onReset={lessonCols.resetWidths}
+                  className="mt-2 mb-1"
+                />
+                <table className="w-full table-fixed min-w-[740px] print:min-w-0 border-collapse border border-slate-400 text-xs mt-1">
+                  <colgroup>
+                    {lessonCols.widths.map((w, idx) => (
+                      <col key={idx} style={{ width: `${w}%` }} />
+                    ))}
+                  </colgroup>
                   <thead>
                     <tr className="bg-slate-100 text-slate-900 font-bold border-b border-slate-400">
-                      <th className="border border-slate-400 p-2 text-center w-[27%]">Nội Dung / Kỹ Thuật Động Tác</th>
-                      <th className="border border-slate-400 p-1 text-center w-[7%]">LVĐ</th>
-                      <th className="border border-slate-400 p-2 text-center w-[33%]">Hoạt Động Của Giáo Viên</th>
-                      <th className="border border-slate-400 p-2 text-center w-[33%]">Hoạt Động Của Học Sinh / Sơ Đồ</th>
+                      {[
+                        'Nội Dung / Kỹ Thuật Động Tác',
+                        'LVĐ',
+                        'Hoạt Động Của Giáo Viên',
+                        'Hoạt Động Của Học Sinh / Sơ Đồ'
+                      ].map((label, colIdx) => (
+                        <th
+                          key={label}
+                          className={`relative border border-slate-400 ${colIdx === 1 ? 'p-1' : 'p-2'} text-center select-none`}
+                        >
+                          {label}
+                          {colIdx < 3 && (
+                            <ColumnResizeHandle
+                              colIndex={colIdx}
+                              widths={lessonCols.widths}
+                              activeDividerIndex={lessonCols.activeDividerIndex}
+                              onStartResize={lessonCols.startResize}
+                              onReset={lessonCols.resetWidths}
+                              variant="header"
+                            />
+                          )}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -4721,7 +4784,15 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                       return (
                         <tr key={rowIdx} className="hover:bg-slate-50/50">
                           {/* Cột 1: Nội Dung / Kỹ Thuật Động Tác */}
-                          <td className="border border-slate-400 p-2 align-top font-medium leading-relaxed">
+                          <td className="relative border border-slate-400 p-2 align-top font-medium leading-relaxed break-words">
+                            <ColumnResizeHandle
+                              colIndex={0}
+                              widths={lessonCols.widths}
+                              activeDividerIndex={lessonCols.activeDividerIndex}
+                              onStartResize={lessonCols.startResize}
+                              onReset={lessonCols.resetWidths}
+                              variant="cell"
+                            />
                             {isEditMode ? (
                               <div className="space-y-1.5">
                                 {/* Toolbar: Row actions + Insert image & diagram at cursor */}
@@ -5046,21 +5117,37 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                           </td>
 
                           {/* Cột 2: LVĐ */}
-                          <td className="border border-slate-400 p-1.5 align-top text-center font-semibold text-slate-800">
+                          <td className="relative border border-slate-400 p-1.5 align-top text-center font-semibold text-slate-800 break-words">
+                            <ColumnResizeHandle
+                              colIndex={1}
+                              widths={lessonCols.widths}
+                              activeDividerIndex={lessonCols.activeDividerIndex}
+                              onStartResize={lessonCols.startResize}
+                              onReset={lessonCols.resetWidths}
+                              variant="cell"
+                            />
                             {isEditMode ? (
-                              <input
-                                type="text"
+                              <LvdDualInput
                                 value={row.lvd}
-                                onChange={(e) => handlePlanRowChange(plan.id, rowIdx, 'lvd', e.target.value)}
-                                className="w-full text-center p-1 text-xs border border-blue-300 rounded focus:outline-none"
+                                onChange={(nextVal) => handlePlanRowChange(plan.id, rowIdx, 'lvd', nextVal)}
+                                layout="stacked"
+                                variant="blue"
                               />
                             ) : (
-                              <RichTextWithImages text={row.lvd} imageHeight={60} showCaptions={false} />
+                              <RichTextWithImages text={(row.lvd || '').trim()} imageHeight={60} showCaptions={false} />
                             )}
                           </td>
 
                           {/* Cột 3: Hoạt Động Giáo Viên */}
-                          <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
+                          <td className="relative border border-slate-400 p-2 align-top leading-relaxed text-slate-800 break-words">
+                            <ColumnResizeHandle
+                              colIndex={2}
+                              widths={lessonCols.widths}
+                              activeDividerIndex={lessonCols.activeDividerIndex}
+                              onStartResize={lessonCols.startResize}
+                              onReset={lessonCols.resetWidths}
+                              variant="cell"
+                            />
                             {isEditMode ? (
                               <div className="space-y-1.5">
                                 {/* Toolbar: Insert image at cursor */}
@@ -5215,7 +5302,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                           </td>
 
                           {/* Cột 4: Hoạt Động HS & SƠ ĐỒ ĐỘI HÌNH */}
-                          <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800">
+                          <td className="border border-slate-400 p-2 align-top leading-relaxed text-slate-800 break-words">
                             {isEditMode ? (
                               <div className="space-y-1.5">
                                 {/* Toolbar: Insert image and diagram at cursor */}

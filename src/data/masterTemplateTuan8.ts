@@ -1,5 +1,5 @@
 import { LessonRow, SchoolSettings } from '../types/gdtc';
-import { standardFormationDiagrams } from './formationDiagrams';
+import { standardFormationDiagrams, getFormationDiagramForPhaseAndGrade } from './formationDiagrams';
 import { standardMovementsLibrary } from './movementLibrary';
 
 export interface MasterPlanItem {
@@ -1497,17 +1497,184 @@ function healDuplicatedCooldownVanDungRows(rows: LessonRow[]): LessonRow[] {
   });
 }
 
+/**
+ * Automatically splits any legacy merged row combining "3.4. Thi đua trình diễn..."
+ * and "Trò chơi vận động" into TWO separate dedicated rows:
+ *  - Row 3.4: Thi đua trình diễn giữa các tổ (with its own LVĐ, GV/HS actions & Thi đua formation)
+ *  - Row 3.5: Trò chơi vận động (preserving the exact game name, rules, SGK game image & game formation)
+ * Idempotent: already-split rows pass through unchanged.
+ */
+export function splitMergedThiDuaAndTroChoiRows(
+  rows: LessonRow[],
+  grade: number = 1
+): LessonRow[] {
+  if (!Array.isArray(rows) || rows.length === 0) return rows;
+
+  const result: LessonRow[] = [];
+
+  for (const row of rows) {
+    const content = row?.content || '';
+    const cLower = content.toLowerCase();
+
+    const hasThiDua =
+      cLower.includes('thi đua') ||
+      cLower.includes('trình diễn') ||
+      /^\s*3\.4\b/.test(cLower);
+    const hasTroChoi =
+      cLower.includes('trò chơi vận động') ||
+      /(?:^|\n)\s*(?:\*|3\.5\.?)\s*trò chơi/i.test(content);
+
+    // Only split when BOTH Thi đua (3.4) and Trò chơi vận động are merged inside the SAME row
+    if (!hasThiDua || !hasTroChoi) {
+      result.push(row);
+      continue;
+    }
+
+    const lines = content.split('\n');
+    const gameLineIdx = lines.findIndex((ln, idx) => {
+      if (idx === 0) return false;
+      return /^\s*(?:(?:\*|-|•)?\s*trò chơi\s*(?:vận động)?|3\.5\.?\s*trò chơi)/i.test(ln.trim());
+    });
+
+    if (gameLineIdx === -1) {
+      result.push(row);
+      continue;
+    }
+
+    // 1. Split Column 1 content cleanly
+    const rawThiDuaLines = lines.slice(0, gameLineIdx).filter((ln) => ln.trim().length > 0);
+    const thiDuaBodyLines = rawThiDuaLines
+      .slice(1)
+      .filter((ln) => !/^\*?\s*thi đua trình diễn/i.test(ln.trim()));
+
+    const thiDuaContent =
+      `3.4. Thi đua trình diễn giữa các tổ:\n` +
+      (thiDuaBodyLines.length > 0
+        ? thiDuaBodyLines.join('\n')
+        : `- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.`);
+
+    const rawGameLines = lines.slice(gameLineIdx).filter((ln) => ln.trim().length > 0);
+    const firstGameLine = rawGameLines[0]
+      .trim()
+      .replace(/^(?:3\.5\.?\s*|\*+\s*|-\s*)/, '')
+      .replace(/^trò chơi\s+vận động\s*:?\s*/i, '')
+      .replace(/^trò chơi\s*:?\s*/i, '')
+      .trim();
+    const gameHeading = firstGameLine
+      ? `3.5. Trò chơi vận động: ${firstGameLine}`
+      : `3.5. Trò chơi vận động:`;
+    const gameContent = [gameHeading, ...rawGameLines.slice(1)].join('\n');
+
+    // 2. Split Column 3 (GV) lines
+    const gvLines = (row.gv || '').split('\n').filter((ln) => ln.trim().length > 0);
+    const thiDuaGvLines: string[] = [];
+    const gameGvLines: string[] = [];
+    let inGameGvSection = false;
+    for (const ln of gvLines) {
+      const l = ln.toLowerCase();
+      if (
+        !inGameGvSection &&
+        (l.includes('trò chơi') ||
+          l.includes('luật chơi') ||
+          l.includes('làm mẫu thao tác') ||
+          l.includes('4 đội thi đấu') ||
+          l.includes('tinh thần thi đấu') ||
+          l.includes('đội chiến thắng'))
+      ) {
+        inGameGvSection = true;
+      }
+      if (inGameGvSection) {
+        gameGvLines.push(ln);
+      } else {
+        thiDuaGvLines.push(ln);
+      }
+    }
+    const thiDuaGv =
+      thiDuaGvLines.length > 0
+        ? thiDuaGvLines.join('\n')
+        : `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.`;
+    const gameGv =
+      gameGvLines.length > 0
+        ? gameGvLines.join('\n')
+        : `- Phổ biến ngắn gọn tên trò chơi vận động, mục đích, luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm làm mẫu thao tác tham gia trò chơi; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.`;
+
+    // 3. Split Column 4 (HS) lines
+    const hsLines = (row.hs || '').split('\n').filter((ln) => ln.trim().length > 0);
+    const thiDuaHsLines: string[] = [];
+    const gameHsLines: string[] = [];
+    let inGameHsSection = false;
+    for (const ln of hsLines) {
+      const l = ln.toLowerCase();
+      if (
+        !inGameHsSection &&
+        (l.includes('khi vào trò chơi') ||
+          l.includes('luật chơi') ||
+          l.includes('vạch xuất phát') ||
+          l.includes('tiếp sức') ||
+          l.includes('giành chiến thắng'))
+      ) {
+        inGameHsSection = true;
+      }
+      if (inGameHsSection) {
+        gameHsLines.push(ln);
+      } else {
+        thiDuaHsLines.push(ln.replace(/đội hình thi đua\s*&\s*trò chơi/gi, 'Đội hình thi đua'));
+      }
+    }
+    const thiDuaHs =
+      thiDuaHsLines.length > 0
+        ? thiDuaHsLines.join('\n')
+        : `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`;
+    const gameHs =
+      gameHsLines.length > 0
+        ? gameHsLines.join('\n')
+        : `- Đội hình trò chơi: 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn vượt qua thử thách và tiếp sức an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.`;
+
+    // 4. Preserve game media & formation diagram on 3.5; give 3.4 a clean Thi đua formation diagram
+    const diagThiDua = getFormationDiagramForPhaseAndGrade('thi_dua', grade);
+
+    const row34: LessonRow = {
+      content: thiDuaContent,
+      lvd: '3 - 4 phút\n1 lượt / tổ',
+      gv: thiDuaGv,
+      hs: thiDuaHs,
+      hsImgUrl: diagThiDua.svgDataUrl,
+      hsImgTitle: diagThiDua.name,
+      hsImages: [
+        {
+          id: `diag_thi_dua_split_${grade}`,
+          url: diagThiDua.svgDataUrl,
+          title: diagThiDua.name
+        }
+      ]
+    };
+
+    const row35: LessonRow = {
+      ...row,
+      content: gameContent,
+      lvd: row.lvd && /lượt|phút/i.test(row.lvd) ? row.lvd : '4 - 5 phút\n2 - 3 lượt',
+      gv: gameGv,
+      hs: gameHs
+    };
+
+    result.push(row34, row35);
+  }
+
+  return result;
+}
+
 export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): MasterPlanItem {
   const base = masterPlansTuan8.k1_t15;
   if (!raw || typeof raw !== 'object') {
     return JSON.parse(JSON.stringify(base));
   }
 
+  const resolvedGrade = typeof raw.grade === 'number' ? raw.grade : base.grade;
   const rawRows = Array.isArray(raw.rows) && raw.rows.length > 0 ? raw.rows : base.rows;
 
   return {
     id: raw.id || base.id,
-    grade: typeof raw.grade === 'number' ? raw.grade : base.grade,
+    grade: resolvedGrade,
     week: typeof raw.week === 'number' ? raw.week : base.week,
     lessonNum: typeof raw.lessonNum === 'number' ? raw.lessonNum : base.lessonNum,
     topic: raw.topic || base.topic,
@@ -1548,7 +1715,10 @@ export function normalizeMasterPlan(raw?: Partial<MasterPlanItem> | null): Maste
       teacherTools: raw.locationEquipment?.teacherTools ?? base.locationEquipment.teacherTools,
       studentTools: raw.locationEquipment?.studentTools ?? base.locationEquipment.studentTools,
     },
-    rows: healDuplicatedCooldownVanDungRows(rawRows),
+    rows: splitMergedThiDuaAndTroChoiRows(
+      healDuplicatedCooldownVanDungRows(rawRows),
+      resolvedGrade
+    ),
     postLessonAdjustment: raw.postLessonAdjustment ?? base.postLessonAdjustment,
     signatures: {
       locationDate: raw.signatures?.locationDate ?? base.signatures.locationDate,

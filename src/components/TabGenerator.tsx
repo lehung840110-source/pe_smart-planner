@@ -82,6 +82,9 @@ import { FormationDiagram, saveCustomFormationToStorage } from '../data/formatio
 import { downloadSvgAsPng } from '../utils/imageProcessing';
 import { getSgkPageForLesson } from '../data/sgkCurriculumTree';
 import { getPpctWeekItems } from '../data/defaultPpctData';
+import { useResizableTableColumns } from '../utils/tableColumnWidths';
+import { ColumnResizeHandle, ColumnWidthToolbar } from './ResizableColumnControls';
+import { LvdDualInput } from './LvdDualInput';
 
 interface TabGeneratorProps {
   week: number;
@@ -216,6 +219,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
   // Modals for manual picking
   const [targetRowForFormation, setTargetRowForFormation] = useState<number | null>(null);
+  const lessonCols = useResizableTableColumns('lessonPlan');
   const [targetRowForStudio, setTargetRowForStudio] = useState<number | null>(null);
   const [studioInitialDiagram, setStudioInitialDiagram] = useState<FormationDiagram | null>(null);
   const [targetRowForImage, setTargetRowForImage] = useState<number | null>(null);
@@ -1561,12 +1565,11 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                         <label className="block text-[11px] font-bold text-slate-600 mb-1">
                           Lượng vận động (LVĐ):
                         </label>
-                        <input
-                          type="text"
+                        <LvdDualInput
                           value={row.lvd}
-                          onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                          className="w-full p-2 text-xs font-bold rounded-xl border border-slate-300 text-slate-800 focus:border-blue-500 focus:outline-none"
-                          placeholder="Ví dụ: 5 - 7'"
+                          onChange={(nextVal) => handleUpdateRow(idx, 'lvd', nextVal)}
+                          layout="row"
+                          variant="slate"
                         />
                       </div>
                     </div>
@@ -1862,14 +1865,60 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
 
         {/* Desktop & Tablet 4-Column Table (>= md) */}
         <div className="hidden md:block overflow-x-auto">
-          <table className="w-full min-w-[820px] text-left text-xs border-collapse">
+          <ColumnWidthToolbar
+            tableKey="lessonPlan"
+            widths={lessonCols.widths}
+            isCustomized={lessonCols.isCustomized}
+            onReset={lessonCols.resetWidths}
+            className="mx-3 mt-2 mb-1.5"
+          />
+          <table className="w-full table-fixed min-w-[820px] text-left text-xs border-collapse">
+            <colgroup>
+              <col style={{ width: '44px' }} />
+              {lessonCols.widths.map((w, idx) => (
+                <col key={idx} style={{ width: `calc((100% - 44px) * ${w / 100})` }} />
+              ))}
+            </colgroup>
             <thead className="bg-slate-100 text-slate-700 uppercase font-bold border-b border-slate-200">
               <tr>
-                <th className="p-3 w-8 text-center text-slate-400">STT</th>
-                <th className="p-3 w-1/4">Cột 1: Nội Dung / Kỹ Thuật / Ảnh</th>
-                <th className="p-3 w-20 text-center">Cột 2: LVĐ</th>
-                <th className="p-3 w-1/3">Cột 3: Hoạt Động Giáo Viên</th>
-                <th className="p-3 w-1/3">Cột 4: Hoạt Động Học Sinh & Sơ Đồ</th>
+                <th className="p-3 text-center text-slate-400 select-none">STT</th>
+                <th className="relative p-3 select-none">
+                  Cột 1: Nội Dung / Kỹ Thuật / Ảnh
+                  <ColumnResizeHandle
+                    colIndex={0}
+                    widths={lessonCols.widths}
+                    activeDividerIndex={lessonCols.activeDividerIndex}
+                    onStartResize={lessonCols.startResize}
+                    onReset={lessonCols.resetWidths}
+                    variant="header"
+                    fixedOffsetPx={44}
+                  />
+                </th>
+                <th className="relative p-3 text-center select-none">
+                  Cột 2: LVĐ
+                  <ColumnResizeHandle
+                    colIndex={1}
+                    widths={lessonCols.widths}
+                    activeDividerIndex={lessonCols.activeDividerIndex}
+                    onStartResize={lessonCols.startResize}
+                    onReset={lessonCols.resetWidths}
+                    variant="header"
+                    fixedOffsetPx={44}
+                  />
+                </th>
+                <th className="relative p-3 select-none">
+                  Cột 3: Hoạt Động Giáo Viên
+                  <ColumnResizeHandle
+                    colIndex={2}
+                    widths={lessonCols.widths}
+                    activeDividerIndex={lessonCols.activeDividerIndex}
+                    onStartResize={lessonCols.startResize}
+                    onReset={lessonCols.resetWidths}
+                    variant="header"
+                    fixedOffsetPx={44}
+                  />
+                </th>
+                <th className="p-3 select-none">Cột 4: Hoạt Động Học Sinh &amp; Sơ Đồ</th>
               </tr>
             </thead>
 
@@ -1904,7 +1953,16 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     </td>
 
                     {/* Cột 1: Nội dung / Kỹ thuật / Ảnh */}
-                    <td className="p-2.5 align-top space-y-2">
+                    <td className="relative p-2.5 align-top space-y-2 break-words border-r border-slate-200/80">
+                      <ColumnResizeHandle
+                        colIndex={0}
+                        widths={lessonCols.widths}
+                        activeDividerIndex={lessonCols.activeDividerIndex}
+                        onStartResize={lessonCols.startResize}
+                        onReset={lessonCols.resetWidths}
+                        variant="cell"
+                        fixedOffsetPx={44}
+                      />
                       {effectiveEditMode ? (
                         <>
                           {/* Row management toolbar */}
@@ -2286,23 +2344,41 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     </td>
 
                     {/* Cột 2: LVĐ */}
-                    <td className="p-2.5 text-center align-top font-semibold text-slate-800">
+                    <td className="relative p-2.5 text-center align-top font-semibold text-slate-800 break-words border-r border-slate-200/80">
+                      <ColumnResizeHandle
+                        colIndex={1}
+                        widths={lessonCols.widths}
+                        activeDividerIndex={lessonCols.activeDividerIndex}
+                        onStartResize={lessonCols.startResize}
+                        onReset={lessonCols.resetWidths}
+                        variant="cell"
+                        fixedOffsetPx={44}
+                      />
                       {effectiveEditMode ? (
-                        <textarea
-                          rows={3}
+                        <LvdDualInput
                           value={row.lvd}
-                          onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                          className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
+                          onChange={(nextVal) => handleUpdateRow(idx, 'lvd', nextVal)}
+                          layout="stacked"
+                          variant="slate"
                         />
                       ) : (
                         <div className="whitespace-pre-line py-1 text-xs font-bold text-slate-800">
-                          {row.lvd}
+                          {(row.lvd || '').trim()}
                         </div>
                       )}
                     </td>
 
                     {/* Cột 3: Hoạt Động Giáo Viên */}
-                    <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
+                    <td className="relative p-2.5 align-top leading-relaxed text-slate-800 space-y-2 break-words border-r border-slate-200/80">
+                      <ColumnResizeHandle
+                        colIndex={2}
+                        widths={lessonCols.widths}
+                        activeDividerIndex={lessonCols.activeDividerIndex}
+                        onStartResize={lessonCols.startResize}
+                        onReset={lessonCols.resetWidths}
+                        variant="cell"
+                        fixedOffsetPx={44}
+                      />
                       {effectiveEditMode ? (
                         <>
                           <div className="flex items-center justify-between gap-1 flex-wrap bg-emerald-50/80 border border-emerald-200 px-2 py-0.5 rounded text-[10.5px]">
@@ -2428,7 +2504,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
                     </td>
 
                     {/* Cột 4: Hoạt Động Học Sinh & Sơ Đồ Đội Hình */}
-                    <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2">
+                    <td className="p-2.5 align-top leading-relaxed text-slate-800 space-y-2 break-words">
                       {effectiveEditMode ? (
                         <>
                           <div className="flex items-center justify-between gap-1 flex-wrap bg-purple-50/80 border border-purple-200 px-2 py-0.5 rounded text-[10.5px]">

@@ -200,10 +200,25 @@ export const initialLessonsData: Record<string, ExtractedLessonData> = {
         ]
       },
       {
-        content: "3.4. Thi đua trình diễn giữa các tổ & Trò chơi vận động:\n* Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.\n* Trò chơi vận động: \"Trao gậy tiếp sức\" (hoặc \"Con thỏ\"):\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: 4 gậy tiếp sức, 4 cọc mốc cự ly 10m.\n- Luật chơi: Xuất phát đúng hiệu lệnh, chạy vòng qua cọc mốc quay về trao gậy cho bạn tiếp theo; đội nào về đích sớm nhất và ít lỗi phạm quy sẽ đạt giải Nhất.",
-        lvd: "5 - 7 phút\n2 - 3 lượt",
-        gv: "- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- Phổ biến ngắn gọn tên trò chơi vận động, mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy (chạy trước lệnh, làm rơi gậy, không vòng qua cọc).\n- Cho 1 nhóm làm mẫu thao tác trao nhận gậy; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.",
-        hs: "- Đội hình thi đua & trò chơi: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Khi vào trò chơi: 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn chạy vòng qua cọc và trao gậy an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.",
+        content: "3.4. Thi đua trình diễn giữa các tổ:\n- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.",
+        lvd: "3 - 4 phút\n1 lượt / tổ",
+        gv: "- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.",
+        hs: "- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.",
+        hsImgUrl: standardFormationDiagrams[6].svgDataUrl,
+        hsImgTitle: 'Đội hình thi đua trình diễn giữa các tổ',
+        hsImages: [
+          {
+            id: 'diag_6_thi_dua',
+            url: standardFormationDiagrams[6].svgDataUrl,
+            title: 'Đội hình thi đua trình diễn giữa các tổ'
+          }
+        ]
+      },
+      {
+        content: "3.5. Trò chơi vận động: \"Trao gậy tiếp sức\" (hoặc \"Con thỏ\"):\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: 4 gậy tiếp sức, 4 cọc mốc cự ly 10m.\n- Luật chơi: Xuất phát đúng hiệu lệnh, chạy vòng qua cọc mốc quay về trao gậy cho bạn tiếp theo; đội nào về đích sớm nhất và ít lỗi phạm quy sẽ đạt giải Nhất.",
+        lvd: "4 - 5 phút\n2 - 3 lượt",
+        gv: "- Phổ biến ngắn gọn tên trò chơi vận động, mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy (chạy trước lệnh, làm rơi gậy, không vòng qua cọc).\n- Cho 1 nhóm làm mẫu thao tác trao nhận gậy; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.",
+        hs: "- Đội hình trò chơi: 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn chạy vòng qua cọc và trao gậy an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.",
         hsImgUrl: standardFormationDiagrams[8].svgDataUrl,
         hsImgTitle: 'Sơ đồ trò chơi tiếp sức 4 làn cọc mốc 10m',
         hsImages: [

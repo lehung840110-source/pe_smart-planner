@@ -2712,34 +2712,52 @@ export function createBalanced7LessonRows(
         }
       ]
     },
-    // HÀNG 6: 3.4. THI ĐUA TRÌNH DIỄN (& TRÒ CHƠI VẬN ĐỘNG NẾU SGK CÓ)
+    // HÀNG 6: 3.4. THI ĐUA TRÌNH DIỄN GIỮA CÁC TỔ (HÀNG RIÊNG)
     {
-      content: resolvedPractice
-        ? `3.4. Thi đua trình diễn giữa các tổ & Trò chơi vận động:\n* Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện động tác trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.\n* Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`
-        : `3.4. Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.`,
-      lvd: resolvedPractice ? `5 - 7 phút\n2 - 3 lượt` : `4 - 5 phút\n1 lượt / tổ`,
-      gv: resolvedPractice
-        ? `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- Phổ biến ngắn gọn tên trò chơi vận động "${resolvedPractice}", mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm làm mẫu thao tác tham gia trò chơi; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.`
-        : `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.`,
-      hs: resolvedPractice
-        ? `- Đội hình thi đua & trò chơi: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Khi vào trò chơi "${resolvedPractice}": 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn vượt qua thử thách và tiếp sức an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.`
-        : `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
-      contentImgUrl: resolvedPractice ? practiceImg?.url : undefined,
-      contentImgTitle: resolvedPractice ? practiceImg?.title : undefined,
-      contentImages:
-        resolvedPractice && practiceImg?.url
-          ? [{ id: 'img_tc_7r_1', url: practiceImg.url, title: practiceImg.title }]
-          : [],
-      hsImgUrl: diagTroChoi.svgDataUrl,
-      hsImgTitle: diagTroChoi.name,
+      content: `3.4. Thi đua trình diễn giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp, các tổ khác quan sát, nhận xét và chấm điểm.`,
+      lvd: `3 - 4 phút\n1 lượt / tổ`,
+      gv: `- Tổ chức thi đua biểu diễn: Gọi lần lượt từng tổ lên trước lớp trình diễn động tác; hướng dẫn các tổ ngồi xem quan sát, cổ vũ văn minh và tham gia nhận xét công tâm.\n- GV ghi nhận ưu điểm, sửa lỗi còn tồn tại và tuyên dương tổ thực hiện đều đẹp, đúng kỹ thuật.`,
+      hs: `- Đội hình thi đua: Ngồi theo hàng ngang quan sát tổ bạn biểu diễn, vỗ tay cổ vũ nhiệt tình và nêu nhận xét khách quan.\n- Từng tổ lên biểu diễn tự tin, thực hiện đúng động tác theo nhịp hô dứt khoát của tổ trưởng.`,
+      contentImgUrl: resolved.luyenTapBySlot.caNhan?.url,
+      contentImgTitle: resolved.luyenTapBySlot.caNhan?.title,
+      contentImages: resolved.luyenTapBySlot.caNhan?.url
+        ? [{ id: 'img_lt_cn_7r_1', url: resolved.luyenTapBySlot.caNhan.url, title: resolved.luyenTapBySlot.caNhan.title }]
+        : [],
+      hsImgUrl: diagThiDua.svgDataUrl,
+      hsImgTitle: diagThiDua.name,
       hsImages: [
         {
-          id: 'diag_6_tro_choi',
-          url: diagTroChoi.svgDataUrl,
-          title: diagTroChoi.name
+          id: 'diag_6_thi_dua',
+          url: diagThiDua.svgDataUrl,
+          title: diagThiDua.name
         }
       ]
     },
+    // HÀNG 7: 3.5. TRÒ CHƠI VẬN ĐỘNG (HÀNG RIÊNG KHI SGK CÓ TRÒ CHƠI)
+    ...(resolvedPractice
+      ? [
+          {
+            content: `3.5. Trò chơi vận động: "${resolvedPractice}":\n- Mục đích: Phát triển tố chất nhanh nhẹn, khéo léo, sức mạnh và tinh thần đồng đội.\n- Dụng cụ: ${equipmentDesc}\n- Luật chơi: Xuất phát đúng hiệu lệnh, di chuyển thực hiện động tác theo luật quay về tiếp sức an toàn cho bạn tiếp theo; đội nào hoàn thành trước ít lỗi phạm quy nhất sẽ đạt giải Nhất.`,
+            lvd: `4 - 5 phút\n2 - 3 lượt`,
+            gv: `- Phổ biến ngắn gọn tên trò chơi vận động "${resolvedPractice}", mục đích rèn luyện tố chất nhanh nhẹn, luật chơi và các lỗi phạm quy.\n- Cho 1 nhóm làm mẫu thao tác tham gia trò chơi; điều hành 4 đội thi đấu chính thức 2 - 3 lượt hào hứng, công bằng.\n- Đảm bảo an toàn tuyệt đối sân bãi; nhận xét tinh thần thi đấu, tuyên dương tổ chiến thắng và động viên các tổ còn lại.`,
+            hs: `- Học sinh chú ý lắng nghe GV phổ biến luật chơi và quan sát nhóm bạn chơi mẫu.\n- Đội hình trò chơi "${resolvedPractice}": 4 hàng dọc đứng sau vạch xuất phát hướng về cọc tiêu.\n- Chấp hành nghiêm chỉnh luật chơi, phối hợp ăn ý, nhanh nhẹn vượt qua thử thách và tiếp sức an toàn cho bạn.\n- Thể hiện tinh thần trung thực, đoàn kết, chúc mừng đội bạn khi giành chiến thắng.`,
+            contentImgUrl: practiceImg?.url,
+            contentImgTitle: practiceImg?.title,
+            contentImages: practiceImg?.url
+              ? [{ id: 'img_tc_7r_1', url: practiceImg.url, title: practiceImg.title }]
+              : [],
+            hsImgUrl: diagTroChoi.svgDataUrl,
+            hsImgTitle: diagTroChoi.name,
+            hsImages: [
+              {
+                id: 'diag_6_tro_choi',
+                url: diagTroChoi.svgDataUrl,
+                title: diagTroChoi.name
+              }
+            ]
+          }
+        ]
+      : []),
     // HÀNG 7: 4. VẬN DỤNG & HỒI TĨNH (Ô RIÊNG)
     {
       content: `4. HOẠT ĐỘNG VẬN DỤNG & HỒI TĨNH\n4.1. Hồi tĩnh:\n- Thả lỏng toàn thân, rũ tay, rung đùi, lắc chân và hít thở sâu theo nhịp chậm rãi.\n4.2. Vận dụng:\n- Câu hỏi vận dụng sách giáo khoa.\n- Tích hợp bảo vệ môi trường: ${appDetails.environmentNote}\n4.3. Nhận xét & Xuống lớp.`,
@@ -3071,7 +3089,7 @@ export function createBalancedGranularLessonRows(
 
   const practiceRowHeading4 = isAssessmentLesson
     ? `3.4. Tổng hợp kết quả kiểm tra giữa các tổ:\n- Công bố nhanh kết quả đạt chuẩn của từng tổ theo các mức Hoàn thành tốt (HTT) và Hoàn thành (HT).\n- Tuyên dương các cá nhân có thành tích nổi bật và tinh thần vượt khó.`
-    : `3.4. Thi đua trình diễn động tác giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp (theo nhịp hô của tổ trưởng).\n- Các tổ ngồi xem quan sát, theo dõi, nhận xét và chấm điểm chéo cho nhau.`;
+    : `3.4. Thi đua trình diễn giữa các tổ:\n- Từng tổ lên thực hiện ${mName} trước lớp (theo nhịp hô của tổ trưởng).\n- Các tổ ngồi xem quan sát, theo dõi, nhận xét và chấm điểm chéo cho nhau.`;
 
   const diagNhanLop = getFormationDiagramForPhaseAndGrade('nhan_lop', grade);
   const diagKhoiDong = getFormationDiagramForPhaseAndGrade('khoi_dong', grade);

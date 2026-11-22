@@ -39,6 +39,15 @@
   background: #94a3b8;
 }
 
+/* Keep resized table columns neat: prevent images or long tokens from overflowing cells */
+table.table-fixed td,
+table.table-fixed th {
+  overflow-wrap: break-word;
+}
+table.table-fixed td img {
+  max-width: 100%;
+}
+
 /* Laser scanner beam animation */
 @keyframes scan-line {
   0% {

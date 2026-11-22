@@ -9,6 +9,11 @@ import {
 } from '../data/integrationAddressesData';
 import { compactOverlongKnowledgeRow, sanitizeRowColumn1Media } from './planAutoMatcher';
 import { splitColumn1ContentForMedia } from './column1MediaLayout';
+import {
+  getSavedLessonPlanColWidths,
+  getSavedWeeklyScheduleColWidths,
+  normalizeColumnWidths
+} from './tableColumnWidths';
 
 export function downloadZipOfImages(images: SgkImageItem[], filename = 'Thu_Vien_Hinh_Anh_SGK_GDTC.zip') {
   const zip = new JSZip();
@@ -69,10 +74,14 @@ export interface ProcessedWordImage {
  * into a high-quality standalone raster PNG base64 string ("data:image/png;base64,...").
  * Calculates proportional compact display dimensions in points (pt) for Microsoft Word.
  */
+function ptToWordPx(pt: number): number {
+  return Math.max(1, Math.round((pt * 96) / 72));
+}
+
 export function convertSvgOrImageToPngBase64(
   src?: string,
-  maxWidthPt = 112,
-  maxHeightPt = 68
+  maxWidthPt = 152,
+  maxHeightPt = 122
 ): Promise<ProcessedWordImage> {
   return new Promise((resolve) => {
     if (!src || typeof src !== 'string') {
@@ -84,7 +93,7 @@ export function convertSvgOrImageToPngBase64(
     img.crossOrigin = 'anonymous';
 
     const timer = setTimeout(() => {
-      resolve({ pngBase64: src, widthPt: maxWidthPt, heightPt: maxHeightPt });
+      resolve({ pngBase64: src, widthPt: maxWidthPt, heightPt: Math.min(maxHeightPt, Math.round(maxWidthPt * 0.65)) });
     }, 4000);
 
     img.onload = () => {
@@ -93,19 +102,19 @@ export function convertSvgOrImageToPngBase64(
         const naturalW = img.naturalWidth || img.width || 600;
         const naturalH = img.naturalHeight || img.height || 400;
 
-        // Calculate proportional display dimensions in points (pt) matching teacher's adjusted PDF
+        // Calculate proportional display dimensions in points (pt) matching teacher's tuned A4 Word/PDF layout
         let widthPt = maxWidthPt;
         let heightPt = Math.round((naturalH / naturalW) * widthPt);
 
-        // Strictly constrain height
+        // Constrain height for tall/square images while preserving exact aspect ratio
         if (heightPt > maxHeightPt) {
           heightPt = maxHeightPt;
           widthPt = Math.round((naturalW / naturalH) * heightPt);
         }
 
-        // Maintain high resolution (e.g. 500-800px) so print is sharp without taking excessive megabytes
-        const canvasW = Math.max(450, Math.min(naturalW * 2, 800));
-        const canvasH = Math.round((naturalH / naturalW) * canvasW) || 300;
+        // High-DPI canvas resolution (640-1000px wide) so ~5.5cm Word images print razor-sharp
+        const canvasW = Math.max(640, Math.min(naturalW * 2, 1000));
+        const canvasH = Math.round((naturalH / naturalW) * canvasW) || 400;
 
         const canvas = document.createElement('canvas');
         canvas.width = canvasW;
@@ -125,7 +134,7 @@ export function convertSvgOrImageToPngBase64(
         resolve({ pngBase64, widthPt, heightPt });
       } catch (err) {
         console.warn('Canvas rasterization error:', err);
-        resolve({ pngBase64: src, widthPt: maxWidthPt, heightPt: maxHeightPt });
+        resolve({ pngBase64: src, widthPt: maxWidthPt, heightPt: Math.min(maxHeightPt, Math.round(maxWidthPt * 0.65)) });
       }
     };
 
@@ -179,6 +188,8 @@ export interface ExportWordDataOptions {
   approvalDate?: string;
   dateRange?: string;
   imageMaxHeightPt?: number;
+  lessonPlanColWidths?: number[];
+  scheduleColWidths?: number[];
 }
 
 interface EmbeddedImageMime {
@@ -224,12 +235,39 @@ export async function buildWordExportPackage(
     format = 'docx',
     approvalDate,
     dateRange: customDateRangeOption,
-    imageMaxHeightPt = 80
+    imageMaxHeightPt = 105,
+    lessonPlanColWidths,
+    scheduleColWidths
   } = options;
+
+  const resolvedLessonColWidths = lessonPlanColWidths
+    ? normalizeColumnWidths(lessonPlanColWidths, 'lessonPlan')
+    : getSavedLessonPlanColWidths();
+  const resolvedScheduleColWidths = scheduleColWidths
+    ? normalizeColumnWidths(scheduleColWidths, 'weeklySchedule')
+    : getSavedWeeklyScheduleColWidths();
+
+  // Calibrated A4 printable table width: 595.3pt - 62.4pt (left 2.2cm) - 28.3pt (right 1.0cm) = ~505pt
+  const PRINTABLE_TABLE_WIDTH_PT = 505;
+  const effectiveBaseHeightPt = Math.max(82, Math.min(130, imageMaxHeightPt));
+
+  // Compute column-aware target image bounds (matching teacher's calibrated Word/PDF layout:
+  // Col 1 ~154pt wide x up to 128pt tall for portrait/square; Col 4 ~134pt wide x up to 104pt tall)
+  const col1InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[0]) / 100) - 12);
+  const col1ImgMaxW = Math.min(168, Math.max(100, Math.round(col1InnerPt * 0.96)));
+  const col1ImgMaxH = Math.min(132, Math.max(92, Math.round(effectiveBaseHeightPt * 1.22)));
+
+  const col3InnerPt = Math.max(96, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[2]) / 100) - 12);
+  const col3ImgMaxW = Math.min(148, Math.max(96, Math.round(col3InnerPt * 0.95)));
+  const col3ImgMaxH = Math.min(110, Math.max(82, Math.round(effectiveBaseHeightPt)));
+
+  const col4InnerPt = Math.max(100, Math.round((PRINTABLE_TABLE_WIDTH_PT * resolvedLessonColWidths[3]) / 100) - 12);
+  const col4DiagMaxW = Math.min(156, Math.max(100, Math.round(col4InnerPt * 0.96)));
+  const col4DiagMaxH = Math.min(108, Math.max(82, Math.round(effectiveBaseHeightPt)));
 
   const isDocx = format === 'docx' || filename.toLowerCase().endsWith('.docx');
 
-  // 1. Pre-process and rasterize all images across all plans with strict bounds
+  // 1. Pre-process and rasterize all images across all plans with exact column-fitted bounds
   const processedPlans = await Promise.all(
     plans.map(async (plan) => {
       const processedRows = await Promise.all(
@@ -237,7 +275,7 @@ export async function buildWordExportPackage(
           const row = compactOverlongKnowledgeRow(sanitizeRowColumn1Media(rawRow, plan.grade, plan.title));
           let contentImgInfo: ProcessedWordImage = { pngBase64: '', widthPt: 0, heightPt: 0 };
           if (row.contentImgUrl) {
-            contentImgInfo = await convertSvgOrImageToPngBase64(row.contentImgUrl, 98, Math.min(68, imageMaxHeightPt));
+            contentImgInfo = await convertSvgOrImageToPngBase64(row.contentImgUrl, col1ImgMaxW, col1ImgMaxH);
           }
 
           // Gather content images (Column 1)
@@ -249,12 +287,12 @@ export async function buildWordExportPackage(
 
           const processedContentImages = await Promise.all(
             rawContentImages.map(async (c) => {
-              const info = await convertSvgOrImageToPngBase64(c.url, 100, Math.min(68, imageMaxHeightPt));
+              const info = await convertSvgOrImageToPngBase64(c.url, col1ImgMaxW, col1ImgMaxH);
               return {
                 title: c.title,
                 pngBase64: info.pngBase64,
-                widthPt: info.widthPt || 98,
-                heightPt: info.heightPt || Math.min(65, imageMaxHeightPt)
+                widthPt: info.widthPt || col1ImgMaxW,
+                heightPt: info.heightPt || Math.round(col1ImgMaxW * 0.62)
               };
             })
           );
@@ -268,12 +306,12 @@ export async function buildWordExportPackage(
 
           const processedDiagrams = await Promise.all(
             rawDiagrams.map(async (d) => {
-              const diagInfo = await convertSvgOrImageToPngBase64(d.url, 115, Math.min(70, imageMaxHeightPt));
+              const diagInfo = await convertSvgOrImageToPngBase64(d.url, col4DiagMaxW, col4DiagMaxH);
               return {
                 title: d.title,
                 pngBase64: diagInfo.pngBase64,
-                widthPt: diagInfo.widthPt || 112,
-                heightPt: diagInfo.heightPt || Math.min(68, imageMaxHeightPt)
+                widthPt: diagInfo.widthPt || col4DiagMaxW,
+                heightPt: diagInfo.heightPt || Math.round(col4DiagMaxW * 0.67)
               };
             })
           );
@@ -287,35 +325,41 @@ export async function buildWordExportPackage(
 
           const processedGvImages = await Promise.all(
             rawGvImages.map(async (g) => {
-              const gvInfo = await convertSvgOrImageToPngBase64(g.url, 100, Math.min(68, imageMaxHeightPt));
+              const gvInfo = await convertSvgOrImageToPngBase64(g.url, col3ImgMaxW, col3ImgMaxH);
               return {
                 title: g.title,
                 pngBase64: gvInfo.pngBase64,
-                widthPt: gvInfo.widthPt || 98,
-                heightPt: gvInfo.heightPt || Math.min(65, imageMaxHeightPt)
+                widthPt: gvInfo.widthPt || col3ImgMaxW,
+                heightPt: gvInfo.heightPt || Math.round(col3ImgMaxW * 0.65)
               };
             })
           );
 
-          // Gather all inline images in text from row.content, row.gv, row.hs
-          const allInlineInRow = [
-            ...extractAllInlineImages(row.content || ''),
-            ...extractAllInlineImages(row.gv || ''),
-            ...extractAllInlineImages(row.hs || '')
-          ];
-
+          // Gather all inline images per column so each matches its column width cleanly
           const inlineRasterizedMap: Record<string, ProcessedWordImage> = {};
-          for (const item of allInlineInRow) {
-            if (!inlineRasterizedMap[item.url]) {
-              inlineRasterizedMap[item.url] = await convertSvgOrImageToPngBase64(item.url, 105, Math.min(68, imageMaxHeightPt));
+          const rasterizeInlineList = async (
+            items: Array<{ url: string }>,
+            maxW: number,
+            maxH: number,
+            prefix: string
+          ) => {
+            for (const item of items) {
+              const mapKey = `${prefix}:${item.url}`;
+              if (!inlineRasterizedMap[mapKey]) {
+                inlineRasterizedMap[mapKey] = await convertSvgOrImageToPngBase64(item.url, maxW, maxH);
+              }
             }
-          }
+          };
+
+          await rasterizeInlineList(extractAllInlineImages(row.content || ''), col1ImgMaxW, col1ImgMaxH, 'c1');
+          await rasterizeInlineList(extractAllInlineImages(row.gv || ''), col3ImgMaxW, col3ImgMaxH, 'c3');
+          await rasterizeInlineList(extractAllInlineImages(row.hs || ''), col4DiagMaxW, col4DiagMaxH, 'c4');
 
           return {
             ...row,
             contentImgPng: contentImgInfo.pngBase64,
-            contentImgWidth: contentImgInfo.widthPt || 98,
-            contentImgHeight: contentImgInfo.heightPt || Math.min(65, imageMaxHeightPt),
+            contentImgWidth: contentImgInfo.widthPt || col1ImgMaxW,
+            contentImgHeight: contentImgInfo.heightPt || Math.round(col1ImgMaxW * 0.62),
             contentImagesProcessed: processedContentImages,
             gvImagesProcessed: processedGvImages,
             diagrams: processedDiagrams,
@@ -370,28 +414,31 @@ export async function buildWordExportPackage(
         </p>
       </div>
 
-      <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; width: 100%; border: 1pt solid #000; margin-top: 10pt;">
+      <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; table-layout: fixed; mso-table-layout-alt: fixed; width: 100%; border: 1pt solid #000; margin-top: 10pt;">
+        <colgroup>
+          ${resolvedScheduleColWidths.map((w) => `<col style="width: ${w}%;" />`).join('')}
+        </colgroup>
         <thead>
           <tr style="background-color: #f2f2f2; font-weight: bold; text-align: center; font-size: 11pt;">
-            <th style="border: 1pt solid #000; padding: 5pt; width: 14%;">Thứ</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 7%;">Tiết</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 9%;">Lớp</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 30%;">Bài học</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 8%;">PPCT</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 22%;">ND Tích hợp / Điều chỉnh</th>
-            <th style="border: 1pt solid #000; padding: 5pt; width: 10%;">ĐDDH</th>
+            <th width="${resolvedScheduleColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt 4pt; width: ${resolvedScheduleColWidths[0]}%;">Thứ</th>
+            <th width="${resolvedScheduleColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[1]}%;">Tiết</th>
+            <th width="${resolvedScheduleColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[2]}%;">Lớp</th>
+            <th width="${resolvedScheduleColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt 5pt; width: ${resolvedScheduleColWidths[3]}%;">Bài học</th>
+            <th width="${resolvedScheduleColWidths[4]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[4]}%;">PPCT</th>
+            <th width="${resolvedScheduleColWidths[5]}%" style="border: 1pt solid #000; padding: 5pt 5pt; width: ${resolvedScheduleColWidths[5]}%;">ND Tích hợp / Điều chỉnh</th>
+            <th width="${resolvedScheduleColWidths[6]}%" style="border: 1pt solid #000; padding: 5pt 4pt; width: ${resolvedScheduleColWidths[6]}%;">ĐDDH</th>
           </tr>
         </thead>
         <tbody>
           ${scheduleRows.map((sr) => `
             <tr style="font-size: 11pt;">
-              <td style="border: 1pt solid #000; padding: 5pt; font-weight: bold; text-align: center;">${escapeHtml(sr.dayOfWeek)}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: center; font-weight: bold;">${sr.period}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: center; font-weight: bold;">${escapeHtml(sr.className)}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: left;">${escapeHtml(sr.lessonTitle)}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: center; font-weight: bold;">${sr.ppct}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: left;">${escapeHtml(sr.integrationNotes).replace(/\n/g, '<br/>')}</td>
-              <td style="border: 1pt solid #000; padding: 5pt; text-align: center;">${escapeHtml(sr.equipment)}</td>
+              <td width="${resolvedScheduleColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt 4pt; width: ${resolvedScheduleColWidths[0]}%; font-weight: bold; text-align: center;">${escapeHtml(sr.dayOfWeek)}</td>
+              <td width="${resolvedScheduleColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[1]}%; text-align: center; font-weight: bold;">${sr.period}</td>
+              <td width="${resolvedScheduleColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[2]}%; text-align: center; font-weight: bold;">${escapeHtml(sr.className)}</td>
+              <td width="${resolvedScheduleColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt 5pt; width: ${resolvedScheduleColWidths[3]}%; text-align: left;">${escapeHtml(sr.lessonTitle)}</td>
+              <td width="${resolvedScheduleColWidths[4]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedScheduleColWidths[4]}%; text-align: center; font-weight: bold;">${sr.ppct}</td>
+              <td width="${resolvedScheduleColWidths[5]}%" style="border: 1pt solid #000; padding: 5pt 5pt; width: ${resolvedScheduleColWidths[5]}%; text-align: left;">${escapeHtml(sr.integrationNotes).replace(/\n/g, '<br/>')}</td>
+              <td width="${resolvedScheduleColWidths[6]}%" style="border: 1pt solid #000; padding: 5pt 4pt; width: ${resolvedScheduleColWidths[6]}%; text-align: center;">${escapeHtml(sr.equipment)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -549,13 +596,16 @@ export async function buildWordExportPackage(
           III. HOẠT ĐỘNG DẠY HỌC CHỦ YẾU
         </p>
 
-        <table border="1" cellspacing="0" cellpadding="6" style="border-collapse: collapse; width: 100%; border: 1pt solid #000;">
+        <table border="1" cellspacing="0" cellpadding="5" style="border-collapse: collapse; table-layout: fixed; mso-table-layout-alt: fixed; width: 100%; border: 1pt solid #000;">
+          <colgroup>
+            ${resolvedLessonColWidths.map((w) => `<col style="width: ${w}%;" />`).join('')}
+          </colgroup>
           <thead>
             <tr style="background-color: #f2f2f2; font-weight: bold; text-align: center; font-size: 11pt;">
-              <th style="border: 1pt solid #000; padding: 6pt; width: 28%;">Nội Dung / Kỹ Thuật Động Tác</th>
-              <th style="border: 1pt solid #000; padding: 6pt; width: 11%;">LVĐ</th>
-              <th style="border: 1pt solid #000; padding: 6pt; width: 31%;">Hoạt Động Của Giáo Viên</th>
-              <th style="border: 1pt solid #000; padding: 6pt; width: 30%;">Hoạt Động Của Học Sinh / Sơ Đồ</th>
+              <th width="${resolvedLessonColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[0]}%;">Nội Dung / Kỹ Thuật Động Tác</th>
+              <th width="${resolvedLessonColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedLessonColWidths[1]}%;">LVĐ</th>
+              <th width="${resolvedLessonColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[2]}%;">Hoạt Động Của Giáo Viên</th>
+              <th width="${resolvedLessonColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[3]}%;">Hoạt Động Của Học Sinh / Sơ Đồ</th>
             </tr>
           </thead>
           <tbody>
@@ -567,25 +617,27 @@ export async function buildWordExportPackage(
                 heightPt: d.heightPt
               }));
 
-              const renderWordTextWithInline = (rawText: string) => {
+              const renderWordTextWithInline = (rawText: string, colPrefix: 'c1' | 'c3' | 'c4', fallbackW: number, fallbackH: number) => {
                 const segments = parseInlineTextSegments(rawText || '');
                 return segments.map((seg) => {
                   if (seg.type === 'text') {
                     return escapeHtml(seg.text).replace(/\n/g, '<br/>');
                   }
-                  const raster = (row.inlineRasterizedMap || {})[seg.url];
+                  const raster = (row.inlineRasterizedMap || {})[`${colPrefix}:${seg.url}`];
                   const src = raster?.pngBase64 ? registerImage(raster.pngBase64) : '';
                   if (!src) return '';
+                  const wPt = raster?.widthPt || fallbackW;
+                  const hPt = raster?.heightPt || fallbackH;
                   return `
                     <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
-                      <img src="${src}" width="${raster?.widthPt || 100}" height="${raster?.heightPt || 65}" style="width: ${raster?.widthPt || 100}pt; height: ${raster?.heightPt || 65}pt; max-width: 105pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
-                      ${seg.title ? `<p style="font-size: 8pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(seg.title)}</p>` : ''}
+                      <img src="${src}" width="${ptToWordPx(wPt)}" height="${ptToWordPx(hPt)}" style="width: ${wPt}pt; height: ${hPt}pt; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                      ${seg.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; color: #4b5563;">${escapeHtml(seg.title)}</p>` : ''}
                     </div>
                   `;
                 }).join('');
               };
 
-              // Column 1 Content: place attached images immediately AFTER content/movement/practice/game/Vận dụng headings (never dumped at cell bottom!)
+              // Column 1 Content: place attached images immediately AFTER content/movement/practice/game/Vận dụng headings
               const col1Segments = splitColumn1ContentForMedia(
                 row.content || '',
                 (row.contentImagesProcessed || []) as Array<{
@@ -598,67 +650,77 @@ export async function buildWordExportPackage(
               const col1FlowHtml = col1Segments
                 .map((seg) => {
                   if (seg.type === 'text') {
-                    return `<div>${renderWordTextWithInline(seg.text)}</div>`;
+                    return `<div>${renderWordTextWithInline(seg.text, 'c1', col1ImgMaxW, Math.round(col1ImgMaxW * 0.62))}</div>`;
                   }
                   return seg.images
-                    .map(
-                      (c) => `
-                <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
-                  <img src="${registerImage(c.pngBase64)}" width="${c.widthPt || 98}" height="${c.heightPt || 65}" style="width: ${c.widthPt || 98}pt; height: ${c.heightPt || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
-                  ${c.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(c.title)}</p>` : ''}
+                    .map((c) => {
+                      const wPt = c.widthPt || col1ImgMaxW;
+                      const hPt = c.heightPt || Math.round(col1ImgMaxW * 0.62);
+                      return `
+                <div style="text-align: center; margin: 4pt 0 5pt 0; page-break-inside: avoid;">
+                  <img src="${registerImage(c.pngBase64)}" width="${ptToWordPx(wPt)}" height="${ptToWordPx(hPt)}" style="width: ${wPt}pt; height: ${hPt}pt; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                  ${c.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; color: #4b5563;">${escapeHtml(c.title)}</p>` : ''}
                 </div>
-              `
-                    )
+              `;
+                    })
                     .join('');
                 })
                 .join('');
 
               // Column 3 GV
-              const col3TextHtml = renderWordTextWithInline(row.gv);
-              const col3AttachedHtml = (row.gvImagesProcessed || []).map((g: any) => `
-                <div style="text-align: center; margin: 3pt 0 4pt 0; page-break-inside: avoid;">
-                  <img src="${registerImage(g.pngBase64)}" width="${g.widthPt || 98}" height="${g.heightPt || 65}" style="width: ${g.widthPt || 98}pt; height: ${g.heightPt || 65}pt; max-width: 102pt; max-height: 68pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
-                  ${g.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1pt 0 0 0; color: #4b5563;">${escapeHtml(g.title)}</p>` : ''}
+              const col3TextHtml = renderWordTextWithInline(row.gv, 'c3', col3ImgMaxW, Math.round(col3ImgMaxW * 0.65));
+              const col3AttachedHtml = (row.gvImagesProcessed || []).map((g: any) => {
+                const wPt = g.widthPt || col3ImgMaxW;
+                const hPt = g.heightPt || Math.round(col3ImgMaxW * 0.65);
+                return `
+                <div style="text-align: center; margin: 4pt 0 5pt 0; page-break-inside: avoid;">
+                  <img src="${registerImage(g.pngBase64)}" width="${ptToWordPx(wPt)}" height="${ptToWordPx(hPt)}" style="width: ${wPt}pt; height: ${hPt}pt; display: block; margin: 2pt auto; border: 1px solid #e2e8f0; border-radius: 3px;" />
+                  ${g.title ? `<p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; color: #4b5563;">${escapeHtml(g.title)}</p>` : ''}
                 </div>
-              `).join('');
+              `;
+              }).join('');
 
               // Column 4 HS
-              const col4TextHtml = renderWordTextWithInline(row.hs);
+              const col4TextHtml = renderWordTextWithInline(row.hs, 'c4', col4DiagMaxW, Math.round(col4DiagMaxW * 0.67));
               const col4DiagramsHtml = diagramsWithSrc.length > 0 ? `
                 <div style="margin-top: 4pt;">
-                  ${diagramsWithSrc.map((d: any) => `
-                    <div style="text-align: center; margin-top: 3pt; page-break-inside: avoid;">
-                      <img src="${d.src}" width="${d.widthPt || 112}" height="${d.heightPt || 68}" style="width: ${d.widthPt || 112}pt; height: ${d.heightPt || 68}pt; max-width: 118pt; max-height: 72pt; object-fit: contain; display: block; margin: 2pt auto; border: 1px solid #d1d5db; border-radius: 4px;" />
+                  ${diagramsWithSrc.map((d: any) => {
+                    const wPt = d.widthPt || col4DiagMaxW;
+                    const hPt = d.heightPt || Math.round(col4DiagMaxW * 0.67);
+                    return `
+                    <div style="text-align: center; margin-top: 4pt; page-break-inside: avoid;">
+                      <img src="${d.src}" width="${ptToWordPx(wPt)}" height="${ptToWordPx(hPt)}" style="width: ${wPt}pt; height: ${hPt}pt; display: block; margin: 2pt auto; border: 1px solid #d1d5db; border-radius: 4px;" />
                       ${d.title ? `
                         <p style="font-size: 8.5pt; font-style: italic; margin: 1.5pt 0 0 0; text-align: center; color: #374151;">
                           ${escapeHtml(d.title)}
                         </p>
                       ` : ''}
                     </div>
-                  `).join('')}
+                  `;
+                  }).join('')}
                 </div>
               ` : '';
 
               return `
                 <tr style="font-size: 11pt; vertical-align: top;">
                   <!-- Cột 1: Nội dung & Ảnh kỹ thuật chèn ngay sau tiêu đề động tác / trò chơi / luyện tập / vận dụng -->
-                  <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
+                  <td width="${resolvedLessonColWidths[0]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[0]}%; vertical-align: top; text-align: left;">
                     ${col1FlowHtml}
                   </td>
 
                   <!-- Cột 2: LVĐ -->
-                  <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: center; font-weight: bold;">
-                    ${escapeHtml(row.lvd).replace(/\n/g, '<br/>')}
+                  <td width="${resolvedLessonColWidths[1]}%" style="border: 1pt solid #000; padding: 5pt 3pt; width: ${resolvedLessonColWidths[1]}%; vertical-align: top; text-align: center; font-weight: bold;">
+                    ${escapeHtml((row.lvd || '').trim()).replace(/\n/g, '<br/>')}
                   </td>
 
                   <!-- Cột 3: HĐ của GV -->
-                  <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
+                  <td width="${resolvedLessonColWidths[2]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[2]}%; vertical-align: top; text-align: left;">
                     <div>${col3TextHtml}</div>
                     ${col3AttachedHtml}
                   </td>
 
                   <!-- Cột 4: HĐ của HS & SƠ ĐỒ ĐỘI HÌNH ĐÃ CHUẨN KÍCH THƯỚC -->
-                  <td style="border: 1pt solid #000; padding: 6pt; vertical-align: top; text-align: left;">
+                  <td width="${resolvedLessonColWidths[3]}%" style="border: 1pt solid #000; padding: 5pt; width: ${resolvedLessonColWidths[3]}%; vertical-align: top; text-align: left;">
                     <div>${col4TextHtml}</div>
                     ${col4DiagramsHtml}
                   </td>
@@ -742,7 +804,7 @@ export async function buildWordExportPackage(
       <style>
         @page WordSection1 {
           size: 595.3pt 841.9pt; /* Standard A4 */
-          margin: 56.7pt 42.5pt 56.7pt 70.8pt; /* Top 2cm, Right 1.5cm, Bottom 2cm, Left 2.5cm */
+          margin: 48.2pt 28.3pt 48.2pt 62.4pt; /* Top 1.7cm, Right 1.0cm, Bottom 1.7cm, Left 2.2cm -> ~505pt table width */
           mso-header-margin: 35.4pt;
           mso-footer-margin: 35.4pt;
           mso-paper-source: 0;
@@ -765,10 +827,13 @@ export async function buildWordExportPackage(
         }
         th, td {
           vertical-align: top;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
         }
         img {
           display: block;
           margin: 4pt auto;
+          max-width: 100%;
         }
       </style>
     </head>
@@ -812,7 +877,7 @@ export async function buildWordExportPackage(
     <w:altChunk r:id="htmlChunk"/>
     <w:sectPr>
       <w:pgSz w:w="11906" w:h="16838"/>
-      <w:pgMar w:top="1134" w:right="850" w:bottom="1134" w:left="1417" w:header="708" w:footer="708"/>
+      <w:pgMar w:top="964" w:right="567" w:bottom="964" w:left="1248" w:header="708" w:footer="708"/>
     </w:sectPr>
   </w:body>
 </w:document>`

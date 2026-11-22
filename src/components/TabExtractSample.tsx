@@ -27,6 +27,7 @@ import { SelectMovementImageModal } from './SelectMovementImageModal';
 import { FormationDiagram } from '../data/formationDiagrams';
 import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
 import { TextCaseButtons } from './TextCaseToolbar';
+import { LvdDualInput } from './LvdDualInput';
 
 interface TabExtractSampleProps {
   currentMasterPlan: MasterPlanItem;
@@ -715,12 +716,11 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                       onChange={(e) => handleUpdateRow(idx, 'content', e.target.value)}
                       className="w-full p-2.5 text-[13px] leading-relaxed rounded-xl border border-slate-300 font-medium focus:border-blue-500 focus:outline-none"
                     />
-                    <input
-                      type="text"
+                    <LvdDualInput
                       value={row.lvd}
-                      onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                      placeholder="Lượng vận động (LVĐ)"
-                      className="w-full p-2 text-xs font-bold rounded-xl border border-slate-300 focus:border-blue-500 focus:outline-none"
+                      onChange={(nextVal) => handleUpdateRow(idx, 'lvd', nextVal)}
+                      layout="row"
+                      variant="slate"
                     />
                     <button
                       type="button"
@@ -942,15 +942,15 @@ export const TabExtractSample: React.FC<TabExtractSampleProps> = ({
                   {/* Cột 2: LVĐ */}
                   <td className="p-3 text-center align-top font-semibold text-slate-800">
                     {isEditMode ? (
-                      <input
-                        type="text"
+                      <LvdDualInput
                         value={row.lvd}
-                        onChange={(e) => handleUpdateRow(idx, 'lvd', e.target.value)}
-                        className="w-full text-center p-1.5 text-xs rounded-lg border border-slate-300 font-bold focus:border-blue-500 focus:outline-none"
+                        onChange={(nextVal) => handleUpdateRow(idx, 'lvd', nextVal)}
+                        layout="stacked"
+                        variant="slate"
                       />
                     ) : (
-                      <span className="bg-slate-100 px-2 py-1 rounded-md text-[11px] font-bold block">
-                        {row.lvd}
+                      <span className="bg-slate-100 px-2 py-1 rounded-md text-[11px] font-bold block whitespace-pre-line">
+                        {(row.lvd || '').trim()}
                       </span>
                     )}
                   </td>
