@@ -2,10 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,
   UserCheck,
-  LogIn,
-  UserPlus,
   Mail,
-  Lock,
   User,
   School,
   LogOut,
@@ -16,46 +13,54 @@ import {
   ShieldCheck,
   Sparkles,
   KeyRound,
-  Search,
-  Eye,
-  EyeOff,
-  Send,
   Trash2,
   Clock,
-  ExternalLink,
-  Check
+  Check,
+  Coffee,
+  Copy,
+  Crown,
+  Gift,
+  Lock,
+  Plus,
+  Send,
+  Ticket,
+  Users,
+  ChevronDown,
+  ChevronUp,
+  LogIn
 } from 'lucide-react';
 import {
   useAuth,
-  RegistrationNotificationItem,
-  FoundAccountHint
+  AuthUser,
+  LicenseKeyRecord,
+  RegistrationNotificationItem
 } from '../contexts/AuthContext';
-import { googleSignIn, getCachedAccessTokenSync } from '../services/googleAuth';
+import { googleQuickSignIn, googleSignIn, getCachedAccessTokenSync } from '../services/googleAuth';
 import {
   ADMIN_NOTIFICATION_EMAIL,
   sendEmailViaGmailApi,
   buildRegistrationNotificationEmail,
-  buildPasswordRecoveryEmail,
   SendGmailParams
 } from '../services/googleGmailService';
+import {
+  SUBSCRIPTION_PLANS,
+  SubscriptionPlanId,
+  TRIAL_DURATION_DAYS,
+  GROUP_DISCOUNT_LABEL,
+  formatVnDate
+} from '../utils/subscriptionPlans';
+import { DonationSupportCard } from './DonationSupportCard';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultSchoolName?: string;
   defaultTeacherName?: string;
-  initialMode?: 'login' | 'register';
+  initialMode?: 'login' | 'register' | 'billing';
   gateReason?: string | null;
   onAuthSuccess: (mode: 'login' | 'register') => Promise<void> | void;
   onManualSyncUp: () => Promise<void>;
   showToast: (msg: string) => void;
-}
-
-interface PendingEmailConfirmation {
-  kind: 'registration' | 'recovery';
-  notificationId?: string;
-  emailParams: SendGmailParams;
-  summaryLines: { label: string; value: string }[];
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -76,140 +81,384 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     rememberedAccounts,
     removeRememberedAccount,
     login,
-    register,
+    passwordlessSignIn,
+    redeemLicenseKey,
+    adminGetSubscriptions,
+    adminCreateLicenseKey,
+    adminExtendUser,
+    refreshUser,
     logout,
-    findAccount,
-    requestPasswordReset,
-    resetPassword,
-    changePassword,
     getRegistrationNotifications,
-    markNotificationSent,
-    confirmRegistrationNotification
+    markNotificationSent
   } = useAuth();
 
-  const [mode, setMode] = useState<'login' | 'register' | 'recovery'>(initialMode);
-  const [recoveryTab, setRecoveryTab] = useState<'reset' | 'find'>('reset');
-
-  // Login / Register fields
+  // Passwordless login form
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState(defaultTeacherName);
   const [schoolName, setSchoolName] = useState(defaultSchoolName);
   const [rememberMe, setRememberMe] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-  // Recovery fields
-  const [recoveryEmail, setRecoveryEmail] = useState('');
-  const [recoveryCodeInput, setRecoveryCodeInput] = useState('');
-  const [recoveryNewPassword, setRecoveryNewPassword] = useState('');
-  const [recoveryConfirmPassword, setRecoveryConfirmPassword] = useState('');
-  const [recoveryRequestInfo, setRecoveryRequestInfo] = useState<{
-    email: string;
-    maskedEmail: string;
-    fullName: string;
-    expiresAt: number;
-    recoveryCode: string;
-    notifyEmail: string;
-  } | null>(null);
-  const [findQuery, setFindQuery] = useState('');
-  const [foundAccounts, setFoundAccounts] = useState<FoundAccountHint[] | null>(null);
+  // Optional legacy password login toggle
+  const [showLegacyPassword, setShowLegacyPassword] = useState(false);
+  const [legacyPassword, setLegacyPassword] = useState('');
 
-  // Logged-in account: change password + registration notifications
-  const [showChangePassword, setShowChangePassword] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newAccountPassword, setNewAccountPassword] = useState('');
-  const [confirmNewAccountPassword, setConfirmNewAccountPassword] = useState('');
+  // Logged-in inner tab: 'overview' | 'billing' | 'admin'
+  const [loggedInTab, setLoggedInTab] = useState<'overview' | 'billing' | 'admin'>('overview');
+
+  // Billing & Key redemption state
+  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('week_1');
+  const [licenseCodeInput, setLicenseCodeInput] = useState('');
+  const [isRedeeming, setIsRedeeming] = useState(false);
+
+  // Admin license & user management state
+  const [adminUsers, setAdminUsers] = useState<AuthUser[]>([]);
+  const [adminKeys, setAdminKeys] = useState<LicenseKeyRecord[]>([]);
+  const [isLoadingAdmin, setIsLoadingAdmin] = useState(false);
+  const [adminGenPlanId, setAdminGenPlanId] = useState<SubscriptionPlanId>('week_1');
+  const [adminGenEmail, setAdminGenEmail] = useState('');
+  const [adminGenNote, setAdminGenNote] = useState('');
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<LicenseKeyRecord | null>(null);
+  const [copiedKeyCode, setCopiedKeyCode] = useState<string | null>(null);
+  const [extendingEmail, setExtendingEmail] = useState<string | null>(null);
+
+  // Optional notifications state (for Gmail registration notification)
   const [notifications, setNotifications] = useState<RegistrationNotificationItem[]>([]);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
-  const [isAdminView, setIsAdminView] = useState(false);
-  const [confirmCodeInputs, setConfirmCodeInputs] = useState<Record<string, string>>({});
-
-  // Post-registration or Gmail confirmation dialog (MANDATORY per Workspace skill before sending email)
-  const [pendingEmailConfirm, setPendingEmailConfirm] = useState<PendingEmailConfirmation | null>(null);
   const [isSendingGmail, setIsSendingGmail] = useState(false);
-  const [emailStatusMsg, setEmailStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const isAdminOwner = Boolean(user && user.email.toLowerCase() === ADMIN_NOTIFICATION_EMAIL.toLowerCase());
+  const isExpired = Boolean(user && user.hasFullAccess === false);
+  const daysRemaining = user?.daysRemaining ?? TRIAL_DURATION_DAYS;
+  const planTier = user?.planTier || (isAdminOwner ? 'admin_lifetime' : 'trial');
+
+  const loadAdminData = useCallback(async () => {
+    if (!user || user.email.toLowerCase() !== ADMIN_NOTIFICATION_EMAIL.toLowerCase()) return;
+    setIsLoadingAdmin(true);
+    const res = await adminGetSubscriptions();
+    if (res.success) {
+      setAdminUsers(res.users || []);
+      setAdminKeys(res.keys || []);
+    }
+    setIsLoadingAdmin(false);
+  }, [user, adminGetSubscriptions]);
+
   const loadNotifications = useCallback(async () => {
     if (!user) return;
-    setIsLoadingNotifications(true);
     const res = await getRegistrationNotifications();
     if (res.success) {
       setNotifications(res.notifications || []);
-      setIsAdminView(Boolean(res.isAdmin));
     }
-    setIsLoadingNotifications(false);
   }, [user, getRegistrationNotifications]);
 
   useEffect(() => {
     if (isOpen) {
-      setMode(initialMode);
       setErrorMsg(null);
       setSuccessMsg(null);
-      setEmailStatusMsg(null);
       if (!email && rememberedAccounts.length > 0) {
         setEmail(rememberedAccounts[0].email);
+        if (!fullName) setFullName(rememberedAccounts[0].fullName);
+        if (!schoolName) setSchoolName(rememberedAccounts[0].schoolName);
       }
       if (user) {
+        refreshUser();
         loadNotifications();
+        if (user.email.toLowerCase() === ADMIN_NOTIFICATION_EMAIL.toLowerCase()) {
+          loadAdminData();
+        }
+        if (initialMode === 'billing' || user.hasFullAccess === false) {
+          setLoggedInTab('billing');
+        } else {
+          setLoggedInTab('overview');
+        }
       }
     }
-  }, [isOpen, initialMode, user, loadNotifications, rememberedAccounts, email]);
+  }, [isOpen, initialMode, user?.id, user?.hasFullAccess]);
 
   if (!isOpen) return null;
 
-  const openRegistrationEmailConfirm = (notif: RegistrationNotificationItem) => {
-    const emailParams = buildRegistrationNotificationEmail({
-      fullName: notif.fullName,
-      email: notif.email,
-      schoolName: notif.schoolName,
-      registeredAt: notif.registeredAt,
-      confirmationCode: notif.confirmationCode
-    });
-    setEmailStatusMsg(null);
-    setPendingEmailConfirm({
-      kind: 'registration',
-      notificationId: notif.id,
-      emailParams,
-      summaryLines: [
-        { label: 'Người nhận thông báo', value: ADMIN_NOTIFICATION_EMAIL },
-        { label: 'Tài khoản vừa đăng ký', value: `${notif.fullName} (${notif.email})` },
-        { label: 'Đơn vị / Trường', value: notif.schoolName },
-        { label: 'Mã xác nhận đăng ký', value: notif.confirmationCode }
-      ]
-    });
+  const handleGoogleQuickSignIn = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsGoogleLoading(true);
+    try {
+      const gProfile = await googleQuickSignIn();
+      if (!gProfile) {
+        setIsGoogleLoading(false);
+        return;
+      }
+      const res = await passwordlessSignIn({
+        email: gProfile.email,
+        fullName: gProfile.displayName || fullName.trim() || defaultTeacherName,
+        schoolName: schoolName.trim() || defaultSchoolName || 'TRƯỜNG TIỂU HỌC & THCS',
+        provider: 'google',
+        rememberMe
+      });
+      setIsGoogleLoading(false);
+      if (!res.success || !res.user) {
+        setErrorMsg(res.error || 'Không thể đăng nhập bằng tài khoản Google.');
+        return;
+      }
+      await onAuthSuccess(res.isNewUser ? 'register' : 'login');
+      if (res.user.planTier === 'admin_lifetime') {
+        showToast(`👑 Xin chào Quản trị viên ${res.user.fullName}! Toàn quyền vĩnh viễn đã sẵn sàng.`);
+      } else if (res.user.hasFullAccess === false) {
+        showToast(`⏰ Tài khoản ${res.user.email} đã hết thời gian trải nghiệm 1 học kỳ. Vui lòng xem gói duy trì để tiếp tục.`);
+        setLoggedInTab('billing');
+        return;
+      } else {
+        showToast(
+          res.isNewUser
+            ? `🎉 Chào mừng ${res.user.fullName}! Đã mở khóa FULL tính năng miễn phí trọn 1 học kỳ (120 ngày)!`
+            : `✅ Xin chào ${res.user.fullName}! Còn ${res.user.daysRemaining} ngày sử dụng Full tính năng.`
+        );
+      }
+      onClose();
+    } catch (err: any) {
+      setIsGoogleLoading(false);
+      setErrorMsg(
+        err?.message ||
+          'Không mở được cửa sổ Google. Thầy/cô chỉ cần nhập trực tiếp Email cá nhân bên dưới (không cần mật khẩu).'
+      );
+    }
   };
 
-  const openRecoveryEmailConfirm = (recipientEmail: string) => {
-    if (!recoveryRequestInfo) return;
-    const emailParams = buildPasswordRecoveryEmail({
-      recipientEmail,
-      accountEmail: recoveryRequestInfo.email,
-      fullName: recoveryRequestInfo.fullName,
-      recoveryCode: recoveryRequestInfo.recoveryCode,
-      expiresAt: recoveryRequestInfo.expiresAt
+  const handlePasswordlessSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setErrorMsg('Vui lòng nhập đúng địa chỉ Email cá nhân (ví dụ: giaovien@gmail.com).');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const res = await passwordlessSignIn({
+      email: cleanEmail,
+      fullName: fullName.trim() || defaultTeacherName || cleanEmail.split('@')[0],
+      schoolName: schoolName.trim() || defaultSchoolName || 'TRƯỜNG TIỂU HỌC & THCS',
+      provider: 'email_passwordless',
+      rememberMe
     });
-    setEmailStatusMsg(null);
-    setPendingEmailConfirm({
-      kind: 'recovery',
-      emailParams,
-      summaryLines: [
-        { label: 'Gửi tới email', value: recipientEmail },
-        { label: 'Tài khoản cần khôi phục', value: `${recoveryRequestInfo.fullName} (${recoveryRequestInfo.email})` },
-        { label: 'Mã khôi phục 6 số', value: recoveryRequestInfo.recoveryCode },
-        { label: 'Hiệu lực đến', value: new Date(recoveryRequestInfo.expiresAt).toLocaleTimeString('vi-VN') }
-      ]
-    });
+    setIsSubmitting(false);
+
+    if (!res.success || !res.user) {
+      setErrorMsg(res.error || 'Đăng nhập thất bại.');
+      return;
+    }
+
+    await onAuthSuccess(res.isNewUser ? 'register' : 'login');
+    if (res.user.planTier === 'admin_lifetime') {
+      showToast(`👑 Xin chào Quản trị viên ${res.user.fullName}! Toàn quyền vĩnh viễn đã sẵn sàng.`);
+    } else if (res.user.hasFullAccess === false) {
+      showToast(`⏰ Tài khoản ${res.user.email} đã kết thúc giai đoạn trải nghiệm miễn phí. Mời thầy/cô xem gói duy trì.`);
+      setLoggedInTab('billing');
+      return;
+    } else {
+      showToast(
+        res.isNewUser
+          ? `🎉 Chào mừng ${res.user.fullName}! Đã mở khóa FULL tính năng miễn phí trọn 1 học kỳ (120 ngày)!`
+          : `✅ Đăng nhập thành công! Còn ${res.user.daysRemaining} ngày sử dụng Full tính năng.`
+      );
+    }
+    onClose();
   };
 
-  const handleConfirmSendGmail = async () => {
-    if (!pendingEmailConfirm) return;
+  const handleQuickRememberedSignIn = async (acc: {
+    email: string;
+    fullName: string;
+    schoolName: string;
+  }) => {
+    setErrorMsg(null);
+    setIsSubmitting(true);
+    const res = await passwordlessSignIn({
+      email: acc.email,
+      fullName: acc.fullName,
+      schoolName: acc.schoolName,
+      provider: 'email_passwordless',
+      rememberMe: true
+    });
+    setIsSubmitting(false);
+    if (!res.success || !res.user) {
+      setErrorMsg(res.error || 'Đăng nhập nhanh thất bại.');
+      return;
+    }
+    await onAuthSuccess('login');
+    if (res.user.hasFullAccess === false) {
+      showToast(`⏰ Tài khoản ${res.user.email} đã hết hạn dùng thử. Vui lòng gia hạn để tiếp tục.`);
+      setLoggedInTab('billing');
+      return;
+    }
+    showToast(`✅ Đã vào lại tài khoản ${res.user.fullName} (không cần mật khẩu)!`);
+    onClose();
+  };
+
+  const handleLegacyPasswordLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setIsSubmitting(true);
+    const res = await login(email.trim(), legacyPassword, rememberMe);
+    setIsSubmitting(false);
+    if (!res.success || !res.user) {
+      setErrorMsg(res.error || 'Email hoặc mật khẩu chưa chính xác.');
+      return;
+    }
+    await onAuthSuccess('login');
+    showToast(`✅ Đăng nhập thành công: ${res.user.fullName}`);
+    onClose();
+  };
+
+  const handleRedeemKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    const code = licenseCodeInput.trim().toUpperCase();
+    if (!code) {
+      setErrorMsg('Vui lòng nhập mã kích hoạt (ví dụ: GDTC-W1-XXXX-XXXX).');
+      return;
+    }
+    setIsRedeeming(true);
+    const res = await redeemLicenseKey(code);
+    setIsRedeeming(false);
+    if (!res.success) {
+      setErrorMsg(res.error || 'Mã kích hoạt không hợp lệ.');
+      return;
+    }
+    setLicenseCodeInput('');
+    const msg = `🎉 Kích hoạt thành công ${res.planLabel || ''}! Đã cộng thêm ${res.durationDays} ngày sử dụng Full tính năng.`;
+    setSuccessMsg(msg);
+    showToast(msg);
+  };
+
+  const handleAdminCreateKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsGeneratingKey(true);
+    const res = await adminCreateLicenseKey({
+      planId: adminGenPlanId,
+      targetEmail: adminGenEmail.trim() || undefined,
+      note: adminGenNote.trim() || undefined
+    });
+    setIsGeneratingKey(false);
+    if (!res.success || !res.key) {
+      setErrorMsg(res.error || 'Không thể tạo mã kích hoạt.');
+      return;
+    }
+    setNewlyGeneratedKey(res.key);
+    setAdminGenEmail('');
+    setAdminGenNote('');
+    setSuccessMsg(`Đã tạo mã kích hoạt mới: ${res.key.code} (${res.key.planLabel})`);
+    showToast(`🎟️ Đã tạo mã ${res.key.code} (${res.key.planLabel})`);
+    await loadAdminData();
+  };
+
+  const handleAdminExtend = async (targetEmail: string, days: number, label: string) => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setExtendingEmail(`${targetEmail}_${days}`);
+    const res = await adminExtendUser({ email: targetEmail, durationDays: days });
+    setExtendingEmail(null);
+    if (!res.success) {
+      setErrorMsg(res.error || 'Không thể gia hạn tài khoản.');
+      return;
+    }
+    setSuccessMsg(`Đã gia hạn trực tiếp +${days} ngày (${label}) cho tài khoản ${targetEmail}.`);
+    showToast(`✅ Đã gia hạn +${days} ngày cho ${targetEmail}!`);
+    await loadAdminData();
+  };
+
+  const handleCopyCode = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedKeyCode(code);
+      showToast(`📋 Đã sao chép mã kích hoạt: ${code}`);
+      setTimeout(() => setCopiedKeyCode(null), 2000);
+    } catch {
+      showToast(`Mã kích hoạt: ${code}`);
+    }
+  };
+
+  const buildRenewalMailtoHref = (isGroup = false) => {
+    const plan = SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0];
+    const subject = isGroup
+      ? `[SmartPlan GDTC Pro] Đăng ký Gói Tổ/Nhóm (3–5 GV · Giảm 20%) - ${user?.email || email}`
+      : `[SmartPlan GDTC Pro] Đăng ký gia hạn ${plan.name} (${plan.priceText}) - ${user?.email || email}`;
+    const body = [
+      'Kính gửi thầy Lê Quốc Hưng,',
+      '',
+      isGroup
+        ? 'Tổ chuyên môn chúng tôi muốn đăng ký Gói Nhóm (3–5 giáo viên, giảm 20% phí duy trì hệ thống):'
+        : 'Tôi muốn đăng ký gia hạn sử dụng SmartPlan GDTC Pro (phí duy trì hệ thống):',
+      `- Tài khoản Email đại diện: ${user?.email || email || '(chưa nhập)'}`,
+      `- Họ và tên: ${user?.fullName || fullName || '(chưa nhập)'}`,
+      `- Đơn vị / Trường: ${user?.schoolName || schoolName || '(chưa nhập)'}`,
+      isGroup
+        ? `- Số lượng giáo viên dự kiến: 3–5 giáo viên · Gói quan tâm: ${plan.name}`
+        : `- Gói lựa chọn: ${plan.name} — ${plan.priceText} (${plan.perMonthText})`,
+      '',
+      'Vui lòng gửi lại hướng dẫn và Mã kích hoạt giúp tôi. Xin cảm ơn!'
+    ].join('\n');
+    return `mailto:${encodeURIComponent(ADMIN_NOTIFICATION_EMAIL)}?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
+  };
+
+  const handleSendRenewalViaGmail = async () => {
+    if (!user) return;
+    const plan = SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0];
     setIsSendingGmail(true);
-    setEmailStatusMsg(null);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      let token = getCachedAccessTokenSync();
+      if (!token) {
+        const signInRes = await googleSignIn();
+        token = signInRes?.accessToken || null;
+      }
+      if (!token) {
+        setIsSendingGmail(false);
+        return;
+      }
+      const params: SendGmailParams = {
+        to: ADMIN_NOTIFICATION_EMAIL,
+        subject: `[SmartPlan GDTC Pro] Đăng ký gia hạn ${plan.name} (${plan.priceText}) - ${user.email}`,
+        htmlBody: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
+            <h2 style="color: #1d4ed8;">Yêu Cầu Gia Hạn SmartPlan GDTC Pro</h2>
+            <p>Thầy/cô vừa gửi yêu cầu duy trì hệ thống:</p>
+            <ul>
+              <li><strong>Họ và tên:</strong> ${user.fullName}</li>
+              <li><strong>Email tài khoản:</strong> ${user.email}</li>
+              <li><strong>Đơn vị / Trường:</strong> ${user.schoolName}</li>
+              <li><strong>Gói đăng ký:</strong> ${plan.name} — <strong>${plan.priceText}</strong> (${plan.perMonthText})</li>
+            </ul>
+            <p>Quản trị viên vui lòng mở mục <em>Quản trị Gia hạn</em> trong ứng dụng để cấp mã hoặc bấm gia hạn trực tiếp cho email trên.</p>
+          </div>
+        `
+      };
+      await sendEmailViaGmailApi(params);
+      setSuccessMsg(`Đã gửi yêu cầu gia hạn (${plan.name}) trực tiếp tới ${ADMIN_NOTIFICATION_EMAIL} qua Gmail!`);
+      showToast(`📧 Đã gửi yêu cầu gia hạn tới ${ADMIN_NOTIFICATION_EMAIL}!`);
+    } catch (err: any) {
+      setErrorMsg(
+        err?.message ||
+          `Không gửi được qua Gmail trực tiếp. Thầy/cô hãy bấm nút "Mở ứng dụng Email" để gửi tới ${ADMIN_NOTIFICATION_EMAIL}.`
+      );
+    } finally {
+      setIsSendingGmail(false);
+    }
+  };
+
+  const handleSendRegNotification = async (notif: RegistrationNotificationItem) => {
+    setIsSendingGmail(true);
+    setErrorMsg(null);
     try {
       let token = getCachedAccessTokenSync();
       let senderEmail = user?.email || '';
@@ -219,205 +468,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         senderEmail = signInRes?.user?.email || senderEmail;
       }
       if (!token) {
-        setEmailStatusMsg({
-          type: 'error',
-          text: 'Cửa sổ đăng nhập Google đã đóng trước khi hoàn tất. Vui lòng bấm lại để cấp quyền gửi Gmail.'
-        });
+        setIsSendingGmail(false);
         return;
       }
-
-      const sendRes = await sendEmailViaGmailApi(pendingEmailConfirm.emailParams);
-
-      if (pendingEmailConfirm.kind === 'registration' && pendingEmailConfirm.notificationId) {
-        await markNotificationSent(pendingEmailConfirm.notificationId, {
-          gmailMessageId: sendRes.id,
-          sentByEmail: senderEmail
-        });
-        await loadNotifications();
-      }
-
-      setEmailStatusMsg({
-        type: 'success',
-        text: `Đã gửi email xác nhận thành công tới ${pendingEmailConfirm.emailParams.to}!`
+      const emailParams = buildRegistrationNotificationEmail({
+        fullName: notif.fullName,
+        email: notif.email,
+        schoolName: notif.schoolName,
+        registeredAt: notif.registeredAt,
+        confirmationCode: notif.confirmationCode
       });
-      showToast(`📧 Đã gửi email thông báo tới ${pendingEmailConfirm.emailParams.to} thành công!`);
-      setPendingEmailConfirm(null);
+      const res = await sendEmailViaGmailApi(emailParams);
+      await markNotificationSent(notif.id, { gmailMessageId: res.id, sentByEmail: senderEmail });
+      await loadNotifications();
+      showToast(`📧 Đã thông báo đăng ký tới ${ADMIN_NOTIFICATION_EMAIL}!`);
     } catch (err: any) {
-      setEmailStatusMsg({
-        type: 'error',
-        text: err?.message || 'Không thể gửi email qua Gmail. Vui lòng thử lại hoặc dùng nút mở trình email.'
-      });
+      setErrorMsg(err?.message || 'Không gửi được email thông báo.');
     } finally {
       setIsSendingGmail(false);
     }
-  };
-
-  const buildMailtoHref = (params: SendGmailParams) => {
-    const plainBody = `Thông báo từ hệ thống SmartPlan GDTC:\nChủ đề: ${params.subject}\nVui lòng kiểm tra thông tin xác nhận tài khoản trong ứng dụng.`;
-    return `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(plainBody)}`;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    if (mode === 'register') {
-      if (password.length < 6) {
-        setErrorMsg('Mật khẩu phải có ít nhất 6 ký tự.');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setErrorMsg('Mật khẩu xác nhận chưa trùng khớp.');
-        return;
-      }
-      setIsSubmitting(true);
-      const res = await register({
-        email: email.trim(),
-        password,
-        fullName: fullName.trim() || defaultTeacherName || 'Giáo viên GDTC',
-        schoolName: schoolName.trim() || defaultSchoolName || 'TRƯỜNG TIỂU HỌC & THCS',
-        rememberMe
-      });
-      setIsSubmitting(false);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Đăng ký thất bại.');
-        return;
-      }
-      await onAuthSuccess('register');
-      showToast(`🎉 Đăng ký thành công! Xin chào thầy/cô ${res.user?.fullName || email}.`);
-
-      // Prompt user to confirm sending registration notification email to lehung840110@gmail.com
-      if (res.registrationNotification) {
-        openRegistrationEmailConfirm(res.registrationNotification);
-        await loadNotifications();
-      } else {
-        onClose();
-      }
-      return;
-    }
-
-    setIsSubmitting(true);
-    const res = await login(email.trim(), password, rememberMe);
-    setIsSubmitting(false);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Đăng nhập thất bại.');
-      return;
-    }
-    await onAuthSuccess('login');
-    showToast(`✅ Đăng nhập thành công! Đã đồng bộ hồ sơ giáo án của ${res.user?.fullName || email}.`);
-    onClose();
-  };
-
-  const handleRequestReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setIsSubmitting(true);
-    const res = await requestPasswordReset(recoveryEmail.trim());
-    setIsSubmitting(false);
-    if (!res.success || !res.recoveryCode || !res.expiresAt || !res.email) {
-      setErrorMsg(res.error || 'Không thể tạo mã khôi phục.');
-      return;
-    }
-    setRecoveryRequestInfo({
-      email: res.email,
-      maskedEmail: res.maskedEmail || res.email,
-      fullName: res.fullName || 'Giáo viên',
-      expiresAt: res.expiresAt,
-      recoveryCode: res.recoveryCode,
-      notifyEmail: res.notifyEmail || ADMIN_NOTIFICATION_EMAIL
-    });
-    setSuccessMsg(
-      `Đã tạo mã khôi phục 6 chữ số (hiệu lực 15 phút). Bạn có thể gửi mã xác nhận qua Gmail tới ${ADMIN_NOTIFICATION_EMAIL} hoặc email tài khoản rồi nhập mã bên dưới để đặt mật khẩu mới.`
-    );
-  };
-
-  const handleCompleteReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    if (recoveryNewPassword.length < 6) {
-      setErrorMsg('Mật khẩu mới phải có ít nhất 6 ký tự.');
-      return;
-    }
-    if (recoveryNewPassword !== recoveryConfirmPassword) {
-      setErrorMsg('Mật khẩu xác nhận chưa trùng khớp.');
-      return;
-    }
-    setIsSubmitting(true);
-    const res = await resetPassword({
-      email: (recoveryRequestInfo?.email || recoveryEmail).trim(),
-      code: recoveryCodeInput.trim(),
-      newPassword: recoveryNewPassword
-    });
-    setIsSubmitting(false);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Đặt lại mật khẩu thất bại.');
-      return;
-    }
-    await onAuthSuccess('login');
-    showToast('✅ Đã khôi phục mật khẩu và đăng nhập thành công!');
-    setRecoveryRequestInfo(null);
-    setRecoveryCodeInput('');
-    setRecoveryNewPassword('');
-    setRecoveryConfirmPassword('');
-    onClose();
-  };
-
-  const handleFindAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setIsSubmitting(true);
-    const res = await findAccount(findQuery.trim());
-    setIsSubmitting(false);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Không thể tra cứu tài khoản.');
-      return;
-    }
-    setFoundAccounts(res.accounts || []);
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    if (newAccountPassword.length < 6) {
-      setErrorMsg('Mật khẩu mới phải có ít nhất 6 ký tự.');
-      return;
-    }
-    if (newAccountPassword !== confirmNewAccountPassword) {
-      setErrorMsg('Mật khẩu mới nhập lại chưa trùng khớp.');
-      return;
-    }
-    setIsSubmitting(true);
-    const res = await changePassword({
-      currentPassword,
-      newPassword: newAccountPassword
-    });
-    setIsSubmitting(false);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Đổi mật khẩu thất bại.');
-      return;
-    }
-    setCurrentPassword('');
-    setNewAccountPassword('');
-    setConfirmNewAccountPassword('');
-    setShowChangePassword(false);
-    setSuccessMsg('Đã cập nhật mật khẩu mới thành công!');
-    showToast('✅ Đã đổi mật khẩu tài khoản thành công!');
-  };
-
-  const handleConfirmRegistration = async (notifId: string) => {
-    setErrorMsg(null);
-    const code = confirmCodeInputs[notifId] || '';
-    const res = await confirmRegistrationNotification(notifId, isAdminView ? undefined : code);
-    if (!res.success) {
-      setErrorMsg(res.error || 'Xác nhận tài khoản thất bại.');
-      return;
-    }
-    await loadNotifications();
-    showToast('✅ Đã xác nhận đăng ký tài khoản thành công!');
   };
 
   const handleLogout = async () => {
@@ -426,32 +495,56 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     onClose();
   };
 
+  const trialProgressPercent =
+    planTier === 'trial'
+      ? Math.min(100, Math.max(4, Math.round((daysRemaining / TRIAL_DURATION_DAYS) * 100)))
+      : 100;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 no-print">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 no-print">
+      <div className="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-blue-600 text-white">
-              <UserCheck className="w-5 h-5" />
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 via-blue-50/60 to-emerald-50/50 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className={`p-2 rounded-xl text-white shrink-0 ${
+                isExpired
+                  ? 'bg-amber-600'
+                  : isAdminOwner
+                  ? 'bg-indigo-600'
+                  : 'bg-blue-600'
+              }`}
+            >
+              {isExpired ? (
+                <Coffee className="w-5 h-5" />
+              ) : isAdminOwner ? (
+                <Crown className="w-5 h-5" />
+              ) : (
+                <UserCheck className="w-5 h-5" />
+              )}
             </div>
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">
-                {user
-                  ? 'Tài Khoản Giáo Viên & Xác Nhận Email'
-                  : mode === 'recovery'
-                  ? 'Phục Hồi Tài Khoản & Mật Khẩu'
-                  : 'Đăng Nhập / Đăng Ký Tài Khoản'}
+            <div className="min-w-0">
+              <h3 className="font-extrabold text-slate-900 text-sm truncate">
+                {!user
+                  ? 'Đăng Nhập 1 Chạm — Miễn Phí Trọn 1 Học Kỳ'
+                  : isExpired
+                  ? 'Ủng Hộ & Gia Hạn Duy Trì Hệ Thống'
+                  : 'Tài Khoản & Trải Nghiệm SmartPlan GDTC Pro'}
               </h3>
-              <p className="text-[11px] text-slate-500">
-                Ghi nhớ đăng nhập, khôi phục mật khẩu & thông báo xác nhận qua {ADMIN_NOTIFICATION_EMAIL}
+              <p className="text-[11px] text-slate-600 truncate">
+                {!user
+                  ? 'Không cần mật khẩu · Mở khóa 100% tính năng miễn phí trọn 1 học kỳ (120 ngày)'
+                  : isAdminOwner
+                  ? 'Quản trị viên hệ thống · Toàn quyền vĩnh viễn & Cấp mã kích hoạt'
+                  : `Tài khoản cá nhân: ${user.email}`}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition shrink-0"
+            aria-label="Đóng"
           >
             <X className="w-4 h-4" />
           </button>
@@ -459,334 +552,688 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto flex-1">
-          {emailStatusMsg && (
-            <div
-              className={`mx-5 mt-4 p-3 rounded-xl text-xs flex items-start gap-2 border ${
-                emailStatusMsg.type === 'success'
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  : 'bg-red-50 border-red-200 text-red-700'
-              }`}
-            >
-              {emailStatusMsg.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-              ) : (
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
-              )}
-              <span className="font-medium leading-relaxed">{emailStatusMsg.text}</span>
-            </div>
-          )}
-
           {user ? (
             <div className="p-5 space-y-4 text-xs">
-              {errorMsg && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span className="font-medium">{errorMsg}</span>
-                </div>
-              )}
-              {successMsg && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
-                  <span className="font-medium">{successMsg}</span>
-                </div>
-              )}
-
-              {/* Profile Summary */}
-              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 space-y-1.5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-1.5 font-bold text-emerald-800">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Đang đăng nhập (đã ghi nhớ)
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-200 text-emerald-900">
-                      {user.role === 'admin' ? 'Quản trị / Tổ trưởng' : 'Giáo viên'}
-                    </span>
-                    {user.registrationConfirmed ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                        Đã xác nhận
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">
-                        Chờ xác nhận email
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm font-extrabold text-slate-900 pt-1">{user.fullName}</p>
-                <p className="text-slate-600">{user.email}</p>
-                <p className="text-slate-600 font-medium">{user.schoolName}</p>
-                {lastSyncedAt && (
-                  <p className="text-[11px] text-emerald-700 flex items-center gap-1 pt-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Đã đồng bộ lần cuối: {new Date(lastSyncedAt).toLocaleString('vi-VN')}
-                  </p>
-                )}
-              </div>
-
-              {/* Registration Notifications -> lehung840110@gmail.com */}
-              <div className="border border-slate-200 rounded-xl p-3.5 space-y-2.5 bg-slate-50/70">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                    <Mail className="w-4 h-4 text-blue-600" />
-                    <span>
-                      {isAdminView
-                        ? `Thông báo đăng ký gửi về ${ADMIN_NOTIFICATION_EMAIL}`
-                        : `Xác nhận đăng ký qua ${ADMIN_NOTIFICATION_EMAIL}`}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={loadNotifications}
-                    disabled={isLoadingNotifications}
-                    className="p-1 text-slate-500 hover:text-blue-600 rounded"
-                    title="Làm mới"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingNotifications ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
-
-                {notifications.length === 0 ? (
-                  <p className="text-[11px] text-slate-500">Chưa có bản ghi thông báo đăng ký nào.</p>
-                ) : (
-                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {notifications.map((notif) => (
-                      <div
-                        key={notif.id}
-                        className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-2"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="font-bold text-slate-900 truncate">
-                              {notif.fullName} <span className="font-normal text-slate-500">({notif.email})</span>
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              {notif.schoolName} · {new Date(notif.registeredAt).toLocaleString('vi-VN')}
-                            </p>
-                            <p className="text-[10px] text-slate-600 mt-0.5">
-                              Mã xác nhận: <strong className="font-mono text-blue-700">{notif.confirmationCode}</strong>
-                            </p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1 shrink-0">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                notif.emailSent
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {notif.emailSent ? 'Đã gửi Gmail' : 'Chưa gửi email'}
-                            </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                                notif.confirmed
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {notif.confirmed ? 'Đã xác nhận' : 'Chờ xác nhận'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => openRegistrationEmailConfirm(notif)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px] transition"
-                          >
-                            <Send className="w-3 h-3" />
-                            <span>{notif.emailSent ? 'Gửi lại qua Gmail' : 'Gửi thông báo qua Gmail'}</span>
-                          </button>
-
-                          {!notif.confirmed && (
-                            isAdminView ? (
-                              <button
-                                type="button"
-                                onClick={() => handleConfirmRegistration(notif.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] transition"
-                              >
-                                <Check className="w-3 h-3" />
-                                <span>Xác nhận tài khoản</span>
-                              </button>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="text"
-                                  maxLength={6}
-                                  value={confirmCodeInputs[notif.id] || ''}
-                                  onChange={(e) =>
-                                    setConfirmCodeInputs((prev) => ({
-                                      ...prev,
-                                      [notif.id]: e.target.value
-                                    }))
-                                  }
-                                  placeholder="Nhập mã 6 số"
-                                  className="w-24 px-2 py-1 text-[11px] border border-slate-300 rounded-md focus:border-blue-500 focus:outline-none"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleConfirmRegistration(notif.id)}
-                                  className="px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px]"
-                                >
-                                  Xác nhận
-                                </button>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Change Password Section */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowChangePassword((v) => !v);
-                    setErrorMsg(null);
-                    setSuccessMsg(null);
-                  }}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between font-bold text-slate-800 transition"
-                >
-                  <span className="inline-flex items-center gap-1.5">
-                    <KeyRound className="w-3.5 h-3.5 text-slate-600" />
-                    Đổi mật khẩu tài khoản
-                  </span>
-                  <span className="text-[11px] text-blue-600">
-                    {showChangePassword ? 'Thu gọn' : 'Mở rộng'}
-                  </span>
-                </button>
-                {showChangePassword && (
-                  <form onSubmit={handleChangePassword} className="p-3.5 space-y-2.5 bg-white">
-                    <input
-                      type="password"
-                      required
-                      autoComplete="current-password"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder="Mật khẩu hiện tại"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none"
-                    />
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      value={newAccountPassword}
-                      onChange={(e) => setNewAccountPassword(e.target.value)}
-                      placeholder="Mật khẩu mới (tối thiểu 6 ký tự)"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none"
-                    />
-                    <input
-                      type="password"
-                      required
-                      minLength={6}
-                      autoComplete="new-password"
-                      value={confirmNewAccountPassword}
-                      onChange={(e) => setConfirmNewAccountPassword(e.target.value)}
-                      placeholder="Nhập lại mật khẩu mới"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 focus:outline-none"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSubmitting}
-                      className="w-full py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold"
-                    >
-                      {isSubmitting ? 'Đang cập nhật...' : 'Cập nhật mật khẩu mới'}
-                    </button>
-                  </form>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await onManualSyncUp();
-                  }}
-                  disabled={isSyncing}
-                  className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-2 transition"
-                >
-                  {isSyncing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4" />
-                  )}
-                  <span>Lưu & Đồng Bộ Giáo Án Lên Tài Khoản Ngay</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleLogout}
-                  className="w-full py-2.5 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold flex items-center justify-center gap-2 transition"
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>Đăng Xuất Tài Khoản</span>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="p-5 space-y-4 text-xs">
-              {gateReason && (
-                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              {/* Gate Reason Banner when Expired user clicked a locked feature */}
+              {isExpired && gateReason && (
+                <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex items-start gap-2.5">
+                  <Lock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <p className="font-bold text-amber-900">Mở khóa toàn bộ tính năng thành viên</p>
-                    <p className="text-[11px] text-amber-800 mt-0.5">
-                      Vui lòng đăng nhập hoặc đăng ký tài khoản miễn phí để sử dụng: <strong>{gateReason}</strong>
+                    <p className="font-bold text-amber-900">
+                      Đã hết 30 ngày dùng thử miễn phí
+                    </p>
+                    <p className="text-[11.5px] text-amber-800 mt-0.5">
+                      Để tiếp tục sử dụng <strong>{gateReason}</strong>, mời thầy/cô gia hạn duy trì hệ thống chỉ <strong>20.000đ/tuần</strong> (chỉ bằng 1 ly cà phê) hoặc nhập Mã kích hoạt bên dưới.
                     </p>
                   </div>
                 </div>
               )}
 
-              {/* Switch Mode Tabs (3 tabs: Login, Register, Recovery) */}
-              <div className="grid grid-cols-3 bg-slate-100 p-1 rounded-xl gap-1">
+              {/* Logged-in Navigation Tabs */}
+              <div
+                className={`grid ${
+                  isAdminOwner ? 'grid-cols-3' : 'grid-cols-2'
+                } bg-slate-100 p-1 rounded-xl gap-1`}
+              >
                 <button
                   type="button"
                   onClick={() => {
-                    setMode('login');
+                    setLoggedInTab('overview');
                     setErrorMsg(null);
                     setSuccessMsg(null);
                   }}
-                  className={`py-2 rounded-lg font-bold flex items-center justify-center gap-1 transition ${
-                    mode === 'login' ? 'bg-white text-blue-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  className={`py-2 px-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
+                    loggedInTab === 'overview'
+                      ? 'bg-white text-blue-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <LogIn className="w-3.5 h-3.5" />
-                  <span>Đăng Nhập</span>
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Tài Khoản</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setMode('register');
+                    setLoggedInTab('billing');
                     setErrorMsg(null);
                     setSuccessMsg(null);
                   }}
-                  className={`py-2 rounded-lg font-bold flex items-center justify-center gap-1 transition ${
-                    mode === 'register' ? 'bg-white text-emerald-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+                  className={`py-2 px-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
+                    loggedInTab === 'billing'
+                      ? 'bg-white text-emerald-700 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>Đăng Ký</span>
+                  <Coffee className="w-3.5 h-3.5" />
+                  <span>{isExpired ? 'Gia Hạn Ngay' : 'Ủng Hộ & Duy Trì'}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('recovery');
-                    setErrorMsg(null);
-                    setSuccessMsg(null);
-                    if (!recoveryEmail && email) setRecoveryEmail(email);
-                  }}
-                  className={`py-2 rounded-lg font-bold flex items-center justify-center gap-1 transition ${
-                    mode === 'recovery' ? 'bg-white text-teal-700 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>Phục Hồi</span>
-                </button>
+                {isAdminOwner && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoggedInTab('admin');
+                      setErrorMsg(null);
+                      setSuccessMsg(null);
+                      loadAdminData();
+                    }}
+                    className={`py-2 px-2 rounded-lg font-bold flex items-center justify-center gap-1.5 transition ${
+                      loggedInTab === 'admin'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Crown className="w-3.5 h-3.5" />
+                    <span>Quản Trị Mã</span>
+                  </button>
+                )}
+              </div>
+
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="font-medium leading-relaxed">{errorMsg}</span>
+                </div>
+              )}
+              {successMsg && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <span className="font-medium leading-relaxed">{successMsg}</span>
+                </div>
+              )}
+
+              {/* TAB 1: OVERVIEW */}
+              {loggedInTab === 'overview' && (
+                <div className="space-y-4">
+                  {/* Subscription Status Card */}
+                  {planTier === 'admin_lifetime' ? (
+                    <div className="rounded-xl p-4 bg-gradient-to-br from-indigo-50 via-blue-50 to-emerald-50 border border-indigo-200 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 font-extrabold text-indigo-900">
+                          <Crown className="w-4 h-4 text-amber-500" />
+                          Quản Trị Viên Hệ Thống · Toàn Quyền Vĩnh Viễn
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-bold">
+                          KHÔNG GIỚI HẠN
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-indigo-900/80 leading-relaxed">
+                        Thầy/cô có toàn quyền tạo mã kích hoạt và gia hạn trực tiếp cho giáo viên tại mục <strong>Quản Trị Mã</strong>.
+                      </p>
+                    </div>
+                  ) : planTier === 'paid' ? (
+                    <div className="rounded-xl p-4 bg-emerald-50 border border-emerald-200 space-y-2">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 font-extrabold text-emerald-900">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Gói Thành Viên Đang Hoạt Động
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-md bg-emerald-600 text-white text-[10.5px] font-bold tabular-nums">
+                          Còn {daysRemaining} ngày
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-emerald-900/85">
+                        Đang mở khóa <strong>100% tính năng</strong> đến hết ngày{' '}
+                        <strong>{formatVnDate(user.activeUntil)}</strong>. Cảm ơn thầy/cô đã đồng hành duy trì hệ thống!
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setLoggedInTab('billing')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-[11px] transition"
+                      >
+                        <Ticket className="w-3.5 h-3.5" />
+                        <span>Gia hạn thêm / Nhập mã kích hoạt</span>
+                      </button>
+                    </div>
+                  ) : planTier === 'trial' ? (
+                    <div className="rounded-xl p-4 bg-gradient-to-br from-blue-50 via-sky-50 to-emerald-50 border border-blue-200 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 font-extrabold text-blue-950">
+                          <Gift className="w-4 h-4 text-blue-600" />
+                          Đang Dùng Thử Full Tính Năng Miễn Phí
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-md bg-blue-600 text-white text-[10.5px] font-bold tabular-nums">
+                          Còn {daysRemaining} / {TRIAL_DURATION_DAYS} ngày
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-white rounded-full overflow-hidden border border-blue-200/80">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            daysRemaining <= 5 ? 'bg-amber-500' : 'bg-gradient-to-r from-blue-600 to-emerald-500'
+                          }`}
+                          style={{ width: `${trialProgressPercent}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-700 flex-wrap gap-1">
+                        <span>
+                          Miễn phí Full đến: <strong>{formatVnDate(user.trialEndsAt)}</strong>
+                        </span>
+                        <span className="text-emerald-800 font-semibold">
+                          Chia sẻ cộng đồng GDTC · Tùy tâm ủng hộ
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLoggedInTab('billing')}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold text-[11px] transition"
+                      >
+                        <Coffee className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Ủng hộ duy trì máy chủ / Xem gói gia hạn</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl p-4 bg-rose-50 border border-rose-200 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 font-extrabold text-rose-900">
+                          <Clock className="w-4 h-4 text-rose-600" />
+                          Đã Hết 30 Ngày Dùng Thử Miễn Phí
+                        </span>
+                        <span className="px-2.5 py-0.5 rounded-md bg-rose-600 text-white text-[10.5px] font-bold">
+                          TẠM KHÓA TẠO GIÁO ÁN
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-rose-900/90 leading-relaxed">
+                        Hồ sơ và các giáo án thầy/cô đã soạn vẫn được lưu an toàn. Mời thầy/cô gia hạn với chi phí duy trì hệ thống chỉ <strong>20.000đ/tuần</strong> (chỉ bằng 1 ly cà phê) để mở lại toàn bộ tính năng.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setLoggedInTab('billing')}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition"
+                      >
+                        <Coffee className="w-4 h-4" />
+                        <span>Mở Gói Gia Hạn (20k/Tuần) &amp; Nhập Mã Kích Hoạt</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Profile Summary */}
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-1.5">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1.5 font-bold text-slate-800">
+                        <UserCheck className="w-4 h-4 text-emerald-600" />
+                        Thông tin tài khoản cá nhân
+                      </span>
+                      <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                        {user.authMethod === 'google'
+                          ? 'Google 1 chạm'
+                          : user.authMethod === 'email_passwordless'
+                          ? 'Email không mật khẩu'
+                          : 'Tài khoản cá nhân'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-extrabold text-slate-900 pt-1">{user.fullName}</p>
+                    <p className="text-slate-600">{user.email}</p>
+                    <p className="text-slate-600 font-medium">{user.schoolName}</p>
+                    {lastSyncedAt && (
+                      <p className="text-[11px] text-emerald-700 flex items-center gap-1 pt-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Đã đồng bộ giáo án lần cuối: {new Date(lastSyncedAt).toLocaleString('vi-VN')}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Quick Notification to Author (optional for new accounts) */}
+                  {!isAdminOwner && notifications.length > 0 && !notifications[0].emailSent && (
+                    <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-blue-900 leading-snug">
+                        <strong>Gửi thông báo kích hoạt về tác giả</strong> ({ADMIN_NOTIFICATION_EMAIL}) để được hỗ trợ nhanh nhất khi cần.
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSendingGmail}
+                        onClick={() => handleSendRegNotification(notifications[0])}
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-[11px] shrink-0 flex items-center gap-1"
+                      >
+                        {isSendingGmail ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                        <span>Gửi Gmail</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Sync + Logout Actions */}
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await onManualSyncUp();
+                      }}
+                      disabled={isSyncing}
+                      className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-2 transition"
+                    >
+                      {isSyncing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      <span>Lưu &amp; Đồng Bộ Giáo Án Lên Tài Khoản Ngay</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full py-2.5 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold flex items-center justify-center gap-2 transition"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>Đăng Xuất / Chuyển Tài Khoản Khác</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 2: BILLING & VOLUNTARY SUPPORT */}
+              {loggedInTab === 'billing' && (
+                <div className="space-y-4">
+                  {/* Official Vietcombank Support & Charitable Student Fund Card */}
+                  <DonationSupportCard
+                    compact
+                    defaultShowQr
+                    suggestedAmountVnd={
+                      (SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).priceVnd
+                    }
+                    suggestedTransferNote={`Ung ho GDTC ${user.email.split('@')[0]}`}
+                    onShowToast={showToast}
+                  />
+
+                  {/* 4 Pricing Plans Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {SUBSCRIPTION_PLANS.map((plan) => {
+                      const isSelected = selectedPlanId === plan.id;
+                      return (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => setSelectedPlanId(plan.id)}
+                          className={`text-left p-3.5 rounded-xl border-2 transition relative ${
+                            isSelected
+                              ? 'border-emerald-600 bg-emerald-50/70 shadow-xs'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          {plan.popular && (
+                            <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
+                              Hợp nhịp học kỳ
+                            </span>
+                          )}
+                          {plan.bestValue && (
+                            <span className="absolute -top-2.5 right-2.5 px-2 py-0.5 rounded-full bg-blue-600 text-white text-[9.5px] font-extrabold uppercase tracking-wide">
+                              Tối ưu nhất
+                            </span>
+                          )}
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-extrabold text-slate-900 text-xs">
+                              {plan.name}
+                            </span>
+                            <span className="font-extrabold text-emerald-700 text-sm tabular-nums">
+                              {plan.priceText}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between text-[10.5px]">
+                            <span className="text-slate-600">{plan.tagline}</span>
+                          </div>
+                          <div className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-bold text-[10px]">
+                            <span>{plan.perMonthText}</span>
+                            <span>·</span>
+                            <span>+{plan.durationDays} ngày Full</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Group / Department Discount Card */}
+                  <div className="p-3 rounded-xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-start gap-2 text-[11px] text-indigo-950">
+                      <Users className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-extrabold">{GROUP_DISCOUNT_LABEL}</p>
+                        <p className="text-indigo-800/85">
+                          Phù hợp cho các thầy/cô cùng tổ chuyên môn GDTC đăng ký chung để tiết kiệm thêm chi phí.
+                        </p>
+                      </div>
+                    </div>
+                    <a
+                      href={buildRenewalMailtoHref(true)}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] whitespace-nowrap text-center shrink-0 transition"
+                    >
+                      Đăng Ký Nhóm (-20%)
+                    </a>
+                  </div>
+
+                  {/* Activation Key Redemption Box */}
+                  <form
+                    onSubmit={handleRedeemKey}
+                    className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5"
+                  >
+                    <label className="block font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                      <Ticket className="w-4 h-4 text-blue-600" />
+                      <span>Đã có Mã Kích Hoạt? Nhập để mở khóa ngay lập tức</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={licenseCodeInput}
+                        onChange={(e) => setLicenseCodeInput(e.target.value.toUpperCase())}
+                        placeholder="VD: GDTC-W1-7K9M-XXXX"
+                        className="flex-1 px-3 py-2.5 rounded-xl border border-slate-300 bg-white font-mono text-xs font-bold tracking-wider uppercase focus:border-blue-500 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isRedeeming}
+                        className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 shrink-0 transition"
+                      >
+                        {isRedeeming ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                        <span>Kích Hoạt</span>
+                      </button>
+                    </div>
+                    <p className="text-[10.5px] text-slate-500">
+                      Sau khi kích hoạt, thời hạn mới sẽ được cộng dồn trực tiếp vào tài khoản <strong>{user.email}</strong>.
+                    </p>
+                  </form>
+
+                  {/* Contact Author to Get Activation Key */}
+                  <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
+                    <div className="font-bold text-blue-950 text-xs flex items-center gap-1.5">
+                      <Mail className="w-4 h-4 text-blue-600" />
+                      <span>Đăng ký nhận Mã Kích Hoạt qua tác giả Lê Quốc Hưng</span>
+                    </div>
+                    <p className="text-[11px] text-slate-700 leading-relaxed">
+                      Gửi yêu cầu gói{' '}
+                      <strong>
+                        {(SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).name} (
+                        {(SUBSCRIPTION_PLANS.find((p) => p.id === selectedPlanId) || SUBSCRIPTION_PLANS[0]).priceText})
+                      </strong>{' '}
+                      tới hộp thư cá nhân{' '}
+                      <strong className="text-blue-700">{ADMIN_NOTIFICATION_EMAIL}</strong> để nhận mã kích hoạt hoặc gia hạn trực tiếp trên tài khoản.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <a
+                        href={buildRenewalMailtoHref()}
+                        className="py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Mở Email Gửi Yêu Cầu</span>
+                      </a>
+                      <button
+                        type="button"
+                        disabled={isSendingGmail}
+                        onClick={handleSendRenewalViaGmail}
+                        className="py-2.5 px-3 rounded-xl bg-white hover:bg-blue-100 text-blue-800 border border-blue-300 font-bold text-xs flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                      >
+                        {isSendingGmail ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        <span>Gửi Nhanh Qua Gmail</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: ADMIN LICENSE KEY & EXTENSION MANAGER */}
+              {loggedInTab === 'admin' && isAdminOwner && (
+                <div className="space-y-4">
+                  {/* Generate New Key Form */}
+                  <form
+                    onSubmit={handleAdminCreateKey}
+                    className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold text-indigo-950 text-xs flex items-center gap-1.5">
+                        <Plus className="w-4 h-4 text-indigo-600" />
+                        <span>Tạo Mã Kích Hoạt Mới Cho Giáo Viên</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={loadAdminData}
+                        disabled={isLoadingAdmin}
+                        className="p-1 text-indigo-600 hover:bg-indigo-100 rounded"
+                        title="Làm mới danh sách"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isLoadingAdmin ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {SUBSCRIPTION_PLANS.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setAdminGenPlanId(p.id)}
+                          className={`px-2.5 py-2 rounded-lg border text-left transition ${
+                            adminGenPlanId === p.id
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                              : 'bg-white text-slate-700 border-slate-200 hover:border-indigo-300 font-medium'
+                          }`}
+                        >
+                          <div className="text-[11px]">{p.shortLabel} ({p.durationDays} ngày)</div>
+                          <div
+                            className={`text-[10px] ${
+                              adminGenPlanId === p.id ? 'text-indigo-100' : 'text-emerald-700 font-bold'
+                            }`}
+                          >
+                            {p.priceText}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="email"
+                        value={adminGenEmail}
+                        onChange={(e) => setAdminGenEmail(e.target.value)}
+                        placeholder="Email nhận (để trống = mã dùng chung)"
+                        className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs focus:border-indigo-500 focus:outline-none"
+                      />
+                      <input
+                        type="text"
+                        value={adminGenNote}
+                        onChange={(e) => setAdminGenNote(e.target.value)}
+                        placeholder="Ghi chú (VD: Thầy Nam - TH Nghĩa Hiệp)"
+                        className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isGeneratingKey}
+                      className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                    >
+                      {isGeneratingKey ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Ticket className="w-4 h-4" />
+                      )}
+                      <span>Tạo Mã Kích Hoạt Ngay</span>
+                    </button>
+
+                    {newlyGeneratedKey && (
+                      <div className="p-3 rounded-xl bg-white border-2 border-emerald-400 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[10px] font-bold text-emerald-700 uppercase">
+                            Mã vừa tạo ({newlyGeneratedKey.planLabel})
+                          </div>
+                          <div className="font-mono text-sm font-extrabold text-slate-900 tracking-wider">
+                            {newlyGeneratedKey.code}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyCode(newlyGeneratedKey.code)}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 shrink-0"
+                        >
+                          {copiedKeyCode === newlyGeneratedKey.code ? (
+                            <Check className="w-3.5 h-3.5" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                          <span>{copiedKeyCode === newlyGeneratedKey.code ? 'Đã chép' : 'Sao chép'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </form>
+
+                  {/* Registered Users & 1-Click Direct Extension */}
+                  <div className="border border-slate-200 rounded-xl p-3.5 space-y-2.5 bg-slate-50/70">
+                    <div className="font-extrabold text-slate-900 flex items-center justify-between">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Users className="w-4 h-4 text-blue-600" />
+                        <span>Danh sách Giáo viên ({adminUsers.length}) · Gia hạn trực tiếp</span>
+                      </span>
+                    </div>
+                    {adminUsers.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">Chưa có tài khoản giáo viên nào.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        {adminUsers.map((u) => (
+                          <div
+                            key={u.id}
+                            className="p-2.5 rounded-lg bg-white border border-slate-200 space-y-1.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-900 truncate">{u.fullName}</p>
+                                <p className="text-[10.5px] text-slate-500 truncate">{u.email}</p>
+                              </div>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
+                                  u.planTier === 'admin_lifetime'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : u.planTier === 'paid'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : u.planTier === 'trial'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-rose-100 text-rose-800'
+                                }`}
+                              >
+                                {u.planTier === 'admin_lifetime'
+                                  ? 'Admin · Vĩnh viễn'
+                                  : u.planTier === 'paid'
+                                  ? `VIP · Còn ${u.daysRemaining} ngày`
+                                  : u.planTier === 'trial'
+                                  ? `Dùng thử · Còn ${u.daysRemaining} ngày`
+                                  : 'Đã hết hạn'}
+                              </span>
+                            </div>
+
+                            {u.planTier !== 'admin_lifetime' && (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
+                                <span className="text-[10px] text-slate-500">Gia hạn / Tặng thêm:</span>
+                                {[
+                                  { days: 7, label: '+7 ngày (20k)' },
+                                  { days: 30, label: '+30 ngày (49k)' },
+                                  { days: 120, label: '+120 ngày (1 HK Free)' },
+                                  { days: 135, label: '+Học kỳ (129k)' },
+                                  { days: 365, label: '+Năm (199k)' }
+                                ].map((btn) => (
+                                  <button
+                                    key={btn.days}
+                                    type="button"
+                                    disabled={extendingEmail === `${u.email}_${btn.days}`}
+                                    onClick={() => handleAdminExtend(u.email, btn.days, btn.label)}
+                                    className="px-2 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[10px] transition"
+                                  >
+                                    {extendingEmail === `${u.email}_${btn.days}` ? '...' : btn.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Generated Keys History */}
+                  <div className="border border-slate-200 rounded-xl p-3.5 space-y-2 bg-white">
+                    <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Lịch sử Mã Kích Hoạt ({adminKeys.length})</span>
+                    </div>
+                    {adminKeys.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">Chưa tạo mã kích hoạt nào.</p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                        {adminKeys.slice(0, 25).map((k) => (
+                          <div
+                            key={k.code}
+                            className="p-2 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono font-extrabold text-slate-900 text-[11px]">
+                                  {k.code}
+                                </span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">
+                                  {k.planLabel}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 truncate">
+                                {k.redeemedAt
+                                  ? `Đã dùng bởi ${k.redeemedByEmail} (${formatVnDate(k.redeemedAt)})`
+                                  : k.targetEmail
+                                  ? `Cấp riêng: ${k.targetEmail}`
+                                  : k.note || 'Chưa sử dụng · Dùng cho mọi tài khoản'}
+                              </p>
+                            </div>
+                            {k.redeemedAt ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
+                                Đã dùng
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyCode(k.code)}
+                                className="px-2 py-1 rounded-md bg-white hover:bg-blue-50 text-blue-700 border border-slate-200 font-bold text-[10px] flex items-center gap-1 shrink-0"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>{copiedKeyCode === k.code ? 'Đã chép' : 'Chép'}</span>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* NOT LOGGED IN: PASSWORDLESS 30-DAY FREE TRIAL FLOW */
+            <div className="p-5 space-y-4 text-xs">
+              {gateReason && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-950 flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <p className="font-bold text-amber-900">
+                      Mở khóa Full 100% tính năng miễn phí 30 ngày
+                    </p>
+                    <p className="text-[11px] text-amber-800 mt-0.5">
+                      Đăng nhập nhanh bằng tài khoản cá nhân (không cần mật khẩu) để sử dụng: <strong>{gateReason}</strong>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 1-Semester Full Free Access Hero Card */}
+              <div className="rounded-xl bg-gradient-to-br from-emerald-50 via-blue-50/70 to-indigo-50/70 border border-emerald-200 p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 font-extrabold text-emerald-950 text-xs">
+                    <Gift className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Mở Miễn Phí Hoàn Toàn Trọn 1 Học Kỳ (120 Ngày)</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold">
+                    KHÔNG CẦN MẬT KHẨU
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-700 leading-relaxed">
+                  Chỉ cần đăng nhập tài khoản cá nhân để dùng thoải mái toàn bộ <strong>308+ ảnh SGK (K1–K5)</strong>, <strong>Studio Sơ Đồ Pro</strong>, <strong>Google Docs / Drive</strong> và xuất Word/PDF hoàn toàn miễn phí trong <strong>1 học kỳ</strong> để trải nghiệm thực tế và góp ý hoàn thiện!
+                </p>
               </div>
 
               {errorMsg && (
@@ -803,543 +1250,222 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
 
-              {mode === 'recovery' ? (
-                <div className="space-y-4">
-                  {/* Recovery sub-tabs */}
-                  <div className="flex gap-2 border-b border-slate-200 pb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecoveryTab('reset');
-                        setErrorMsg(null);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition ${
-                        recoveryTab === 'reset'
-                          ? 'bg-teal-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Đặt lại mật khẩu
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRecoveryTab('find');
-                        setErrorMsg(null);
-                      }}
-                      className={`px-3 py-1.5 rounded-lg font-bold text-[11px] transition ${
-                        recoveryTab === 'find'
-                          ? 'bg-teal-600 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Tìm tài khoản đã đăng ký
-                    </button>
-                  </div>
+              {/* 1-Tap Google Sign-In */}
+              <button
+                type="button"
+                disabled={isGoogleLoading || isSubmitting}
+                onClick={handleGoogleQuickSignIn}
+                className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 border-2 border-blue-600 text-slate-900 font-extrabold text-xs shadow-xs flex items-center justify-center gap-2.5 transition disabled:opacity-50"
+              >
+                {isGoogleLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                ) : (
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="#4285F4"
+                      d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.87z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09A12 12 0 0 0 12 24z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.28 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12 12 0 0 0 0 10.76l3.99-3.09z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z"
+                    />
+                  </svg>
+                )}
+                <span>Tiếp Tục Với Tài Khoản Google (1 Chạm · Không Mật Khẩu)</span>
+              </button>
 
-                  {recoveryTab === 'find' ? (
-                    <div className="space-y-3">
-                      <form onSubmit={handleFindAccount} className="flex gap-2">
-                        <div className="relative flex-1">
-                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                          <input
-                            type="text"
-                            required
-                            value={findQuery}
-                            onChange={(e) => setFindQuery(e.target.value)}
-                            placeholder="Nhập họ tên giáo viên, tên trường hoặc một phần email..."
-                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-teal-500 focus:outline-none"
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          disabled={isSubmitting}
-                          className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold shrink-0"
-                        >
-                          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Tra cứu'}
-                        </button>
-                      </form>
-
-                      {foundAccounts !== null && (
-                        <div className="space-y-2">
-                          {foundAccounts.length === 0 ? (
-                            <p className="text-center py-4 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                              Không tìm thấy tài khoản nào phù hợp với từ khoá "{findQuery}".
-                            </p>
-                          ) : (
-                            foundAccounts.map((acc) => (
-                              <div
-                                key={acc.email}
-                                className="p-3 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between gap-2"
-                              >
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-900 truncate">{acc.fullName}</p>
-                                  <p className="text-[11px] text-teal-700 font-mono">{acc.maskedEmail}</p>
-                                  <p className="text-[10px] text-slate-500 truncate">{acc.schoolName}</p>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEmail(acc.email);
-                                      setMode('login');
-                                    }}
-                                    className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px]"
-                                  >
-                                    Đăng nhập
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setRecoveryEmail(acc.email);
-                                      setRecoveryTab('reset');
-                                    }}
-                                    className="px-2.5 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-[11px]"
-                                  >
-                                    Khôi phục MK
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Step 1: Request 6-digit recovery code */}
-                      <form onSubmit={handleRequestReset} className="space-y-2.5">
-                        <label className="block text-[11px] font-bold text-slate-700">
-                          Bước 1: Nhập email tài khoản cần khôi phục mật khẩu
-                        </label>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                            <input
-                              type="email"
-                              required
-                              value={recoveryEmail}
-                              onChange={(e) => setRecoveryEmail(e.target.value)}
-                              placeholder="lehung840110@gmail.com"
-                              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-teal-500 focus:outline-none"
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={isSubmitting}
-                            className="px-3.5 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold shrink-0"
-                          >
-                            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Tạo mã khôi phục'}
-                          </button>
-                        </div>
-                      </form>
-
-                      {recoveryRequestInfo && (
-                        <>
-                          {/* Recovery code status + optional Gmail send */}
-                          <div className="p-3.5 rounded-xl bg-teal-50 border border-teal-200 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-teal-900">
-                                Mã khôi phục cho {recoveryRequestInfo.fullName}
-                              </span>
-                              <span className="inline-flex items-center gap-1 text-[10px] text-teal-700 font-semibold">
-                                <Clock className="w-3 h-3" />
-                                Hết hạn lúc {new Date(recoveryRequestInfo.expiresAt).toLocaleTimeString('vi-VN')}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-teal-200">
-                              <span className="text-[11px] text-slate-600">Mã xác thực 6 số:</span>
-                              <span className="font-mono text-base font-extrabold tracking-widest text-teal-800">
-                                {recoveryRequestInfo.recoveryCode}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 pt-1">
-                              <button
-                                type="button"
-                                onClick={() => openRecoveryEmailConfirm(ADMIN_NOTIFICATION_EMAIL)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-[11px]"
-                              >
-                                <Send className="w-3 h-3" />
-                                <span>Gửi mã qua Gmail tới {ADMIN_NOTIFICATION_EMAIL}</span>
-                              </button>
-                              {recoveryRequestInfo.email !== ADMIN_NOTIFICATION_EMAIL && (
-                                <button
-                                  type="button"
-                                  onClick={() => openRecoveryEmailConfirm(recoveryRequestInfo.email)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-[11px]"
-                                >
-                                  <Send className="w-3 h-3" />
-                                  <span>Gửi tới {recoveryRequestInfo.maskedEmail}</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Step 2: Enter code + new password */}
-                          <form onSubmit={handleCompleteReset} className="space-y-2.5 pt-2 border-t border-slate-200">
-                            <label className="block text-[11px] font-bold text-slate-700">
-                              Bước 2: Nhập mã 6 số & đặt mật khẩu mới
-                            </label>
-                            <input
-                              type="text"
-                              required
-                              maxLength={6}
-                              value={recoveryCodeInput}
-                              onChange={(e) => setRecoveryCodeInput(e.target.value)}
-                              placeholder="Nhập mã khôi phục 6 chữ số"
-                              className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono tracking-widest focus:border-teal-500 focus:outline-none"
-                            />
-                            <input
-                              type="password"
-                              required
-                              minLength={6}
-                              autoComplete="new-password"
-                              value={recoveryNewPassword}
-                              onChange={(e) => setRecoveryNewPassword(e.target.value)}
-                              placeholder="Mật khẩu mới (tối thiểu 6 ký tự)"
-                              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-teal-500 focus:outline-none"
-                            />
-                            <input
-                              type="password"
-                              required
-                              minLength={6}
-                              autoComplete="new-password"
-                              value={recoveryConfirmPassword}
-                              onChange={(e) => setRecoveryConfirmPassword(e.target.value)}
-                              placeholder="Nhập lại mật khẩu mới"
-                              className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-teal-500 focus:outline-none"
-                            />
-                            <button
-                              type="submit"
-                              disabled={isSubmitting}
-                              className="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-bold flex items-center justify-center gap-2"
-                            >
-                              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
-                              <span>Đặt Lại Mật Khẩu & Đăng Nhập</span>
-                            </button>
-                          </form>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Remembered accounts quick-pick (Login mode) */}
-                  {mode === 'login' && rememberedAccounts.length > 0 && (
-                    <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
-                      <p className="text-[11px] font-bold text-blue-900">
-                        Tài khoản đã ghi nhớ trên thiết bị này:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {rememberedAccounts.map((acc) => (
-                          <div
-                            key={acc.email}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition ${
-                              email.toLowerCase() === acc.email.toLowerCase()
-                                ? 'bg-blue-600 text-white border-blue-600'
-                                : 'bg-white text-slate-700 border-slate-300 hover:border-blue-400'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setEmail(acc.email)}
-                              className="font-semibold truncate max-w-[190px]"
-                              title={`${acc.fullName} - ${acc.email}`}
-                            >
-                              {acc.fullName} ({acc.email})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => removeRememberedAccount(acc.email)}
-                              className="opacity-70 hover:opacity-100"
-                              title="Xóa khỏi danh sách ghi nhớ"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {mode === 'register' && (
-                    <div className="space-y-2.5">
-                      {/* Standout Benefits Showcase when Registering */}
-                      <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50 via-white to-sky-50 border border-emerald-200 space-y-2">
-                        <div className="flex items-center gap-1.5 font-extrabold text-emerald-900 text-[11.5px]">
-                          <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>Đặc quyền nổi trội khi đăng ký tài khoản SmartPlan GDTC Pro:</span>
-                        </div>
-                        <ul className="space-y-1.5 text-[11px] text-slate-700 leading-relaxed">
-                          <li className="flex items-start gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                            <span>
-                              <strong>Studio tạo sơ đồ đội hình mạnh mẽ &amp; linh hoạt:</strong> vẽ lưới ô vuông (3x3, 1x5...), đường song song, nhóm hình tròn/tam giác/gấp khúc, <strong>nối đối tượng nét liền – nét đứt – mũi tên</strong>, <strong>xoay góc tùy chỉnh (45°, 90°...)</strong>, lật gương Mirror &amp; canh thẳng hàng tự động.
-                            </span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                            <span>
-                              <strong>Thư viện lên tới 308 hình ảnh SGK (Khối 1 → Khối 5):</strong> phân loại chuẩn theo động tác &amp; trò chơi, tự động gắn chính xác giúp nâng cao chất lượng dạy học động tác GDTC.
-                            </span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                            <span>
-                              <strong>Tích hợp tự động “Tất cả trong 1” duy nhất:</strong> kết nối trực tiếp tài liệu <strong>Google Docs / Google Drive</strong>, sinh giáo án chuẩn PPCT, xuất Word/PDF A4 &amp; đồng bộ phiên bản — tiết kiệm tối đa thời gian, công sức soạn giảng cho Quý thầy cô.
-                            </span>
-                          </li>
-                        </ul>
-                        <p className="text-[10.5px] text-slate-600 pt-1.5 border-t border-emerald-200/70">
-                          💌 Mọi ý kiến đóng góp xin gửi qua hộp thư cá nhân:{' '}
-                          <a
-                            href={`mailto:${ADMIN_NOTIFICATION_EMAIL}`}
-                            className="font-bold text-blue-700 hover:underline"
-                          >
-                            {ADMIN_NOTIFICATION_EMAIL}
-                          </a>
-                        </p>
-                      </div>
-
-                      <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-[10.5px] leading-relaxed flex items-start gap-2">
-                        <Mail className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                        <span>
-                          Sau khi tạo tài khoản, hệ thống tạo <strong>mã xác nhận đăng ký</strong> và mở hộp thoại gửi thông báo xác nhận tới <strong>{ADMIN_NOTIFICATION_EMAIL}</strong>.
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Email giáo viên <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                        <input
-                          type="email"
-                          name="email"
-                          autoComplete="username"
-                          required
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          placeholder="vidu: lehung840110@gmail.com"
-                          className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {mode === 'register' && (
-                      <>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Họ và tên giáo viên <span className="text-red-500">*</span>
-                          </label>
-                          <div className="relative">
-                            <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                            <input
-                              type="text"
-                              required
-                              value={fullName}
-                              onChange={(e) => setFullName(e.target.value)}
-                              placeholder="Ví dụ: Lê Quốc Hưng"
-                              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            Đơn vị / Trường học
-                          </label>
-                          <div className="relative">
-                            <School className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                            <input
-                              type="text"
-                              value={schoolName}
-                              onChange={(e) => setSchoolName(e.target.value)}
-                              placeholder="TRƯỜNG TIỂU HỌC & THCS ..."
-                              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                            />
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                        Mật khẩu <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          name="password"
-                          autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                          required
-                          minLength={6}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          placeholder="Tối thiểu 6 ký tự"
-                          className="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                        />
+              {/* Remembered Accounts — 1-Tap Re-entry */}
+              {rememberedAccounts.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-bold text-slate-600">
+                    Tài khoản đã dùng trên máy này (bấm 1 chạm để vào ngay):
+                  </p>
+                  <div className="space-y-1.5">
+                    {rememberedAccounts.map((acc) => (
+                      <div
+                        key={acc.email}
+                        className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50/70 hover:border-blue-300 transition"
+                      >
                         <button
                           type="button"
-                          onClick={() => setShowPassword((v) => !v)}
-                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-                          title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                          disabled={isSubmitting}
+                          onClick={() => handleQuickRememberedSignIn(acc)}
+                          className="flex-1 text-left min-w-0 flex items-center gap-2.5"
                         >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                            {(acc.fullName || acc.email).charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 truncate">{acc.fullName}</p>
+                            <p className="text-[10.5px] text-slate-500 truncate">{acc.email}</p>
+                          </div>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRememberedAccount(acc.email)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg"
+                          title="Xóa khỏi danh sách ghi nhớ"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                    </div>
-
-                    {mode === 'register' && (
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                          Nhập lại mật khẩu <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                          <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                          <input
-                            type={showPassword ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            required
-                            minLength={6}
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            placeholder="Nhập lại mật khẩu"
-                            className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    )}
+                    ))}
                   </div>
-
-                  {/* Remember Me + Forgot Password Row */}
-                  <div className="flex items-center justify-between gap-2 pt-0.5">
-                    <label className="inline-flex items-center gap-2 cursor-pointer select-none text-[11px] text-slate-700 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span>Ghi nhớ tài khoản & đăng nhập (30 ngày)</span>
-                    </label>
-                    {mode === 'login' && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode('recovery');
-                          setRecoveryEmail(email);
-                          setErrorMsg(null);
-                        }}
-                        className="text-[11px] font-bold text-teal-700 hover:underline shrink-0"
-                      >
-                        Quên mật khẩu?
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={`w-full py-2.5 px-4 rounded-xl text-white font-bold flex items-center justify-center gap-2 shadow-sm transition ${
-                      mode === 'register'
-                        ? 'bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50'
-                        : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50'
-                    }`}
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : mode === 'register' ? (
-                      <UserPlus className="w-4 h-4" />
-                    ) : (
-                      <LogIn className="w-4 h-4" />
-                    )}
-                    <span>{mode === 'register' ? 'Tạo Tài Khoản & Gửi Xác Nhận' : 'Đăng Nhập Ngay'}</span>
-                  </button>
-                </form>
+                </div>
               )}
+
+              {/* Divider */}
+              <div className="relative flex items-center justify-center">
+                <div className="border-t border-slate-200 w-full" />
+                <span className="bg-white px-2.5 text-[10.5px] font-semibold text-slate-400 whitespace-nowrap">
+                  hoặc nhập Email cá nhân (không cần tạo mật khẩu)
+                </span>
+                <div className="border-t border-slate-200 w-full" />
+              </div>
+
+              {/* Passwordless Personal Email Form */}
+              <form onSubmit={handlePasswordlessSubmit} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Email cá nhân của thầy/cô <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="giaovien.gdtc@gmail.com"
+                      className="w-full pl-9 pr-3 py-2.5 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Họ và tên giáo viên
+                    </label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        placeholder="VD: Nguyễn Văn An"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Đơn vị / Trường
+                    </label>
+                    <div className="relative">
+                      <School className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={schoolName}
+                        onChange={(e) => setSchoolName(e.target.value)}
+                        placeholder="VD: Trường TH Nghĩa Hiệp"
+                        className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-[11px] text-slate-600 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span>Ghi nhớ đăng nhập trên thiết bị này cho lần mở sau</span>
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting || isGoogleLoading}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 disabled:opacity-50 text-white font-extrabold text-xs shadow-sm flex items-center justify-center gap-2 transition"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-amber-200" />
+                  )}
+                  <span>Vào Dùng Miễn Phí Trọn 1 Học Kỳ (Không Cần Mật Khẩu)</span>
+                </button>
+              </form>
+
+              {/* Transparent Pricing & Contact Footer */}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 space-y-1 leading-relaxed">
+                <p>
+                  <strong className="text-slate-800">☕ Vì cộng đồng giáo viên GDTC:</strong> Mở miễn phí trọn 1 học kỳ (120 ngày) &amp; cam kết bảo toàn 100% giáo án cũ. Nếu thấy hữu ích, thầy cô có thể ủng hộ tùy tâm duy trì máy chủ/API bất cứ lúc nào.
+                </p>
+                <p>
+                  Mọi ý kiến đóng góp &amp; hỗ trợ gửi về:{' '}
+                  <a
+                    href={`mailto:${ADMIN_NOTIFICATION_EMAIL}`}
+                    className="font-bold text-blue-700 hover:underline"
+                  >
+                    {ADMIN_NOTIFICATION_EMAIL}
+                  </a>
+                </p>
+              </div>
+
+              {/* Optional Legacy Password Login Collapsible */}
+              <div className="pt-1 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowLegacyPassword((v) => !v)}
+                  className="w-full py-1.5 text-[11px] text-slate-500 hover:text-slate-700 font-medium flex items-center justify-center gap-1"
+                >
+                  <span>Đã có tài khoản mật khẩu cũ?</span>
+                  {showLegacyPassword ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                {showLegacyPassword && (
+                  <form onSubmit={handleLegacyPasswordLogin} className="mt-2 p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+                    <p className="text-[10.5px] text-slate-500">
+                      Lưu ý: Bạn vẫn có thể vào lại tài khoản cũ ngay bên trên chỉ bằng Email mà không cần mật khẩu.
+                    </p>
+                    <input
+                      type="password"
+                      required
+                      value={legacyPassword}
+                      onChange={(e) => setLegacyPassword(e.target.value)}
+                      placeholder="Nhập mật khẩu cũ..."
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs focus:border-blue-500 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center justify-center gap-1.5"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Đăng nhập bằng mật khẩu cũ</span>
+                    </button>
+                  </form>
+                )}
+              </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Explicit Confirmation Dialog before sending email via Gmail API (MANDATORY per Workspace Skill) */}
-      {pendingEmailConfirm && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-900/75 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl shadow-2xl border border-blue-200 max-w-md w-full p-5 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-blue-100 text-blue-700">
-                <Send className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="text-sm font-bold text-slate-900">
-                  {pendingEmailConfirm.kind === 'registration'
-                    ? 'Xác nhận gửi email thông báo đăng ký'
-                    : 'Xác nhận gửi email mã khôi phục mật khẩu'}
-                </h4>
-                <p className="text-[11px] text-slate-500">
-                  Email sẽ được gửi thông qua tài khoản Gmail sau khi bạn xác nhận
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
-              <p className="font-bold text-slate-800 pb-1 border-b border-slate-200">
-                Tiêu đề: {pendingEmailConfirm.emailParams.subject}
-              </p>
-              {pendingEmailConfirm.summaryLines.map((line) => (
-                <div key={line.label} className="flex justify-between gap-2 text-[11px]">
-                  <span className="text-slate-500 shrink-0">{line.label}:</span>
-                  <span className="font-semibold text-slate-900 text-right break-all">{line.value}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={handleConfirmSendGmail}
-                disabled={isSendingGmail}
-                className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
-              >
-                {isSendingGmail ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
-                <span>
-                  {isSendingGmail
-                    ? 'Đang gửi email qua Gmail...'
-                    : `Đồng ý & Gửi Email tới ${pendingEmailConfirm.emailParams.to}`}
-                </span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href={buildMailtoHref(pendingEmailConfirm.emailParams)}
-                  className="flex-1 py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Mở ứng dụng Email</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setPendingEmailConfirm(null)}
-                  disabled={isSendingGmail}
-                  className="flex-1 py-2 px-3 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-600 font-semibold text-xs transition"
-                >
-                  Huỷ / Để sau
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

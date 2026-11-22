@@ -149,14 +149,37 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={onOpenAuth}
                   className={`min-h-[40px] min-w-[40px] px-2.5 py-1.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1 whitespace-nowrap shrink-0 transition ${
                     authUser
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300'
+                      ? authUser.hasFullAccess === false
+                        ? 'bg-amber-50 text-amber-800 border border-amber-300'
+                        : 'bg-emerald-50 text-emerald-800 border border-emerald-300'
                       : 'bg-slate-900 text-white'
                   }`}
-                  title={authUser ? `Tài khoản: ${authUser.email}` : 'Đăng nhập / Đăng ký'}
+                  title={
+                    authUser
+                      ? authUser.planTier === 'admin_lifetime'
+                        ? `Quản trị viên: ${authUser.email}`
+                        : authUser.hasFullAccess === false
+                        ? `Hết hạn dùng thử — Bấm để gia hạn`
+                        : `${authUser.fullName} · Còn ${authUser.daysRemaining ?? 120} ngày Full`
+                      : 'Đăng nhập 1 chạm (không mật khẩu) · Miễn phí trọn 1 học kỳ'
+                  }
                   aria-label={authUser ? 'Tài khoản' : 'Đăng nhập'}
                 >
                   {authUser ? (
-                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                    <>
+                      <UserCheck
+                        className={`w-4 h-4 ${
+                          authUser.hasFullAccess === false ? 'text-amber-600' : 'text-emerald-600'
+                        }`}
+                      />
+                      <span className="text-[10px] font-extrabold tabular-nums">
+                        {authUser.planTier === 'admin_lifetime'
+                          ? 'Admin'
+                          : authUser.hasFullAccess === false
+                          ? 'Gia hạn'
+                          : `${authUser.daysRemaining ?? 120}n`}
+                      </span>
+                    </>
                   ) : (
                     <LogIn className="w-4 h-4 text-sky-300" />
                   )}
@@ -285,20 +308,51 @@ export const Header: React.FC<HeaderProps> = ({
                   onClick={onOpenAuth}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0 ${
                     authUser
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                      ? authUser.hasFullAccess === false
+                        ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                        : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
                       : 'bg-slate-900 hover:bg-slate-800 text-white'
                   }`}
-                  title={authUser ? `Đang đăng nhập: ${authUser.email}` : 'Đăng nhập hoặc Đăng ký tài khoản giáo viên'}
+                  title={
+                    authUser
+                      ? authUser.planTier === 'admin_lifetime'
+                        ? `Quản trị viên: ${authUser.email} (Toàn quyền vĩnh viễn)`
+                        : authUser.hasFullAccess === false
+                        ? `Đã hết 30 ngày dùng thử — Bấm để gia hạn từ 20k/tuần`
+                        : `Đang đăng nhập: ${authUser.email} · Còn ${authUser.daysRemaining ?? 120} ngày Full`
+                      : 'Đăng nhập tài khoản cá nhân (không cần mật khẩu) · Mở Full miễn phí trọn 1 học kỳ'
+                  }
                 >
                   {authUser ? (
                     <>
-                      <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="max-w-[110px] truncate">{authUser.fullName}</span>
+                      <UserCheck
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          authUser.hasFullAccess === false ? 'text-amber-600' : 'text-emerald-600'
+                        }`}
+                      />
+                      <span className="max-w-[96px] truncate">{authUser.fullName}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold tabular-nums ${
+                          authUser.planTier === 'admin_lifetime'
+                            ? 'bg-indigo-600 text-white'
+                            : authUser.hasFullAccess === false
+                            ? 'bg-amber-600 text-white'
+                            : authUser.planTier === 'paid'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-blue-600 text-white'
+                        }`}
+                      >
+                        {authUser.planTier === 'admin_lifetime'
+                          ? 'Admin'
+                          : authUser.hasFullAccess === false
+                          ? 'Gia hạn'
+                          : `${authUser.daysRemaining ?? 120} ngày`}
+                      </span>
                     </>
                   ) : (
                     <>
                       <LogIn className="w-3.5 h-3.5 text-sky-300 shrink-0" />
-                      <span>Đăng nhập / ĐK</span>
+                      <span>Vào Free 1 Học Kỳ</span>
                     </>
                   )}
                 </button>

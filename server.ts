@@ -2341,7 +2341,10 @@ const WORKSPACES_DIR = path.join(DATA_DIR, 'workspaces');
 const SECRET_FILE = path.join(DATA_DIR, '.session_secret');
 const RECOVERY_CODES_FILE = path.join(DATA_DIR, 'recovery_codes.json');
 const REG_NOTIFICATIONS_FILE = path.join(DATA_DIR, 'registration_notifications.json');
+const LICENSE_KEYS_FILE = path.join(DATA_DIR, 'license_keys.json');
 const ADMIN_NOTIFICATION_EMAIL = 'lehung840110@gmail.com';
+const TRIAL_DURATION_DAYS = 120;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface StoredUser {
   id: string;
@@ -2350,10 +2353,28 @@ interface StoredUser {
   schoolName: string;
   role: 'teacher' | 'admin';
   passwordHash: string;
+  authMethod?: 'google' | 'email_passwordless' | 'password';
   createdAt: number;
   lastLoginAt: number;
+  trialStartedAt?: number;
+  trialEndsAt?: number;
+  paidUntil?: number;
   registrationConfirmed?: boolean;
   confirmedAt?: number;
+}
+
+interface StoredLicenseKey {
+  code: string;
+  planId: 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+  planLabel: string;
+  durationDays: number;
+  priceVnd: number;
+  targetEmail?: string;
+  note?: string;
+  createdAt: number;
+  createdBy: string;
+  redeemedAt?: number;
+  redeemedByEmail?: string;
 }
 
 interface StoredRecoveryCode {
@@ -2388,6 +2409,7 @@ function ensureAuthStorage() {
   if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '[]', 'utf8');
   if (!fs.existsSync(RECOVERY_CODES_FILE)) fs.writeFileSync(RECOVERY_CODES_FILE, '[]', 'utf8');
   if (!fs.existsSync(REG_NOTIFICATIONS_FILE)) fs.writeFileSync(REG_NOTIFICATIONS_FILE, '[]', 'utf8');
+  if (!fs.existsSync(LICENSE_KEYS_FILE)) fs.writeFileSync(LICENSE_KEYS_FILE, '[]', 'utf8');
 }
 
 function getSessionSecret(): string {
@@ -2444,6 +2466,131 @@ function readRegistrationNotifications(): RegistrationNotificationRecord[] {
 
 function writeRegistrationNotifications(items: RegistrationNotificationRecord[]) {
   writeJsonList(REG_NOTIFICATIONS_FILE, items);
+}
+
+function readLicenseKeys(): StoredLicenseKey[] {
+  return readJsonList<StoredLicenseKey>(LICENSE_KEYS_FILE);
+}
+
+function writeLicenseKeys(items: StoredLicenseKey[]) {
+  writeJsonList(LICENSE_KEYS_FILE, items);
+}
+
+const SERVER_PLANS: Record<
+  'week_1' | 'month_1' | 'semester_1' | 'year_1',
+  { prefix: 'W1' | 'M1' | 'S1' | 'Y1'; label: string; durationDays: number; priceVnd: number }
+> = {
+  week_1: { prefix: 'W1', label: 'Gói Tuần (7 ngày)', durationDays: 7, priceVnd: 20000 },
+  month_1: { prefix: 'M1', label: 'Gói Tháng (30 ngày)', durationDays: 30, priceVnd: 49000 },
+  semester_1: { prefix: 'S1', label: 'Gói Học Kỳ (4–5 tháng)', durationDays: 135, priceVnd: 129000 },
+  year_1: { prefix: 'Y1', label: 'Gói Năm Học (12 tháng)', durationDays: 365, priceVnd: 199000 }
+};
+
+const KEY_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const KEY_SIGNATURE_PEPPER = 'SMARTPLAN_GDTC_PRO_LQH_2026_V1';
+
+function computeServerLicenseChecksum(prefix: string, tokenPart: string): string {
+  const input = `${prefix.toUpperCase()}-${tokenPart.toUpperCase()}-${KEY_SIGNATURE_PEPPER}`;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b1;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 0x01000193);
+    h2 = Math.imul(h2 ^ (ch + i * 17), 0x85ebca6b);
+  }
+  const combined = ((h1 >>> 0) ^ (h2 >>> 0)) >>> 0;
+  let out = '';
+  let val = combined;
+  for (let i = 0; i < 4; i++) {
+    out += KEY_ALPHABET[val % KEY_ALPHABET.length];
+    val = Math.floor(val / KEY_ALPHABET.length) + ((h1 >>> (i * 5)) & 31);
+  }
+  return out;
+}
+
+function generateServerLicenseCode(planId: 'week_1' | 'month_1' | 'semester_1' | 'year_1'): string {
+  const plan = SERVER_PLANS[planId] || SERVER_PLANS.week_1;
+  let randPart = '';
+  for (let i = 0; i < 4; i++) {
+    randPart += KEY_ALPHABET[crypto.randomInt(0, KEY_ALPHABET.length)];
+  }
+  const chk = computeServerLicenseChecksum(plan.prefix, randPart);
+  return `GDTC-${plan.prefix}-${randPart}-${chk}`;
+}
+
+function verifyServerSignedCode(rawCode: string): {
+  valid: boolean;
+  normalizedCode: string;
+  planId?: 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+} {
+  const normalized = String(rawCode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+  const m = /^GDTC-(W1|M1|S1|Y1)-([A-Z0-9]{4})-([A-Z0-9]{4})$/.exec(normalized);
+  if (!m) return { valid: false, normalizedCode: normalized };
+  const [, prefix, randPart, chk] = m;
+  if (chk !== computeServerLicenseChecksum(prefix, randPart)) {
+    return { valid: false, normalizedCode: normalized };
+  }
+  const entry = (Object.entries(SERVER_PLANS) as Array<
+    ['week_1' | 'month_1' | 'semester_1' | 'year_1', { prefix: string }]
+  >).find(([, v]) => v.prefix === prefix);
+  return entry ? { valid: true, normalizedCode: normalized, planId: entry[0] } : { valid: false, normalizedCode: normalized };
+}
+
+function computeUserSubscription(u: StoredUser) {
+  const now = Date.now();
+  const trialStartedAt = u.trialStartedAt || u.createdAt || now;
+  const trialEndsAt = u.trialEndsAt || trialStartedAt + TRIAL_DURATION_DAYS * DAY_MS;
+  const paidUntil = u.paidUntil;
+
+  if (u.email === ADMIN_NOTIFICATION_EMAIL) {
+    return {
+      trialStartedAt,
+      trialEndsAt,
+      paidUntil,
+      planTier: 'admin_lifetime' as const,
+      activeUntil: null as number | null,
+      daysRemaining: 9999,
+      hasFullAccess: true
+    };
+  }
+
+  if (paidUntil && paidUntil > now) {
+    const activeUntil = Math.max(paidUntil, trialEndsAt);
+    return {
+      trialStartedAt,
+      trialEndsAt,
+      paidUntil,
+      planTier: 'paid' as const,
+      activeUntil,
+      daysRemaining: Math.max(1, Math.ceil((activeUntil - now) / DAY_MS)),
+      hasFullAccess: true
+    };
+  }
+
+  if (trialEndsAt > now) {
+    return {
+      trialStartedAt,
+      trialEndsAt,
+      paidUntil,
+      planTier: 'trial' as const,
+      activeUntil: trialEndsAt,
+      daysRemaining: Math.max(1, Math.ceil((trialEndsAt - now) / DAY_MS)),
+      hasFullAccess: true
+    };
+  }
+
+  return {
+    trialStartedAt,
+    trialEndsAt,
+    paidUntil,
+    planTier: 'expired' as const,
+    activeUntil: paidUntil && paidUntil > trialEndsAt ? paidUntil : trialEndsAt,
+    daysRemaining: 0,
+    hasFullAccess: false
+  };
 }
 
 function hashPassword(password: string): string {
@@ -2531,16 +2678,25 @@ function authenticateRequest(req: Request): StoredUser | null {
 }
 
 function toPublicUser(u: StoredUser) {
+  const sub = computeUserSubscription(u);
   return {
     id: u.id,
     email: u.email,
     fullName: u.fullName,
     schoolName: u.schoolName,
     role: u.email === ADMIN_NOTIFICATION_EMAIL ? 'admin' : u.role,
+    authMethod: u.authMethod || 'password',
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
     registrationConfirmed: Boolean(u.registrationConfirmed),
-    confirmedAt: u.confirmedAt
+    confirmedAt: u.confirmedAt,
+    trialStartedAt: sub.trialStartedAt,
+    trialEndsAt: sub.trialEndsAt,
+    paidUntil: sub.paidUntil,
+    planTier: sub.planTier,
+    activeUntil: sub.activeUntil,
+    daysRemaining: sub.daysRemaining,
+    hasFullAccess: sub.hasFullAccess
   };
 }
 
@@ -2551,6 +2707,105 @@ function setSessionCookie(res: Response, token: string, rememberMe = true) {
     `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${maxAgePart}`
   );
 }
+
+// Passwordless personal account sign-in (Google 1-tap or Personal Email — NO password required!)
+// Automatically grants 30 days full-feature free trial on first sign-in (never resets on re-login).
+app.post('/api/auth/passwordless', (req: Request, res: Response) => {
+  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  const fullNameInput = String(req.body?.fullName || '').trim();
+  const schoolNameInput = String(req.body?.schoolName || '').trim();
+  const provider = req.body?.provider === 'google' ? 'google' : 'email_passwordless';
+  const rememberMe = req.body?.rememberMe !== false;
+
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email cá nhân không hợp lệ. Vui lòng nhập đúng định dạng email (ví dụ: ten@gmail.com).'
+    });
+  }
+
+  const users = readUsersList();
+  const now = Date.now();
+  const existingIdx = users.findIndex((u) => u.email === rawEmail);
+
+  if (existingIdx >= 0) {
+    const existing = users[existingIdx];
+    existing.lastLoginAt = now;
+    if (!existing.trialStartedAt) existing.trialStartedAt = existing.createdAt || now;
+    if (!existing.trialEndsAt) existing.trialEndsAt = existing.trialStartedAt + TRIAL_DURATION_DAYS * DAY_MS;
+    if (fullNameInput && (!existing.fullName || existing.fullName === 'Giáo viên GDTC')) {
+      existing.fullName = fullNameInput;
+    }
+    if (schoolNameInput && (!existing.schoolName || existing.schoolName === 'TRƯỜNG TIỂU HỌC & THCS')) {
+      existing.schoolName = schoolNameInput;
+    }
+    if (existing.email === ADMIN_NOTIFICATION_EMAIL && existing.role !== 'admin') {
+      existing.role = 'admin';
+    }
+    if (!existing.authMethod) existing.authMethod = provider;
+    writeUsersList(users);
+
+    const token = signSessionToken(existing, rememberMe);
+    setSessionCookie(res, token, rememberMe);
+    return res.json({
+      success: true,
+      isNewUser: false,
+      token,
+      user: toPublicUser(existing)
+    });
+  }
+
+  const isAdminAccount = rawEmail === ADMIN_NOTIFICATION_EMAIL;
+  const derivedName = fullNameInput || rawEmail.split('@')[0] || 'Giáo viên GDTC';
+  const newUser: StoredUser = {
+    id: `usr_${now}_${crypto.randomBytes(4).toString('hex')}`,
+    email: rawEmail,
+    fullName: derivedName,
+    schoolName: schoolNameInput || 'TRƯỜNG TIỂU HỌC & THCS',
+    role: isAdminAccount ? 'admin' : 'teacher',
+    passwordHash: hashPassword(crypto.randomBytes(24).toString('hex')),
+    authMethod: provider,
+    createdAt: now,
+    lastLoginAt: now,
+    trialStartedAt: now,
+    trialEndsAt: now + TRIAL_DURATION_DAYS * DAY_MS,
+    registrationConfirmed: true,
+    confirmedAt: now
+  };
+
+  users.push(newUser);
+  writeUsersList(users);
+
+  const confirmationCode = String(crypto.randomInt(100000, 999999));
+  const notificationRecord: RegistrationNotificationRecord = {
+    id: `reg_${now}_${crypto.randomBytes(3).toString('hex')}`,
+    userId: newUser.id,
+    email: newUser.email,
+    fullName: newUser.fullName,
+    schoolName: newUser.schoolName,
+    notifyEmail: ADMIN_NOTIFICATION_EMAIL,
+    confirmationCode,
+    registeredAt: now,
+    emailSent: false,
+    confirmed: true,
+    confirmedAt: now,
+    confirmedBy: provider
+  };
+  const notifications = readRegistrationNotifications();
+  notifications.unshift(notificationRecord);
+  writeRegistrationNotifications(notifications.slice(0, 200));
+
+  const token = signSessionToken(newUser, rememberMe);
+  setSessionCookie(res, token, rememberMe);
+
+  return res.json({
+    success: true,
+    isNewUser: true,
+    token,
+    user: toPublicUser(newUser),
+    registrationNotification: notificationRecord
+  });
+});
 
 app.post('/api/auth/register', (req: Request, res: Response) => {
   const rawEmail = String(req.body?.email || '').trim().toLowerCase();
@@ -2902,6 +3157,170 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
     return res.json({ authenticated: false, user: null });
   }
   return res.json({ authenticated: true, user: toPublicUser(user) });
+});
+
+// Redeem a subscription activation key (e.g. 20k/week, 50k/month, 180k/semester, 300k/year)
+app.post('/api/subscription/redeem', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Vui lòng đăng nhập tài khoản trước khi nhập mã kích hoạt.' });
+  }
+
+  const rawCode = String(req.body?.code || '').trim().toUpperCase().replace(/\s+/g, '');
+  if (!rawCode) {
+    return res.status(400).json({ success: false, error: 'Vui lòng nhập mã kích hoạt.' });
+  }
+
+  const keys = readLicenseKeys();
+  let keyIdx = keys.findIndex((k) => k.code.toUpperCase() === rawCode);
+  let durationDays = 0;
+  let planLabel = '';
+
+  if (keyIdx >= 0) {
+    const keyRec = keys[keyIdx];
+    if (keyRec.redeemedAt) {
+      return res.status(400).json({
+        success: false,
+        error: `Mã kích hoạt này đã được sử dụng trước đó (${keyRec.redeemedByEmail || 'tài khoản khác'}).`
+      });
+    }
+    if (keyRec.targetEmail && keyRec.targetEmail.toLowerCase() !== authUser.email.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        error: `Mã kích hoạt này được cấp riêng cho email ${keyRec.targetEmail}.`
+      });
+    }
+    durationDays = keyRec.durationDays;
+    planLabel = keyRec.planLabel;
+    keys[keyIdx].redeemedAt = Date.now();
+    keys[keyIdx].redeemedByEmail = authUser.email;
+    writeLicenseKeys(keys);
+  } else {
+    // Also support signed keys generated offline by admin
+    const sigCheck = verifyServerSignedCode(rawCode);
+    if (!sigCheck.valid || !sigCheck.planId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mã kích hoạt không hợp lệ hoặc bị sai ký tự. Vui lòng kiểm tra lại.'
+      });
+    }
+    const plan = SERVER_PLANS[sigCheck.planId];
+    durationDays = plan.durationDays;
+    planLabel = plan.label;
+    keys.unshift({
+      code: sigCheck.normalizedCode,
+      planId: sigCheck.planId,
+      planLabel: plan.label,
+      durationDays: plan.durationDays,
+      priceVnd: plan.priceVnd,
+      createdAt: Date.now(),
+      createdBy: ADMIN_NOTIFICATION_EMAIL,
+      redeemedAt: Date.now(),
+      redeemedByEmail: authUser.email
+    });
+    writeLicenseKeys(keys.slice(0, 500));
+  }
+
+  const users = readUsersList();
+  const userIdx = users.findIndex((u) => u.id === authUser.id);
+  if (userIdx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy tài khoản.' });
+  }
+
+  const now = Date.now();
+  const baseTime = Math.max(now, users[userIdx].paidUntil || 0, users[userIdx].trialEndsAt || 0);
+  users[userIdx].paidUntil = baseTime + durationDays * DAY_MS;
+  writeUsersList(users);
+
+  return res.json({
+    success: true,
+    planLabel,
+    durationDays,
+    user: toPublicUser(users[userIdx])
+  });
+});
+
+// Admin subscription dashboard (only lehung840110@gmail.com)
+app.get('/api/admin/subscriptions', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới có quyền truy cập mục này.' });
+  }
+
+  const users = readUsersList()
+    .map((u) => toPublicUser(u))
+    .sort((a, b) => (b.lastLoginAt || 0) - (a.lastLoginAt || 0));
+  const keys = readLicenseKeys().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  return res.json({
+    success: true,
+    users,
+    keys
+  });
+});
+
+app.post('/api/admin/license-keys', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới được tạo mã kích hoạt.' });
+  }
+
+  const planIdRaw = String(req.body?.planId || 'week_1') as 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+  const plan = SERVER_PLANS[planIdRaw] || SERVER_PLANS.week_1;
+  const planId = SERVER_PLANS[planIdRaw] ? planIdRaw : 'week_1';
+  const targetEmail = String(req.body?.targetEmail || '').trim().toLowerCase() || undefined;
+  const note = String(req.body?.note || '').trim().slice(0, 120) || undefined;
+
+  const code = generateServerLicenseCode(planId);
+  const record: StoredLicenseKey = {
+    code,
+    planId,
+    planLabel: plan.label,
+    durationDays: plan.durationDays,
+    priceVnd: plan.priceVnd,
+    targetEmail,
+    note,
+    createdAt: Date.now(),
+    createdBy: authUser.email
+  };
+
+  const keys = readLicenseKeys();
+  keys.unshift(record);
+  writeLicenseKeys(keys.slice(0, 500));
+
+  return res.json({
+    success: true,
+    key: record
+  });
+});
+
+app.post('/api/admin/extend-user', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới được gia hạn trực tiếp.' });
+  }
+
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const durationDays = Number(req.body?.durationDays || 7);
+  if (!email || !Number.isFinite(durationDays) || durationDays < 1 || durationDays > 3650) {
+    return res.status(400).json({ success: false, error: 'Thông tin email hoặc số ngày gia hạn không hợp lệ.' });
+  }
+
+  const users = readUsersList();
+  const idx = users.findIndex((u) => u.email === email);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: `Không tìm thấy tài khoản ${email}.` });
+  }
+
+  const now = Date.now();
+  const baseTime = Math.max(now, users[idx].paidUntil || 0, users[idx].trialEndsAt || 0);
+  users[idx].paidUntil = baseTime + durationDays * DAY_MS;
+  writeUsersList(users);
+
+  return res.json({
+    success: true,
+    user: toPublicUser(users[idx])
+  });
 });
 
 app.get('/api/workspace', (req: Request, res: Response) => {

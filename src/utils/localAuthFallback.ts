@@ -2,8 +2,18 @@ import { getAppStateDB, setAppStateDB, safeLocalStorageSet } from './db';
 import type {
   AuthUser,
   FoundAccountHint,
-  RegistrationNotificationItem
+  RegistrationNotificationItem,
+  LicenseKeyRecord
 } from '../contexts/AuthContext';
+import {
+  DAY_MS,
+  TRIAL_DURATION_DAYS,
+  SubscriptionPlanId,
+  computeSubscriptionState,
+  generateSignedLicenseCode,
+  getSubscriptionPlanById,
+  verifySignedLicenseCode
+} from './subscriptionPlans';
 
 export const LOCAL_ADMIN_NOTIFICATION_EMAIL = 'lehung840110@gmail.com';
 export const LOCAL_TOKEN_PREFIX = 'local_sess_';
@@ -12,6 +22,7 @@ const USERS_KEY = 'gdtc_local_users_v1';
 const SESSIONS_KEY = 'gdtc_local_sessions_v1';
 const RECOVERY_CODES_KEY = 'gdtc_local_recovery_codes_v1';
 const NOTIFICATIONS_KEY = 'gdtc_local_reg_notifications_v1';
+const LICENSE_KEYS_KEY = 'gdtc_local_license_keys_v1';
 
 interface LocalStoredUser {
   id: string;
@@ -20,8 +31,12 @@ interface LocalStoredUser {
   schoolName: string;
   role: 'teacher' | 'admin';
   passwordHash: string;
+  authMethod?: 'google' | 'email_passwordless' | 'password';
   createdAt: number;
   lastLoginAt: number;
+  trialStartedAt?: number;
+  trialEndsAt?: number;
+  paidUntil?: number;
   registrationConfirmed?: boolean;
   confirmedAt?: number;
 }
@@ -182,17 +197,41 @@ function resolveUserByToken(token?: string | null): LocalStoredUser | null {
 }
 
 function toPublicUser(u: LocalStoredUser): AuthUser {
+  const sub = computeSubscriptionState({
+    email: u.email,
+    createdAt: u.createdAt,
+    trialStartedAt: u.trialStartedAt,
+    trialEndsAt: u.trialEndsAt,
+    paidUntil: u.paidUntil
+  });
   return {
     id: u.id,
     email: u.email,
     fullName: u.fullName,
     schoolName: u.schoolName,
     role: u.email === LOCAL_ADMIN_NOTIFICATION_EMAIL ? 'admin' : u.role,
+    authMethod: u.authMethod || 'password',
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
     registrationConfirmed: Boolean(u.registrationConfirmed),
-    confirmedAt: u.confirmedAt
+    confirmedAt: u.confirmedAt,
+    trialStartedAt: sub.trialStartedAt,
+    trialEndsAt: sub.trialEndsAt,
+    paidUntil: sub.paidUntil,
+    planTier: sub.planTier,
+    activeUntil: sub.activeUntil,
+    daysRemaining: sub.daysRemaining,
+    hasFullAccess: sub.hasFullAccess
   };
+}
+
+function readLocalLicenseKeys(): LicenseKeyRecord[] {
+  const list = readJsonStore<LicenseKeyRecord[]>(LICENSE_KEYS_KEY, []);
+  return Array.isArray(list) ? list : [];
+}
+
+function writeLocalLicenseKeys(items: LicenseKeyRecord[]): void {
+  writeJsonStore(LICENSE_KEYS_KEY, items.slice(0, 500));
 }
 
 function readNotifications(): RegistrationNotificationItem[] {
@@ -635,4 +674,261 @@ export async function localPushWorkspace(
   };
   await setAppStateDB(workspaceStorageKey(authUser.id), payload);
   return { success: true, updatedAt };
+}
+
+export async function localPasswordlessAuth(params: {
+  email: string;
+  fullName?: string;
+  schoolName?: string;
+  provider: 'google' | 'email_passwordless';
+  rememberMe?: boolean;
+}): Promise<{
+  success: boolean;
+  isNewUser?: boolean;
+  error?: string;
+  token?: string;
+  user?: AuthUser;
+  registrationNotification?: RegistrationNotificationItem;
+}> {
+  const rawEmail = String(params.email || '').trim().toLowerCase();
+  const fullNameInput = String(params.fullName || '').trim();
+  const schoolNameInput = String(params.schoolName || '').trim();
+  const provider = params.provider === 'google' ? 'google' : 'email_passwordless';
+  const rememberMe = params.rememberMe !== false;
+
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return {
+      success: false,
+      error: 'Email cá nhân không hợp lệ. Vui lòng nhập đúng định dạng email (ví dụ: ten@gmail.com).'
+    };
+  }
+
+  const users = readUsers();
+  const now = Date.now();
+  const existingIdx = users.findIndex((u) => u.email === rawEmail);
+
+  if (existingIdx >= 0) {
+    const existing = users[existingIdx];
+    existing.lastLoginAt = now;
+    if (!existing.trialStartedAt) existing.trialStartedAt = existing.createdAt || now;
+    if (!existing.trialEndsAt) existing.trialEndsAt = existing.trialStartedAt + TRIAL_DURATION_DAYS * DAY_MS;
+    if (fullNameInput && (!existing.fullName || existing.fullName === 'Giáo viên GDTC')) {
+      existing.fullName = fullNameInput;
+    }
+    if (schoolNameInput && (!existing.schoolName || existing.schoolName === 'TRƯỜNG TIỂU HỌC & THCS')) {
+      existing.schoolName = schoolNameInput;
+    }
+    if (existing.email === LOCAL_ADMIN_NOTIFICATION_EMAIL && existing.role !== 'admin') {
+      existing.role = 'admin';
+    }
+    if (!existing.authMethod) existing.authMethod = provider;
+    writeUsers(users);
+
+    const token = createLocalSession(existing.id, rememberMe);
+    return {
+      success: true,
+      isNewUser: false,
+      token,
+      user: toPublicUser(existing)
+    };
+  }
+
+  const isAdminAccount = rawEmail === LOCAL_ADMIN_NOTIFICATION_EMAIL;
+  const derivedName = fullNameInput || rawEmail.split('@')[0] || 'Giáo viên GDTC';
+  const newUser: LocalStoredUser = {
+    id: `usr_${now}_${randomHex(4)}`,
+    email: rawEmail,
+    fullName: derivedName,
+    schoolName: schoolNameInput || 'TRƯỜNG TIỂU HỌC & THCS',
+    role: isAdminAccount ? 'admin' : 'teacher',
+    passwordHash: await hashLocalSecret(randomHex(24)),
+    authMethod: provider,
+    createdAt: now,
+    lastLoginAt: now,
+    trialStartedAt: now,
+    trialEndsAt: now + TRIAL_DURATION_DAYS * DAY_MS,
+    registrationConfirmed: true,
+    confirmedAt: now
+  };
+
+  users.push(newUser);
+  writeUsers(users);
+
+  const notificationRecord: RegistrationNotificationItem = {
+    id: `reg_${now}_${randomHex(3)}`,
+    userId: newUser.id,
+    email: newUser.email,
+    fullName: newUser.fullName,
+    schoolName: newUser.schoolName,
+    notifyEmail: LOCAL_ADMIN_NOTIFICATION_EMAIL,
+    confirmationCode: randomSixDigitCode(),
+    registeredAt: now,
+    emailSent: false,
+    confirmed: true,
+    confirmedAt: now,
+    confirmedBy: provider
+  };
+  const notifications = readNotifications();
+  notifications.unshift(notificationRecord);
+  writeNotifications(notifications);
+
+  const token = createLocalSession(newUser.id, rememberMe);
+  return {
+    success: true,
+    isNewUser: true,
+    token,
+    user: toPublicUser(newUser),
+    registrationNotification: notificationRecord
+  };
+}
+
+export function localRedeemLicenseKey(
+  token: string | null,
+  rawCode: string
+): {
+  success: boolean;
+  error?: string;
+  planLabel?: string;
+  durationDays?: number;
+  user?: AuthUser;
+} {
+  const authUser = resolveUserByToken(token);
+  if (!authUser) {
+    return { success: false, error: 'Vui lòng đăng nhập tài khoản trước khi nhập mã kích hoạt.' };
+  }
+
+  const normalized = String(rawCode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+  if (!normalized) {
+    return { success: false, error: 'Vui lòng nhập mã kích hoạt.' };
+  }
+
+  const keys = readLocalLicenseKeys();
+  const keyIdx = keys.findIndex((k) => k.code.toUpperCase() === normalized);
+  let durationDays = 0;
+  let planLabel = '';
+
+  if (keyIdx >= 0) {
+    const rec = keys[keyIdx];
+    if (rec.redeemedAt) {
+      return { success: false, error: 'Mã kích hoạt này đã được sử dụng trước đó.' };
+    }
+    if (rec.targetEmail && rec.targetEmail.toLowerCase() !== authUser.email.toLowerCase()) {
+      return { success: false, error: `Mã kích hoạt này được cấp riêng cho email ${rec.targetEmail}.` };
+    }
+    durationDays = rec.durationDays;
+    planLabel = rec.planLabel;
+    keys[keyIdx].redeemedAt = Date.now();
+    keys[keyIdx].redeemedByEmail = authUser.email;
+    writeLocalLicenseKeys(keys);
+  } else {
+    const sig = verifySignedLicenseCode(normalized);
+    if (!sig.valid || !sig.plan) {
+      return {
+        success: false,
+        error: 'Mã kích hoạt không hợp lệ hoặc bị sai ký tự. Vui lòng kiểm tra lại.'
+      };
+    }
+    durationDays = sig.plan.durationDays;
+    planLabel = sig.plan.name;
+    keys.unshift({
+      code: sig.normalizedCode,
+      planId: sig.plan.id,
+      planLabel: sig.plan.name,
+      durationDays: sig.plan.durationDays,
+      priceVnd: sig.plan.priceVnd,
+      createdAt: Date.now(),
+      createdBy: LOCAL_ADMIN_NOTIFICATION_EMAIL,
+      redeemedAt: Date.now(),
+      redeemedByEmail: authUser.email
+    });
+    writeLocalLicenseKeys(keys);
+  }
+
+  const users = readUsers();
+  const userIdx = users.findIndex((u) => u.id === authUser.id);
+  if (userIdx < 0) {
+    return { success: false, error: 'Không tìm thấy tài khoản.' };
+  }
+  const now = Date.now();
+  const baseTime = Math.max(now, users[userIdx].paidUntil || 0, users[userIdx].trialEndsAt || 0);
+  users[userIdx].paidUntil = baseTime + durationDays * DAY_MS;
+  writeUsers(users);
+
+  return {
+    success: true,
+    planLabel,
+    durationDays,
+    user: toPublicUser(users[userIdx])
+  };
+}
+
+export function localAdminGetSubscriptions(token: string | null): {
+  success: boolean;
+  users?: AuthUser[];
+  keys?: LicenseKeyRecord[];
+  error?: string;
+} {
+  const authUser = resolveUserByToken(token);
+  if (!authUser || authUser.email !== LOCAL_ADMIN_NOTIFICATION_EMAIL) {
+    return { success: false, error: 'Chỉ quản trị viên mới có quyền truy cập mục này.' };
+  }
+  const users = readUsers()
+    .map((u) => toPublicUser(u))
+    .sort((a, b) => (b.lastLoginAt || 0) - (a.lastLoginAt || 0));
+  const keys = readLocalLicenseKeys().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return { success: true, users, keys };
+}
+
+export function localAdminCreateLicenseKey(
+  token: string | null,
+  params: { planId: SubscriptionPlanId; targetEmail?: string; note?: string }
+): { success: boolean; key?: LicenseKeyRecord; error?: string } {
+  const authUser = resolveUserByToken(token);
+  if (!authUser || authUser.email !== LOCAL_ADMIN_NOTIFICATION_EMAIL) {
+    return { success: false, error: 'Chỉ quản trị viên mới được tạo mã kích hoạt.' };
+  }
+  const plan = getSubscriptionPlanById(params.planId);
+  const record: LicenseKeyRecord = {
+    code: generateSignedLicenseCode(plan.id),
+    planId: plan.id,
+    planLabel: plan.name,
+    durationDays: plan.durationDays,
+    priceVnd: plan.priceVnd,
+    targetEmail: params.targetEmail?.trim().toLowerCase() || undefined,
+    note: params.note?.trim().slice(0, 120) || undefined,
+    createdAt: Date.now(),
+    createdBy: authUser.email
+  };
+  const keys = readLocalLicenseKeys();
+  keys.unshift(record);
+  writeLocalLicenseKeys(keys);
+  return { success: true, key: record };
+}
+
+export function localAdminExtendUser(
+  token: string | null,
+  params: { email: string; durationDays: number }
+): { success: boolean; user?: AuthUser; error?: string } {
+  const authUser = resolveUserByToken(token);
+  if (!authUser || authUser.email !== LOCAL_ADMIN_NOTIFICATION_EMAIL) {
+    return { success: false, error: 'Chỉ quản trị viên mới được gia hạn trực tiếp.' };
+  }
+  const rawEmail = String(params.email || '').trim().toLowerCase();
+  const days = Number(params.durationDays || 7);
+  if (!rawEmail || !Number.isFinite(days) || days < 1) {
+    return { success: false, error: 'Email hoặc số ngày gia hạn không hợp lệ.' };
+  }
+  const users = readUsers();
+  const idx = users.findIndex((u) => u.email === rawEmail);
+  if (idx < 0) {
+    return { success: false, error: `Không tìm thấy tài khoản ${rawEmail}.` };
+  }
+  const now = Date.now();
+  const baseTime = Math.max(now, users[idx].paidUntil || 0, users[idx].trialEndsAt || 0);
+  users[idx].paidUntil = baseTime + days * DAY_MS;
+  writeUsers(users);
+  return { success: true, user: toPublicUser(users[idx]) };
 }

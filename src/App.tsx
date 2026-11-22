@@ -55,7 +55,8 @@ import {
   setAppStateDB,
   clearImagesDB,
 } from './utils/db';
-import { CheckCircle2, Loader2, Lock, UserPlus, LogIn } from 'lucide-react';
+import { CheckCircle2, Loader2, Lock, UserPlus, LogIn, Clock, Coffee, Sparkles } from 'lucide-react';
+import { EXPIRY_WARNING_DAYS, formatVnDate } from './utils/subscriptionPlans';
 import {
   PlanVersionStore,
   LessonPlanVersion,
@@ -97,9 +98,19 @@ import {
 export default function App() {
   const { user: authUser, isLoading: authLoading, pullWorkspace, pushWorkspace } = useAuth();
   const isGuest = !authLoading && !authUser;
+  const isSubscriptionExpired = Boolean(!authLoading && authUser && authUser.hasFullAccess === false);
+  const isAccessLocked = isGuest || isSubscriptionExpired;
+  const isTrialExpiringSoon = Boolean(
+    !authLoading &&
+      authUser &&
+      authUser.planTier === 'trial' &&
+      typeof authUser.daysRemaining === 'number' &&
+      authUser.daysRemaining > 0 &&
+      authUser.daysRemaining <= EXPIRY_WARNING_DAYS
+  );
   const [activeTab, setActiveTab] = useState<string>('tab-generator');
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'billing'>('register');
   const [authGateReason, setAuthGateReason] = useState<string | null>(null);
   const [userCustomTemplates, setUserCustomTemplates] = useState<UserCustomTemplate[]>([]);
   const [activeCustomTemplateId, setActiveCustomTemplateId] = useState<string | null>(null);
@@ -184,7 +195,7 @@ export default function App() {
   const [scanInitialPage, setScanInitialPage] = useState<number | undefined>(undefined);
 
   const handleNavigateToScanFromLesson = (targetGrade: GradeLevel, targetPage?: number) => {
-    if (isGuest) {
+    if (isAccessLocked) {
       requireAuth('Quét & bóc tách ảnh trực tiếp từ SGK (Tab 1)');
       return;
     }
@@ -198,15 +209,20 @@ export default function App() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isDbLoadedRef = useRef<boolean>(false);
 
-  const openAuthModal = (mode: 'login' | 'register' = 'login', reason: string | null = null) => {
+  const openAuthModal = (mode: 'login' | 'register' | 'billing' = 'login', reason: string | null = null) => {
     setAuthGateReason(reason);
     setAuthModalMode(mode);
     setIsAuthModalOpen(true);
   };
 
-  const requireAuth = (featureName: string, mode: 'login' | 'register' = 'register') => {
+  const requireAuth = (featureName: string, mode: 'login' | 'register' | 'billing' = 'register') => {
+    if (isSubscriptionExpired) {
+      openAuthModal('billing', featureName);
+      showToast(`☕ Đã hết thời gian trải nghiệm 1 học kỳ — Xem gói duy trì hoặc nhập mã để mở khóa: ${featureName}`);
+      return;
+    }
     openAuthModal(mode, featureName);
-    showToast(`🔒 Đăng ký hoặc đăng nhập miễn phí để mở khóa: ${featureName}`);
+    showToast(`🎁 Đăng nhập 1 chạm (không cần mật khẩu) để dùng miễn phí trọn 1 học kỳ: ${featureName}`);
   };
 
   // Unified Lesson Plan Version History & Draft Store (Default = Last Edited Version)
@@ -1477,7 +1493,7 @@ export default function App() {
     setVersionRefreshNonce((n) => n + 1);
     setActiveTab('tab-export');
     showToast(
-      isGuest
+      isAccessLocked
         ? `Đang mở chế độ Xem trước A4 cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
         : `Đã lưu bản nháp và chuyển sang Xem trước & In cho giáo án Tuần ${week} - Khối ${grade} (Tiết ${lessonNum})!`
     );
@@ -1491,7 +1507,7 @@ export default function App() {
   };
 
   const handleResetData = async () => {
-    if (isGuest) {
+    if (isAccessLocked) {
       requireAuth('Khôi phục dữ liệu gốc của hệ thống');
       return;
     }
@@ -1529,7 +1545,7 @@ export default function App() {
   };
 
   const handleOpenSelectCellModal = (img: SgkImageItem) => {
-    if (isGuest) {
+    if (isAccessLocked) {
       requireAuth('Gắn ảnh vào giáo án');
       return;
     }
@@ -1647,7 +1663,7 @@ export default function App() {
   };
 
   const handleOpenSmartClean = (img: SgkImageItem) => {
-    if (isGuest) {
+    if (isAccessLocked) {
       requireAuth('Tẩy rác & làm sạch ảnh bằng AI');
       return;
     }
@@ -1666,7 +1682,7 @@ export default function App() {
 
   // Gemini Vision AI Analysis
   const handleAnalyzeVision = async (img: SgkImageItem) => {
-    if (isGuest) {
+    if (isAccessLocked) {
       requireAuth('Phân tích động tác bằng Gemini Vision AI');
       return;
     }
@@ -2048,14 +2064,14 @@ export default function App() {
         imageCount={images.length}
         schoolSettings={schoolSettings}
         onOpenSettings={() =>
-          isGuest ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
+          isAccessLocked ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
         }
         onResetData={handleResetData}
         onOpenImport={() =>
-          isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+          isAccessLocked ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
         }
         onOpenGoogleDrive={() => {
-          if (isGuest) {
+          if (isAccessLocked) {
             requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive');
             return;
           }
@@ -2064,10 +2080,10 @@ export default function App() {
         }}
         onOpenBackupRestore={() => setIsBackupRestoreOpen(true)}
         onOpenFormationStudio={() =>
-          isGuest ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
+          isAccessLocked ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
         }
         onOpenFormationLibrary={() =>
-          isGuest ? requireAuth('Kho 32+ sơ đồ đội hình & chèn vào giáo án') : setIsGlobalFormationLibraryOpen(true)
+          isAccessLocked ? requireAuth('Kho 32+ sơ đồ đội hình & chèn vào giáo án') : setIsGlobalFormationLibraryOpen(true)
         }
         onOpenPpctManager={() => {
           handleTabChange('tab-export');
@@ -2079,36 +2095,36 @@ export default function App() {
           showToast(`✨ Đang xem Kế hoạch bài dạy Tuần ${week} (Tuần hiện hành)!`);
         }}
         authUser={authUser}
-        isGuest={isGuest}
-        onOpenAuth={() => openAuthModal('login', null)}
+        isGuest={isAccessLocked}
+        onOpenAuth={() => openAuthModal(isSubscriptionExpired ? 'billing' : 'login', null)}
       />
 
-      {/* Guest Basic Access Banner */}
+      {/* Guest Banner: 1-Semester (120-Day) Passwordless Full Free Community Access */}
       {isGuest && (
-        <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-blue-50 border-b border-amber-200 no-print">
+        <div className="bg-gradient-to-r from-emerald-50 via-sky-50 to-blue-50 border-b border-emerald-200 no-print">
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
             <div className="flex items-start sm:items-center gap-2 text-slate-700">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 text-white font-bold text-[10.5px] shrink-0 mt-0.5 sm:mt-0">
-                <Lock className="w-3 h-3" />
-                Chế Độ Khách
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold text-[10.5px] shrink-0 mt-0.5 sm:mt-0">
+                <Sparkles className="w-3 h-3" />
+                Miễn Phí Trọn 1 Học Kỳ
               </span>
               <span className="leading-snug text-[11.5px] sm:text-xs">
-                Đăng ký miễn phí để mở khóa trọn bộ: <strong>308+ ảnh SGK (K1–K5)</strong>, <strong>Studio Sơ đồ linh hoạt</strong> (nối nét, xoay góc, Mirror), tích hợp <strong>Google Docs / Drive</strong> &amp; xuất Word/PDF.
+                Đăng nhập tài khoản cá nhân <strong>(không cần mật khẩu)</strong> để mở khóa <strong>100% tính năng miễn phí 120 ngày</strong>: 308+ ảnh SGK (K1–K5), Studio Sơ đồ Pro &amp; Google Docs — chia sẻ vì cộng đồng giáo viên GDTC.
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={() => openAuthModal('register', null)}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
+                className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
               >
                 <UserPlus className="w-3.5 h-3.5 shrink-0" />
-                <span>Đăng Ký</span>
+                <span>Vào Dùng Miễn Phí</span>
               </button>
               <button
                 type="button"
                 onClick={() => openAuthModal('login', null)}
-                className="min-h-[38px] px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition whitespace-nowrap"
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition whitespace-nowrap"
               >
                 <LogIn className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span>Đăng Nhập</span>
@@ -2118,22 +2134,80 @@ export default function App() {
         </div>
       )}
 
+      {/* Gentle 7-Day Pre-Expiry Reminder Banner */}
+      {isTrialExpiringSoon && authUser && (
+        <div className="bg-gradient-to-r from-amber-50 via-orange-50/70 to-blue-50 border-b border-amber-200 no-print">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-start sm:items-center gap-2 text-slate-800">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500 text-white font-bold text-[10.5px] shrink-0">
+                <Clock className="w-3 h-3" />
+                Còn {authUser.daysRemaining} ngày Full
+              </span>
+              <span className="leading-snug text-[11.5px] sm:text-xs">
+                Giai đoạn trải nghiệm miễn phí trọn 1 học kỳ kết thúc ngày <strong>{formatVnDate(authUser.trialEndsAt)}</strong> · Cam kết <strong>không mất giáo án cũ</strong>. Ủng hộ duy trì máy chủ từ <strong>20k/tuần</strong> · <strong>129k/học kỳ</strong> · <strong>199k/năm</strong>.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAuthModal('billing', null)}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
+            >
+              <Coffee className="w-3.5 h-3.5" />
+              <span>Ủng Hộ &amp; Duy Trì</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Expired Trial -> Friendly Freemium Basic Mode Banner */}
+      {isSubscriptionExpired && authUser && (
+        <div className="bg-gradient-to-r from-amber-50 via-rose-50/70 to-orange-50 border-b border-amber-300 no-print">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-start sm:items-center gap-2 text-slate-800">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 text-white font-bold text-[10.5px] shrink-0 mt-0.5 sm:mt-0">
+                <Lock className="w-3 h-3" />
+                Chế Độ Cơ Bản
+              </span>
+              <span className="leading-snug text-[11.5px] sm:text-xs">
+                Đã kết thúc giai đoạn trải nghiệm miễn phí 1 học kỳ · Toàn bộ giáo án cũ vẫn giữ nguyên &amp; tiếp tục xem/tra cứu miễn phí. Chung tay duy trì hệ thống từ <strong>20k/tuần</strong> · <strong>129k/học kỳ</strong> · <strong>199k/năm</strong> (giảm 20% nhóm 3–5 GV).
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAuthModal('billing', null)}
+              className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap shrink-0"
+            >
+              <Coffee className="w-3.5 h-3.5" />
+              <span>Gia Hạn / Nhập Mã</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Body View */}
       <main className="flex-grow max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-24 md:pb-10 flex flex-col">
         {activeTab === 'tab-scan' && (
-          isGuest ? (
+          isAccessLocked ? (
             <LockedFeatureGate
-              badgeText="Tab 1 · Bóc Tách SGK"
+              badgeText={isSubscriptionExpired ? 'Tính Năng Pro · Tab 1' : 'Tab 1 · Bóc Tách SGK'}
               title="Tab 1 · Quét & Bóc Tách Ảnh Từ SGK Điện Tử"
-              description="Trích xuất ảnh động tác và trò chơi trực tiếp từ sách giáo khoa GDTC Kết nối tri thức (Khối 1, 2, 3, 4, 5), làm sạch nền AI và phân tích kỹ thuật bằng Gemini Vision dành riêng cho thành viên."
+              description={
+                isSubscriptionExpired
+                  ? 'Giai đoạn 30 ngày dùng thử Full đã kết thúc. Nâng cấp gói duy trì hệ thống từ 20.000đ/tuần (hoặc 49k/tháng · 149k/học kỳ) để tiếp tục quét SGK & phân tích Gemini Vision AI.'
+                  : 'Đăng nhập 1 chạm bằng tài khoản cá nhân (không cần mật khẩu) để mở khóa miễn phí 30 ngày toàn bộ tính năng quét SGK Khối 1–5, làm sạch nền AI và phân tích kỹ thuật Gemini Vision.'
+              }
               highlights={[
                 'Cắt vùng ảnh chuẩn nét cao từ từng trang SGK Khối 1, 2, 3, 4, 5',
                 'Tự động phân tích tên động tác, nhịp đếm bằng Gemini Vision AI',
                 'Làm sạch nền & khử nhiễu ảnh scan trước khi đưa vào giáo án',
                 'Lưu trực tiếp vào Thư viện ảnh & gắn tự động vào đúng tiết học'
               ]}
-              onRegister={() => openAuthModal('register', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')}
-              onLogin={() => openAuthModal('login', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')}
+              onRegister={() =>
+                openAuthModal(isSubscriptionExpired ? 'billing' : 'register', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')
+              }
+              onLogin={() =>
+                openAuthModal(isSubscriptionExpired ? 'billing' : 'login', 'Quét & Bóc Tách Ảnh SGK (Tab 1)')
+              }
               onFallbackTab={() => handleTabChange('tab-generator')}
             />
           ) : (
@@ -2164,25 +2238,33 @@ export default function App() {
             cloudSyncConnected={Boolean(cloudGoogleUser && cloudSessionConsented)}
             cloudSyncing={cloudSyncStatus.phase === 'syncing'}
             showToast={showToast}
-            isGuest={isGuest}
+            isGuest={isAccessLocked}
             onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
 
         {activeTab === 'tab-extract' && (
-          isGuest ? (
+          isAccessLocked ? (
             <LockedFeatureGate
-              badgeText="Tab 3 · Sửa Giáo Án Mẫu"
+              badgeText={isSubscriptionExpired ? 'Tính Năng Pro · Tab 3' : 'Tab 3 · Sửa Giáo Án Mẫu'}
               title="Tab 3 · Giáo Án Mẫu & Chỉnh Sửa Trực Tiếp 4 Cột"
-              description="Không gian làm việc chuyên sâu để giáo viên chỉnh sửa từng dòng hoạt động chuẩn Công văn 5512, quản lý các mẫu giáo án mới do bạn nạp lên và chuyển đổi nhanh sang tuần kế tiếp."
+              description={
+                isSubscriptionExpired
+                  ? 'Giai đoạn 30 ngày dùng thử Full đã kết thúc. Toàn bộ giáo án cũ của thầy/cô vẫn an toàn ở Tab 6. Nâng cấp Pro từ 20k/tuần để mở lại chỉnh sửa trực tiếp 4 cột & nạp mẫu riêng.'
+                  : 'Đăng nhập 1 chạm (không cần mật khẩu) để trải nghiệm miễn phí 30 ngày không gian chỉnh sửa trực tiếp 4 cột chuẩn Công văn 5512 và nạp mẫu giáo án riêng.'
+              }
               highlights={[
                 'Sửa trực tiếp toàn bộ bảng 4 cột chuẩn 1:1 (Nội dung · LVĐ · GV · HS)',
                 'Quản lý, chỉnh sửa và áp dụng bộ sưu tập Mẫu giáo án mới từ người dùng',
                 'Đính kèm, thay thế ảnh động tác & sơ đồ đội hình ngay trên từng dòng',
                 'Chuyển nhanh giáo án mẫu đã hoàn thiện sang Tuần mới (Tab 5)'
               ]}
-              onRegister={() => openAuthModal('register', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')}
-              onLogin={() => openAuthModal('login', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')}
+              onRegister={() =>
+                openAuthModal(isSubscriptionExpired ? 'billing' : 'register', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')
+              }
+              onLogin={() =>
+                openAuthModal(isSubscriptionExpired ? 'billing' : 'login', 'Giáo Án Mẫu & Sửa Trực Tiếp (Tab 3)')
+              }
               onFallbackTab={() => handleTabChange('tab-generator')}
             />
           ) : (
@@ -2220,7 +2302,7 @@ export default function App() {
             scenarios={scenarios}
             setScenarios={setScenarios}
             onOpenAddModal={() => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Thêm kịch bản giảng dạy mới');
                 return;
               }
@@ -2228,7 +2310,7 @@ export default function App() {
               setIsScenarioModalOpen(true);
             }}
             onEditScenario={(sc) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Chỉnh sửa kịch bản giảng dạy');
                 return;
               }
@@ -2236,14 +2318,14 @@ export default function App() {
               setIsScenarioModalOpen(true);
             }}
             onInsertToLesson={(sc) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Chèn kịch bản vào giáo án tuần này');
                 return;
               }
               handleInsertScenarioToLesson(sc);
             }}
             showToast={showToast}
-            isGuest={isGuest}
+            isGuest={isAccessLocked}
             onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
@@ -2268,28 +2350,28 @@ export default function App() {
             onChangeLessonContext={handleChangeGeneratorContext}
             planVersionStore={planVersionStore}
             onSaveOfficialVersion={(plan, label, markAsBest, baseline, forceNew) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Lưu phiên bản giáo án mới');
                 return;
               }
               return handleSaveOfficialVersion(plan, 'tab-generator', label, markAsBest, baseline, forceNew);
             }}
             onLoadPlanVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Tải phiên bản từ Lịch sử');
                 return;
               }
               handleLoadPlanVersion(planKey, versionId);
             }}
             onToggleBestVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Đánh dấu phiên bản hoàn hảo nhất');
                 return;
               }
               handleToggleBestVersion(planKey, versionId);
             }}
             onDeletePlanVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Xóa phiên bản trong Lịch sử');
                 return;
               }
@@ -2298,7 +2380,7 @@ export default function App() {
             userCustomTemplates={userCustomTemplates}
             activeCustomTemplateId={activeCustomTemplateId}
             onApplyCustomTemplate={(tpl) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Sử dụng mẫu giáo án mới từ người dùng');
                 return;
               }
@@ -2309,9 +2391,9 @@ export default function App() {
             onNavigateToScan={handleNavigateToScanFromLesson}
             showToast={showToast}
             onOpenImport={() =>
-              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+              isAccessLocked ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
             }
-            isGuest={isGuest}
+            isGuest={isAccessLocked}
             onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
@@ -2326,7 +2408,7 @@ export default function App() {
             lessonRows={lessonRows}
             schoolSettings={schoolSettings}
             onUpdateSchoolSettings={(newSettings) => {
-              if (isGuest) return;
+              if (isAccessLocked) return;
               setSchoolSettings(newSettings);
               setAppStateDB('school_settings', newSettings);
             }}
@@ -2337,35 +2419,35 @@ export default function App() {
             versionRefreshNonce={versionRefreshNonce}
             onAutoSaveDraftPlans={(plans) => handleAutoSaveDraftPlans(plans, 'tab-export')}
             onSaveOfficialVersion={(plan, label, markAsBest, baseline, forceNew) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Lưu phiên bản giáo án mới');
                 return;
               }
               return handleSaveOfficialVersion(plan, 'tab-export', label, markAsBest, baseline, forceNew);
             }}
             onSaveMultipleOfficialVersions={(plans) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Lưu bộ giáo án 5 khối vào Lịch sử & Cơ sở dữ liệu');
                 return;
               }
               handleSaveMultipleOfficialVersions(plans, 'tab-export');
             }}
             onLoadPlanVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Tải phiên bản từ Lịch sử');
                 return;
               }
               handleLoadPlanVersion(planKey, versionId);
             }}
             onToggleBestVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Đánh dấu phiên bản hoàn hảo nhất');
                 return;
               }
               handleToggleBestVersion(planKey, versionId);
             }}
             onDeletePlanVersion={(planKey, versionId) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Xóa phiên bản trong Lịch sử');
                 return;
               }
@@ -2375,7 +2457,7 @@ export default function App() {
             userCustomTemplates={userCustomTemplates}
             activeCustomTemplateId={activeCustomTemplateId}
             onSelectCustomTemplate={(id) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Xem & sử dụng Mẫu giáo án mới từ người dùng');
                 return;
               }
@@ -2383,11 +2465,11 @@ export default function App() {
               setAppStateDB('active_custom_template_id', id).catch(() => {});
             }}
             onUpdateUserCustomTemplate={(tpl) => {
-              if (isGuest) return;
+              if (isAccessLocked) return;
               handleUpdateCustomTemplate(tpl);
             }}
             onOpenImportModal={() =>
-              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+              isAccessLocked ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
             }
             images={images}
             showToast={showToast}
@@ -2398,7 +2480,7 @@ export default function App() {
             }}
             onNavigateToLibrary={() => handleTabChange('tab-img-library')}
             onOpenGoogleDrive={(bundle) => {
-              if (isGuest) {
+              if (isAccessLocked) {
                 requireAuth('Đồng bộ & lưu trữ giáo án lên Google Drive');
                 return;
               }
@@ -2406,7 +2488,7 @@ export default function App() {
               setIsGoogleDriveOpen(true);
             }}
             onNavigateToGenerator={() => handleTabChange('tab-generator')}
-            isGuest={isGuest}
+            isGuest={isAccessLocked}
             onRequireAuth={(feature) => requireAuth(feature)}
           />
         )}
@@ -2415,17 +2497,17 @@ export default function App() {
           <TabIntro
             onNavigateTab={handleTabChange}
             onOpenImport={() =>
-              isGuest ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
+              isAccessLocked ? requireAuth('Nạp & phân tích đa nhiệm file Giáo án mới') : setIsImportModalOpen(true)
             }
-            onOpenAuth={() => openAuthModal('login', null)}
-            onOpenAuthMode={(mode) => openAuthModal(mode, null)}
+            onOpenAuth={() => openAuthModal(isSubscriptionExpired ? 'billing' : 'login', null)}
+            onOpenAuthMode={(mode) => openAuthModal(isSubscriptionExpired ? 'billing' : mode, null)}
             onOpenFormationStudio={() =>
-              isGuest ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
+              isAccessLocked ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
             }
             onOpenSettings={() =>
-              isGuest ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
+              isAccessLocked ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
             }
-            isGuest={isGuest}
+            isGuest={isAccessLocked}
             liveStats={{
               imageCount: images.length,
               planCount: Object.keys(allMasterPlans || {}).length,

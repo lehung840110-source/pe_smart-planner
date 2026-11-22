@@ -123,6 +123,61 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 /**
+ * Lightweight 1-tap Google Sign-In for personal account authentication (no password, no Drive consent).
+ * Returns basic profile info cleanly, or null if the user closes the popup.
+ */
+export const googleQuickSignIn = async (): Promise<{
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  uid: string;
+} | null> => {
+  if (isSigningIn) {
+    return null;
+  }
+  const basicProvider = new GoogleAuthProvider();
+  basicProvider.setCustomParameters({ prompt: 'select_account' });
+  try {
+    isSigningIn = true;
+    const result = await signInWithPopup(auth, basicProvider);
+    const u = result.user;
+    if (!u?.email) {
+      throw new Error('Không lấy được địa chỉ email từ tài khoản Google.');
+    }
+    return {
+      email: u.email.trim().toLowerCase(),
+      displayName: (u.displayName || '').trim() || u.email.split('@')[0],
+      photoURL: u.photoURL || undefined,
+      uid: u.uid
+    };
+  } catch (error: any) {
+    const code = String(error?.code || '');
+    const msg = String(error?.message || '').toLowerCase();
+    if (
+      code === 'auth/popup-closed-by-user' ||
+      code === 'auth/cancelled-popup-request' ||
+      msg.includes('popup-closed-by-user') ||
+      msg.includes('cancelled-popup-request')
+    ) {
+      return null;
+    }
+    if (code === 'auth/popup-blocked' || msg.includes('popup-blocked')) {
+      throw new Error(
+        'Trình duyệt đang chặn cửa sổ đăng nhập Google. Vui lòng cho phép popup hoặc nhập Email cá nhân bên dưới.'
+      );
+    }
+    if (code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+      throw new Error(
+        'Tên miền hiện tại chưa kích hoạt popup Google. Vui lòng nhập trực tiếp Email cá nhân bên dưới (không cần mật khẩu).'
+      );
+    }
+    throw error;
+  } finally {
+    isSigningIn = false;
+  }
+};
+
+/**
  * Get cached access token in memory
  */
 export const getAccessToken = async (): Promise<string | null> => {

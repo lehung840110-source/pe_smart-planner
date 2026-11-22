@@ -31,6 +31,7 @@ import {
   MessageSquareHeart
 } from 'lucide-react';
 import { IntroSlideDeck, IntroSlideLiveStats } from './IntroSlideDeck';
+import { DonationSupportCard } from './DonationSupportCard';
 
 interface TabIntroProps {
   onNavigateTab: (tabId: string) => void;
@@ -373,7 +374,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition shrink-0"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Đăng Ký Mở Khóa Miễn Phí</span>
+              <span>Dùng Miễn Phí Trọn 1 Học Kỳ (Không Mật Khẩu)</span>
             </button>
           )}
         </div>
@@ -478,87 +479,87 @@ export const TabIntro: React.FC<TabIntroProps> = ({
         </div>
       </section>
 
-      {/* 2B. Guest Basic vs Authenticated Full Features */}
+      {/* 2B. 2-Stage Community Roadmap: Full Free 1 Semester + Voluntary Support */}
       <section className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="text-sm sm:text-base font-bold text-slate-900 flex items-center gap-2">
               <UserCheck className="w-4 h-4 text-emerald-600" />
-              <span>Quyền Truy Cập: Chế Độ Khách (Cơ Bản) &amp; Thành Viên (Toàn Bộ Tính Năng)</span>
+              <span>Mở Miễn Phí Hoàn Toàn Trọn 1 Học Kỳ (120 Ngày · Không Cần Mật Khẩu)</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Người dùng chưa đăng nhập vẫn có thể tham khảo kho học liệu &amp; xem trước giáo án; đăng ký tài khoản miễn phí để mở khóa 100% tính năng chuyên sâu.
+              Chia sẻ trọn vẹn cho cộng đồng giáo viên GDTC trải nghiệm thực tế trên sân tập · Cam kết bảo toàn 100% giáo án cũ · Ủng hộ tùy tâm để duy trì máy chủ &amp; API.
             </p>
           </div>
-          {isGuest && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => (onOpenAuthMode ? onOpenAuthMode('register') : onOpenAuth?.())}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-              >
-                <UserPlus className="w-3.5 h-3.5" />
-                <span>Đăng ký miễn phí</span>
-              </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => (onOpenAuthMode ? onOpenAuthMode('register') : onOpenAuth?.())}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>{isGuest ? 'Vào Dùng Miễn Phí 1 Học Kỳ' : 'Tài Khoản & Ủng Hộ Duy Trì'}</span>
+            </button>
+            {isGuest && (
               <button
                 type="button"
                 onClick={() => (onOpenAuthMode ? onOpenAuthMode('login') : onOpenAuth?.())}
                 className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Đăng nhập ngay</span>
+                <span>Đăng nhập 1 chạm</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 space-y-2">
             <div className="font-bold text-slate-800 flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10.5px] uppercase">Chưa đăng nhập</span>
-              <span>Tính Năng Cơ Bản (Xem &amp; Tham Khảo)</span>
+              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 text-[10.5px] uppercase">Miễn phí trọn đời</span>
+              <span>Chế Độ Cơ Bản &amp; Cam Kết Dữ Liệu</span>
             </div>
             <ul className="space-y-1.5 text-slate-600">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Xem trang Giới thiệu &amp; Hướng dẫn sử dụng (Tab 7).</span>
+                <span>Duyệt, tra cứu Thư viện ảnh SGK (Tab 2) &amp; Kịch bản sư phạm (Tab 4).</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Duyệt, tìm kiếm Thư viện ảnh SGK (Tab 2) &amp; Kịch bản sư phạm (Tab 4).</span>
+                <span>Xem trước bản A4 theo từng khối hoặc gộp cả 5 khối &amp; giữ nguyên 100% giáo án cũ đã tạo.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Chọn tuần/khối/tiết và bấm Sinh giáo án cơ bản xem thử ở Tab 5.</span>
+                <span>Không khóa cứng dữ liệu, luôn trân trọng thành quả soạn giảng của giáo viên.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-                <span>Xem trước bản A4 theo từng khối hoặc gộp cả 5 khối ở Tab 6.</span>
+                <span>Thông báo nhắc nhẹ trước 7 ngày khi kết thúc giai đoạn trải nghiệm 1 học kỳ.</span>
               </li>
             </ul>
           </div>
 
           <div className="rounded-xl bg-emerald-50/70 border border-emerald-200 p-4 space-y-2">
-            <div className="font-bold text-emerald-950 flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Đã đăng nhập</span>
-              <span>Mở Khóa 100% Tính Năng Chuyên Sâu</span>
+            <div className="font-bold text-emerald-950 flex items-center gap-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[10.5px] uppercase">Full 1 Học Kỳ (120 Ngày)</span>
+              <span>Mở Khóa 100% Tính Năng Không Rào Cản</span>
             </div>
             <ul className="space-y-1.5 text-emerald-900">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Thư viện lên tới 308 hình ảnh SGK (Khối 1–5)</strong>, quét bóc tách SGK (Tab 1) &amp; làm sạch ảnh thông minh.</span>
+                <span><strong>Thư viện 308+ hình ảnh SGK (Khối 1–5)</strong>, quét bóc tách SGK (Tab 1) &amp; làm sạch ảnh AI.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Studio Tạo Sơ Đồ Đội Hình Mạnh Mẽ &amp; Linh Hoạt:</strong> vẽ lưới ô vuông, đường song song, nhóm hình theo mẫu, nối nét liền/đứt/mũi tên, xoay góc tùy ý, lật gương Mirror &amp; canh thẳng hàng.</span>
+                <span><strong>Studio Tạo Sơ Đồ Đội Hình Pro:</strong> lưới ô vuông, đường song song, nhóm hình, nối nét liền/đứt/mũi tên, xoay góc, Mirror &amp; canh thẳng hàng.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp &amp; phân tích mẫu giáo án riêng, chốt Lịch sử phiên bản.</span>
+                <span>Chỉnh sửa trực tiếp giáo án mẫu (Tab 3), nạp mẫu riêng, chốt lịch sử &amp; <strong>kết nối Google Docs / Drive</strong>, xuất Word/PDF.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                <span><strong>Kết nối trực tiếp Google Docs / Google Drive</strong>, xuất Word (.DOC/.DOCX), lưu PDF/in A4 &amp; đồng bộ tài khoản.</span>
+                <span><strong>Ủng hộ / Duy trì linh hoạt sau 1 học kỳ:</strong> tùy tâm hoặc chọn gói nhẹ từ <strong>20k/tuần · 129k/học kỳ · 199k/năm</strong> (giảm 20% nhóm 3–5 GV).</span>
               </li>
             </ul>
           </div>
@@ -738,6 +739,9 @@ export const TabIntro: React.FC<TabIntroProps> = ({
           </div>
         </div>
       </section>
+
+      {/* 4B. Voluntary Community Support & Charitable Student Fund Card */}
+      <DonationSupportCard />
 
       {/* 5. Footer Author Attribution & Feedback Mailbox */}
       <footer className="bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">

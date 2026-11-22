@@ -13,8 +13,14 @@ import {
   localMarkNotificationSent,
   localConfirmRegistrationNotification,
   localPullWorkspace,
-  localPushWorkspace
+  localPushWorkspace,
+  localPasswordlessAuth,
+  localRedeemLicenseKey,
+  localAdminGetSubscriptions,
+  localAdminCreateLicenseKey,
+  localAdminExtendUser
 } from '../utils/localAuthFallback';
+import type { PlanTier, SubscriptionPlanId } from '../utils/subscriptionPlans';
 
 export interface AuthUser {
   id: string;
@@ -22,10 +28,32 @@ export interface AuthUser {
   fullName: string;
   schoolName: string;
   role: 'teacher' | 'admin';
+  authMethod?: 'google' | 'email_passwordless' | 'password';
   createdAt: number;
   lastLoginAt: number;
   registrationConfirmed?: boolean;
   confirmedAt?: number;
+  trialStartedAt?: number;
+  trialEndsAt?: number;
+  paidUntil?: number;
+  planTier?: PlanTier;
+  activeUntil?: number | null;
+  daysRemaining?: number;
+  hasFullAccess?: boolean;
+}
+
+export interface LicenseKeyRecord {
+  code: string;
+  planId: SubscriptionPlanId;
+  planLabel: string;
+  durationDays: number;
+  priceVnd: number;
+  targetEmail?: string;
+  note?: string;
+  createdAt: number;
+  createdBy: string;
+  redeemedAt?: number;
+  redeemedByEmail?: string;
 }
 
 export interface RememberedAccount {
@@ -122,6 +150,42 @@ interface AuthContextValue {
     id: string,
     confirmationCode?: string
   ) => Promise<{ success: boolean; notification?: RegistrationNotificationItem; error?: string }>;
+  passwordlessSignIn: (params: {
+    email: string;
+    fullName?: string;
+    schoolName?: string;
+    provider: 'google' | 'email_passwordless';
+    rememberMe?: boolean;
+  }) => Promise<{
+    success: boolean;
+    isNewUser?: boolean;
+    error?: string;
+    user?: AuthUser;
+    registrationNotification?: RegistrationNotificationItem;
+  }>;
+  redeemLicenseKey: (code: string) => Promise<{
+    success: boolean;
+    planLabel?: string;
+    durationDays?: number;
+    user?: AuthUser;
+    error?: string;
+  }>;
+  adminGetSubscriptions: () => Promise<{
+    success: boolean;
+    users?: AuthUser[];
+    keys?: LicenseKeyRecord[];
+    error?: string;
+  }>;
+  adminCreateLicenseKey: (params: {
+    planId: SubscriptionPlanId;
+    targetEmail?: string;
+    note?: string;
+  }) => Promise<{ success: boolean; key?: LicenseKeyRecord; error?: string }>;
+  adminExtendUser: (params: {
+    email: string;
+    durationDays: number;
+  }) => Promise<{ success: boolean; user?: AuthUser; error?: string }>;
+  refreshUser: () => Promise<void>;
   pullWorkspace: () => Promise<any | null>;
   pushWorkspace: (workspace: any) => Promise<boolean>;
 }
@@ -701,6 +765,213 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [getActiveToken, user, authHeaders]
   );
 
+  const passwordlessSignIn = async (params: {
+    email: string;
+    fullName?: string;
+    schoolName?: string;
+    provider: 'google' | 'email_passwordless';
+    rememberMe?: boolean;
+  }) => {
+    const rememberMe = params.rememberMe !== false;
+    const apiRes = await tryBackendJson('/api/auth/passwordless', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ ...params, rememberMe })
+    });
+
+    if (apiRes.unavailable) {
+      const localRes = await localPasswordlessAuth({ ...params, rememberMe });
+      if (!localRes.success || !localRes.user) {
+        return { success: false, error: localRes.error || 'Đăng nhập thất bại.' };
+      }
+      if (localRes.token) {
+        saveStoredToken(localRes.token, rememberMe);
+        setToken(localRes.token);
+      }
+      setUser(localRes.user);
+      if (rememberMe) {
+        upsertRememberedAccount(localRes.user);
+      }
+      return {
+        success: true,
+        isNewUser: localRes.isNewUser,
+        user: localRes.user,
+        registrationNotification: localRes.registrationNotification
+      };
+    }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Đăng nhập thất bại.' };
+    }
+    if (data.token) {
+      saveStoredToken(data.token, rememberMe);
+      setToken(data.token);
+    }
+    setUser(data.user);
+    if (rememberMe && data.user) {
+      upsertRememberedAccount(data.user);
+    }
+    return {
+      success: true,
+      isNewUser: Boolean(data.isNewUser),
+      user: data.user,
+      registrationNotification: data.registrationNotification
+    };
+  };
+
+  const redeemLicenseKey = useCallback(
+    async (code: string) => {
+      const activeToken = getActiveToken();
+      if (isLocalSessionToken(activeToken)) {
+        const localRes = localRedeemLicenseKey(activeToken, code);
+        if (localRes.success && localRes.user) {
+          setUser(localRes.user);
+        }
+        return localRes;
+      }
+
+      const apiRes = await tryBackendJson('/api/subscription/redeem', {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify({ code })
+      });
+
+      if (apiRes.unavailable) {
+        const localRes = localRedeemLicenseKey(activeToken, code);
+        if (localRes.success && localRes.user) {
+          setUser(localRes.user);
+        }
+        return localRes;
+      }
+
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể kích hoạt mã.' };
+      }
+      if (data.user) setUser(data.user);
+      return {
+        success: true,
+        planLabel: data.planLabel,
+        durationDays: data.durationDays,
+        user: data.user
+      };
+    },
+    [authHeaders, getActiveToken]
+  );
+
+  const adminGetSubscriptions = useCallback(async () => {
+    const activeToken = getActiveToken();
+    if (isLocalSessionToken(activeToken)) {
+      return localAdminGetSubscriptions(activeToken);
+    }
+
+    const apiRes = await tryBackendJson('/api/admin/subscriptions', {
+      method: 'GET',
+      headers: authHeaders(activeToken),
+      credentials: 'include'
+    });
+
+    if (apiRes.unavailable) {
+      return localAdminGetSubscriptions(activeToken);
+    }
+
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Không thể tải danh sách quản trị.' };
+    }
+    return {
+      success: true,
+      users: data.users || [],
+      keys: data.keys || []
+    };
+  }, [authHeaders, getActiveToken]);
+
+  const adminCreateLicenseKey = useCallback(
+    async (params: { planId: SubscriptionPlanId; targetEmail?: string; note?: string }) => {
+      const activeToken = getActiveToken();
+      if (isLocalSessionToken(activeToken)) {
+        return localAdminCreateLicenseKey(activeToken, params);
+      }
+
+      const apiRes = await tryBackendJson('/api/admin/license-keys', {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify(params)
+      });
+
+      if (apiRes.unavailable) {
+        return localAdminCreateLicenseKey(activeToken, params);
+      }
+
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể tạo mã kích hoạt.' };
+      }
+      return { success: true, key: data.key };
+    },
+    [authHeaders, getActiveToken]
+  );
+
+  const adminExtendUser = useCallback(
+    async (params: { email: string; durationDays: number }) => {
+      const activeToken = getActiveToken();
+      if (isLocalSessionToken(activeToken)) {
+        const localRes = localAdminExtendUser(activeToken, params);
+        if (localRes.success && localRes.user && user && localRes.user.email === user.email) {
+          setUser(localRes.user);
+        }
+        return localRes;
+      }
+
+      const apiRes = await tryBackendJson('/api/admin/extend-user', {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify(params)
+      });
+
+      if (apiRes.unavailable) {
+        const localRes = localAdminExtendUser(activeToken, params);
+        if (localRes.success && localRes.user && user && localRes.user.email === user.email) {
+          setUser(localRes.user);
+        }
+        return localRes;
+      }
+
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể gia hạn tài khoản.' };
+      }
+      if (data.user && user && data.user.email === user.email) {
+        setUser(data.user);
+      }
+      return { success: true, user: data.user };
+    },
+    [authHeaders, getActiveToken, user]
+  );
+
+  const refreshUser = useCallback(async () => {
+    const activeToken = getActiveToken();
+    if (!activeToken) return;
+    if (isLocalSessionToken(activeToken)) {
+      const localRes = localGetMe(activeToken);
+      if (localRes.authenticated && localRes.user) setUser(localRes.user);
+      return;
+    }
+    const apiRes = await tryBackendJson<{ authenticated?: boolean; user?: AuthUser | null }>('/api/auth/me', {
+      method: 'GET',
+      headers: authHeaders(activeToken),
+      credentials: 'include'
+    });
+    if (!apiRes.unavailable && apiRes.data?.authenticated && apiRes.data?.user) {
+      setUser(apiRes.data.user);
+    }
+  }, [authHeaders, getActiveToken]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -713,6 +984,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removeRememberedAccount,
         login,
         register,
+        passwordlessSignIn,
+        redeemLicenseKey,
+        adminGetSubscriptions,
+        adminCreateLicenseKey,
+        adminExtendUser,
+        refreshUser,
         logout,
         findAccount,
         requestPasswordReset,

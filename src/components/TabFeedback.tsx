@@ -25,6 +25,7 @@ import {
   School
 } from 'lucide-react';
 import type { AuthUser } from '../contexts/AuthContext';
+import { DonationSupportCard } from './DonationSupportCard';
 
 export type FeedbackCategory = 'review' | 'feature' | 'bug' | 'resource';
 
@@ -1162,6 +1163,9 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
           </div>
         </section>
       )}
+
+      {/* 3B. Voluntary Community Support & Charitable Student Fund Card */}
+      <DonationSupportCard onShowToast={showToast} />
 
       {/* 4. Direct Contact Footer */}
       <footer className="bg-slate-100 border border-slate-200 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-slate-600">
