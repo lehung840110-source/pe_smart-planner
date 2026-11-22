@@ -253,6 +253,7 @@ export interface ImportedWeeklyPlanEntry {
   lessonTitle: string;
   gameName?: string;
   pageHint?: number;
+  endPageHint?: number;
   dateRange?: string;
   objectivesSummary?: string;
   equipmentSummary?: string;

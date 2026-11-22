@@ -16,7 +16,7 @@ import {
   Printer,
   RefreshCw,
   RotateCcw,
-  Search,
+  Shuffle,
   Sliders,
   Sparkles,
   Trash2,
@@ -60,6 +60,11 @@ import { splitColumn1ContentForMedia } from '../utils/column1MediaLayout';
 import { isInvalidColumn1AttachmentForRow } from '../utils/planAutoMatcher';
 import { SelectFormationModal } from './SelectFormationModal';
 import { SelectMovementImageModal } from './SelectMovementImageModal';
+import { FaithfulOriginalDocumentViewer } from './FaithfulOriginalDocumentViewer';
+import {
+  getOriginalDocumentDB,
+  StoredOriginalDocument
+} from '../utils/originalDocumentStore';
 
 interface TabTemplateLabProps {
   blueprints: CustomLayoutBlueprint[];
@@ -180,14 +185,17 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
   const [applyDetectedMetaOnActivate, setApplyDetectedMetaOnActivate] = useState<boolean>(true);
   const [editorSectionOpen, setEditorSectionOpen] = useState<'columns' | 'header' | 'sections' | 'signatures'>('columns');
 
-  // Weekly plan table search / expansion
-  const [weeklySearchQuery, setWeeklySearchQuery] = useState('');
-  const [showAllWeeklyRows, setShowAllWeeklyRows] = useState(false);
+  // Scope within the 1 selected week: show the full week (all periods of that week) or a specific period in that week
+  const [weekScopeMode, setWeekScopeMode] = useState<'full_week' | 'single_period'>('full_week');
 
   // Interactive media modals & upload targets for imported lesson plan
   const [uploadTargetRowIdx, setUploadTargetRowIdx] = useState<number>(1);
   const [formationModalRowIdx, setFormationModalRowIdx] = useState<number | null>(null);
   const [libraryImageModalRowIdx, setLibraryImageModalRowIdx] = useState<number | null>(null);
+
+  // Faithful verbatim original document (100% untouched PDF / Word / HTML) & viewer mode
+  const [originalDocument, setOriginalDocument] = useState<StoredOriginalDocument | null>(null);
+  const [sandboxViewMode, setSandboxViewMode] = useState<'original' | 'structured'>('original');
 
   // Load persisted imported workspaces from IndexedDB on mount
   useEffect(() => {
@@ -258,6 +266,29 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
     }
   }, [selectedBlueprint?.id, Boolean(activeWorkspace)]);
 
+  // Load saved original verbatim document (PDF bytes / Word HTML) whenever selected blueprint changes
+  useEffect(() => {
+    let alive = true;
+    const bpId = selectedBlueprint?.id;
+    if (!bpId) {
+      setOriginalDocument(null);
+      setSandboxViewMode('structured');
+      return;
+    }
+    getOriginalDocumentDB(bpId).then((doc) => {
+      if (!alive) return;
+      setOriginalDocument(doc);
+      if (doc) {
+        setSandboxViewMode('original');
+      } else {
+        setSandboxViewMode('structured');
+      }
+    });
+    return () => {
+      alive = false;
+    };
+  }, [selectedBlueprint?.id]);
+
   // Sample plans available for live sandbox rendering
   const samplePlanOptions = useMemo(() => {
     const opts: Array<{ key: string; label: string; plan: MasterPlanItem }> = [];
@@ -314,9 +345,12 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
     setIsAnalyzing(true);
     setAnalysisProgress({ label: `Đang tiếp nhận "${file.name}"...`, percent: 8 });
     try {
-      const { blueprint, parsedContent, workspace } = await analyzeLessonLayoutFile(file, (label, percent) => {
-        setAnalysisProgress({ label, percent });
-      });
+      const { blueprint, parsedContent, workspace, originalDocument: savedOrigDoc } = await analyzeLessonLayoutFile(
+        file,
+        (label, percent) => {
+          setAnalysisProgress({ label, percent });
+        }
+      );
       onSaveBlueprint(blueprint, false);
       setSelectedBlueprintId(blueprint.id);
       setLastParsedByBlueprintId((prev) => ({ ...prev, [blueprint.id]: parsedContent }));
@@ -325,13 +359,17 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
         saveTemplateLabWorkspacesAsync(next).catch(() => {});
         return next;
       });
+      setOriginalDocument(savedOrigDoc);
+      setSandboxViewMode('original');
       setPreviewPlanKey('uploaded_file');
-      setWeeklySearchQuery('');
-      setShowAllWeeklyRows(false);
+      setWeekScopeMode('full_week');
 
-      const lessonCount = workspace.weeklySchedule.length;
+      const distinctWeeks = new Set(workspace.weeklySchedule.map((e) => e.week)).size;
+      const firstWeek = workspace.weeklySchedule[0]?.week || 1;
       showToast(
-        `✅ Đã tiếp nhận mẫu giáo án "${file.name}" (${lessonCount} tiết học, tự động chèn ${workspace.autoInsertedFormationsCount} sơ đồ đội hình từ thư viện)!`
+        distinctWeeks > 1
+          ? `✅ Đã tiếp nhận "${file.name}" (${distinctWeeks} tuần). Đang hiển thị gọn 1 giáo án hoàn thiện nguyên vẹn của Tuần ${firstWeek} — thầy cô có thể chọn tuần bất kỳ!`
+          : `✅ Đã tiếp nhận nguyên vẹn giáo án "${file.name}" — giữ nguyên 100% nội dung và hình ảnh gốc!`
       );
     } catch (err: any) {
       console.error('Layout analysis error:', err);
@@ -350,7 +388,7 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
     }
     setIsAnalyzing(true);
     try {
-      const { blueprint, parsedContent, workspace } = analyzeLessonLayoutText(
+      const { blueprint, parsedContent, workspace, originalDocument: savedOrigDoc } = analyzeLessonLayoutText(
         pastedText,
         pastedName.trim() || 'Mẫu giáo án dán trực tiếp'
       );
@@ -362,9 +400,11 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
         saveTemplateLabWorkspacesAsync(next).catch(() => {});
         return next;
       });
+      setOriginalDocument(savedOrigDoc);
+      setSandboxViewMode('original');
       setPreviewPlanKey('uploaded_file');
       showToast(
-        `✅ Đã tiếp nhận mẫu giáo án "${blueprint.name}" & tự động chèn ${workspace.autoInsertedFormationsCount} sơ đồ đội hình từ thư viện!`
+        `✅ Đã tiếp nhận nguyên vẹn giáo án "${blueprint.name}" để ứng dụng hiển thị & phân tích!`
       );
     } finally {
       setIsAnalyzing(false);
@@ -421,8 +461,9 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
       autoInsertedFormationsCount: autoRes.insertedCount
     }));
     setPreviewPlanKey('uploaded_file');
+    setSandboxViewMode('structured');
     showToast(
-      `✨ Ứng dụng đã phân tích ${activeImportedEntry.rows.length} hoạt động và tự động chèn ${autoRes.insertedCount} sơ đồ đội hình phù hợp từ thư viện!`
+      `✨ Ứng dụng đã phân tích ${activeImportedEntry.rows.length} hoạt động và chèn thử ${autoRes.insertedCount} sơ đồ đội hình từ thư viện (Bản gốc của thầy cô vẫn giữ nguyên vẹn 100%)!`
     );
   };
 
@@ -741,24 +782,70 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
   const currentBlueprintIsActive = Boolean(selectedBlueprint && activeBlueprintId === selectedBlueprint.id);
   const uploadedParsedForSelected = selectedBlueprint ? lastParsedByBlueprintId[selectedBlueprint.id] : undefined;
 
-  const filteredWeeklyEntries = useMemo(() => {
-    if (!activeWorkspace) return [];
-    const q = weeklySearchQuery.trim().toLowerCase();
-    if (!q) return activeWorkspace.weeklySchedule;
-    return activeWorkspace.weeklySchedule.filter(
-      (e) =>
-        `tuần ${e.week}`.includes(q) ||
-        `tiết ${e.period}`.includes(q) ||
-        (e.topic || '').toLowerCase().includes(q) ||
-        (e.lessonTitle || '').toLowerCase().includes(q) ||
-        (e.gameName || '').toLowerCase().includes(q)
-    );
-  }, [activeWorkspace, weeklySearchQuery]);
-
-  const distinctWeeksCount = useMemo(() => {
-    if (!activeWorkspace) return 0;
-    return new Set(activeWorkspace.weeklySchedule.map((e) => e.week)).size;
+  // Group extracted schedule by week so Tab 7 ALWAYS displays strictly 1 complete week at a time
+  const availableWeekGroups = useMemo(() => {
+    if (!activeWorkspace || activeWorkspace.weeklySchedule.length === 0) return [];
+    const map = new Map<number, ImportedWeeklyPlanEntry[]>();
+    activeWorkspace.weeklySchedule.forEach((e) => {
+      const list = map.get(e.week) || [];
+      list.push(e);
+      map.set(e.week, list);
+    });
+    const sortedWeeks = Array.from(map.keys()).sort((a, b) => a - b);
+    return sortedWeeks.map((w, idx) => {
+      const entries = (map.get(w) || []).sort((a, b) => a.period - b.period);
+      const startPage = entries.reduce(
+        (min, e) => (e.pageHint && e.pageHint < min ? e.pageHint : min),
+        entries[0]?.pageHint || 1
+      );
+      const nextWeekNum = sortedWeeks[idx + 1];
+      const nextWeekEntries = nextWeekNum !== undefined ? map.get(nextWeekNum) || [] : [];
+      const nextWeekStartPage = nextWeekEntries[0]?.pageHint;
+      const computedEnd =
+        nextWeekStartPage && nextWeekStartPage > startPage
+          ? nextWeekStartPage - 1
+          : entries.reduce(
+              (max, e) => Math.max(max, e.endPageHint || e.pageHint || startPage),
+              startPage
+            );
+      const endPage = Math.max(startPage, computedEnd);
+      const topicSummary = entries[0]?.topic || entries[0]?.lessonTitle || `Tuần ${w}`;
+      return {
+        week: w,
+        nextWeekNumber: nextWeekNum,
+        entries,
+        startPage,
+        endPage,
+        topicSummary
+      };
+    });
   }, [activeWorkspace]);
+
+  const selectedWeekGroup = useMemo(() => {
+    if (availableWeekGroups.length === 0) return null;
+    const matched = availableWeekGroups.find((g) => g.week === activeImportedEntry?.week);
+    return matched || availableWeekGroups[0];
+  }, [availableWeekGroups, activeImportedEntry?.week]);
+
+  const distinctWeeksCount = availableWeekGroups.length;
+
+  const handleSelectWeek = (weekNum: number) => {
+    const group = availableWeekGroups.find((g) => g.week === weekNum);
+    if (!group || group.entries.length === 0) return;
+    handleSelectWeeklyEntry(group.entries[0].id);
+    setWeekScopeMode('full_week');
+  };
+
+  const handlePickRandomWeek = () => {
+    if (availableWeekGroups.length <= 1) return;
+    const candidates = availableWeekGroups.filter((g) => g.week !== selectedWeekGroup?.week);
+    const pool = candidates.length > 0 ? candidates : availableWeekGroups;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    if (picked) {
+      handleSelectWeek(picked.week);
+      showToast(`🎲 Đã chuyển sang hiển thị nguyên vẹn giáo án Tuần ${picked.week} (${picked.entries.length} tiết)!`);
+    }
+  };
 
   const currentEntryStats = useMemo(() => {
     const rows = activeImportedEntry?.rows || [];
@@ -1570,17 +1657,21 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-extrabold uppercase tracking-wide text-emerald-800">
-                      Đã tiếp nhận mẫu giáo án · Đang hiển thị bài dạy của thầy cô
+                      Đã tiếp nhận mẫu giáo án · Chỉ hiển thị 1 giáo án hoàn thiện (Tuần {selectedWeekGroup?.week || activeImportedEntry.week})
                     </span>
                     <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-200">
                       {activeWorkspace.detectedGradeLabel}
-                      {activeWorkspace.totalPages ? ` · ${activeWorkspace.totalPages} trang` : ''}
+                      {selectedWeekGroup
+                        ? ` · Tuần ${selectedWeekGroup.week}/${distinctWeeksCount}`
+                        : ''}
                     </span>
                   </div>
                   <p className="text-xs sm:text-[13px] text-slate-800 font-medium leading-relaxed mt-1.5">
-                    <b className="text-emerald-900">Đã tiếp nhận mẫu giáo án để ứng dụng xử lý.</b> Quý thầy cô cần{' '}
-                    <b className="text-blue-800">tải hình ảnh minh họa động tác</b>;{' '}
-                    <b className="text-teal-800">sơ đồ đội hình</b> có thể sử dụng mẫu sơ đồ có sẵn trong thư viện của ứng dụng để trải nghiệm — ứng dụng đã tự động phân tích từng hoạt động và chèn sẵn mẫu sơ đồ phù hợp ngay bên dưới.
+                    <b className="text-emerald-900">Đã tiếp nhận mẫu giáo án để ứng dụng xử lý.</b> Ứng dụng{' '}
+                    <b className="text-emerald-900">chỉ hiển thị gọn nguyên vẹn 1 giáo án hoàn thiện của 1 tuần bất kỳ</b>{' '}
+                    trong file (giữ nguyên 100% nội dung, bảng biểu và hình ảnh gốc — không mở tràn cả bộ nhiều tuần). Thầy cô có thể chọn tuần khác bên dưới hoặc thử ghép{' '}
+                    <b className="text-blue-800">ảnh động tác</b> &amp;{' '}
+                    <b className="text-teal-800">sơ đồ thư viện</b> ở chế độ Chạy thử khung mẫu.
                   </p>
                 </div>
               </div>
@@ -1588,9 +1679,12 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
               {/* Quick Live Metrics */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 <div className="bg-white/90 rounded-xl border border-emerald-200/80 px-3 py-2">
-                  <div className="text-[11px] text-slate-500 font-semibold">Kế hoạch tuần phân tích được</div>
+                  <div className="text-[11px] text-slate-500 font-semibold">Đang hiển thị gọn 1 tuần</div>
                   <div className="font-bold text-slate-900 mt-0.5">
-                    {distinctWeeksCount} tuần · {activeWorkspace.weeklySchedule.length} tiết dạy
+                    Tuần {selectedWeekGroup?.week || activeImportedEntry.week}{' '}
+                    {selectedWeekGroup
+                      ? `(${selectedWeekGroup.entries.length} tiết · trích từ ${distinctWeeksCount} tuần)`
+                      : ''}
                   </div>
                 </div>
                 <div className="bg-white/90 rounded-xl border border-teal-200/80 px-3 py-2">
@@ -1643,29 +1737,42 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
             </div>
           )}
 
-          {/* Weekly Plan / PPCT Extracted From Teacher's Uploaded File */}
-          {activeWorkspace && activeWorkspace.weeklySchedule.length > 0 && (
+          {/* Single-Week Focused Selector & Plan Summary (Strictly 1 Week At A Time) */}
+          {activeWorkspace && selectedWeekGroup && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
                 <div className="flex items-center gap-2 min-w-0">
                   <CalendarDays className="w-4 h-4 text-indigo-600 shrink-0" />
                   <div className="min-w-0">
                     <h3 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                      Kế hoạch tuần trích từ mẫu giáo án ({activeWorkspace.weeklySchedule.length} tiết · {activeWorkspace.detectedGradeLabel})
+                      Kế hoạch dạy học Tuần {selectedWeekGroup.week} ({selectedWeekGroup.entries.length} tiết · {activeWorkspace.detectedGradeLabel})
                     </h3>
                     <p className="text-[11px] text-slate-500 truncate">
-                      Nguồn: {activeWorkspace.weeklyPlanSourceName || activeWorkspace.fileName} — Bấm chọn bất kỳ tiết nào để ứng dụng phân tích &amp; chèn sơ đồ đội hình
+                      {distinctWeeksCount > 1
+                        ? `Chỉ hiển thị 1 giáo án hoàn thiện của Tuần ${selectedWeekGroup.week} (trích gọn từ file có ${distinctWeeksCount} tuần)`
+                        : `Nguồn: ${activeWorkspace.weeklyPlanSourceName || activeWorkspace.fileName}`}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {distinctWeeksCount > 1 && (
+                    <button
+                      type="button"
+                      onClick={handlePickRandomWeek}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 transition"
+                      title="Chọn ngẫu nhiên 1 tuần khác trong file để xem giáo án hoàn thiện"
+                    >
+                      <Shuffle className="w-3.5 h-3.5" />
+                      <span>Đổi tuần ngẫu nhiên</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => weeklyPlanFileInputRef.current?.click()}
                     disabled={isImportingWeeklyPlan}
                     className="px-2.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 text-[11px] font-bold flex items-center gap-1 transition disabled:opacity-60"
-                    title="Nạp thêm tệp Kế hoạch tuần / Phân phối chương trình (.docx, .pdf, .txt) để ứng dụng phân tích theo từng tuần"
+                    title="Nạp thêm tệp Kế hoạch tuần / Phân phối chương trình (.docx, .pdf, .txt)"
                   >
                     {isImportingWeeklyPlan ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1677,37 +1784,74 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                 </div>
               </div>
 
-              {activeWorkspace.weeklySchedule.length > 4 && (
-                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
-                  <div className="relative flex-1 min-w-[200px]">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={weeklySearchQuery}
-                      onChange={(e) => setWeeklySearchQuery(e.target.value)}
-                      placeholder="Lọc nhanh theo Tuần, Tiết, Chủ đề, Tên bài học hoặc Trò chơi..."
-                      className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
+              {/* Clean 1-Week Dropdown Selector */}
+              {distinctWeeksCount > 1 && (
+                <div className="px-4 py-2.5 border-b border-slate-100 bg-indigo-50/40 flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs font-bold text-slate-700 shrink-0">
+                    Chọn 1 tuần bất kỳ trong file:
+                  </label>
+                  <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[220px]">
+                    <select
+                      value={selectedWeekGroup.week}
+                      onChange={(e) => handleSelectWeek(Number(e.target.value))}
+                      className="w-full sm:w-auto sm:min-w-[290px] max-w-full px-3 py-1.5 rounded-lg border border-indigo-300 text-xs font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      {availableWeekGroups.map((g) => {
+                        const periodText =
+                          g.entries.length > 1
+                            ? `Tiết ${g.entries[0].period}–${g.entries[g.entries.length - 1].period}`
+                            : `Tiết ${g.entries[0]?.period || 1}`;
+                        return (
+                          <option key={g.week} value={g.week}>
+                            Tuần {g.week} ({periodText}) – {g.topicSummary.slice(0, 48)}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {selectedWeekGroup.entries.length > 1 && (
+                      <div className="flex items-center bg-white rounded-lg border border-slate-200 p-0.5 text-[11px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => setWeekScopeMode('full_week')}
+                          className={`px-2 py-1 rounded-md transition ${
+                            weekScopeMode === 'full_week'
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Trọn Tuần {selectedWeekGroup.week}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setWeekScopeMode('single_period')}
+                          className={`px-2 py-1 rounded-md transition ${
+                            weekScopeMode === 'single_period'
+                              ? 'bg-indigo-600 text-white'
+                              : 'text-slate-600 hover:bg-slate-100'
+                          }`}
+                        >
+                          Chỉ Tiết {activeImportedEntry?.period}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <span className="text-[11px] text-slate-500 font-semibold">
-                    Hiển thị {filteredWeeklyEntries.length} / {activeWorkspace.weeklySchedule.length} tiết
-                  </span>
                 </div>
               )}
 
+              {/* Compact Table Showing ONLY The 1–2 Periods Of The Selected Week */}
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200 text-left">
                       <th className="py-2 px-2.5 w-16 text-center">Tuần</th>
                       <th className="py-2 px-2 w-16 text-center">Tiết</th>
-                      <th className="py-2 px-2.5">Chủ đề &amp; Tên bài học</th>
-                      <th className="py-2 px-2.5 hidden sm:table-cell">Trò chơi / Trang</th>
-                      <th className="py-2 px-2.5 w-28 text-center">Xem &amp; Phân tích</th>
+                      <th className="py-2 px-2.5">Chủ đề &amp; Tên bài học trong Tuần {selectedWeekGroup.week}</th>
+                      <th className="py-2 px-2.5 hidden sm:table-cell">Trò chơi / Phạm vi trang</th>
+                      <th className="py-2 px-2.5 w-28 text-center">Trạng thái</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {(showAllWeeklyRows ? filteredWeeklyEntries : filteredWeeklyEntries.slice(0, 6)).map((entry) => {
+                    {selectedWeekGroup.entries.map((entry) => {
                       const isSelected = activeImportedEntry?.id === entry.id && isViewingImportedLesson;
                       const formCnt = entry.rows.filter(
                         (r) => (r.hsImages && r.hsImages.length > 0) || Boolean(r.hsImgUrl)
@@ -1738,7 +1882,11 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                           <td className="py-2 px-2.5 hidden sm:table-cell text-[11px] text-slate-600">
                             <div>{entry.gameName ? `🎯 ${entry.gameName}` : `${entry.rows.length} hoạt động`}</div>
                             <div className="text-[10px] text-slate-400 mt-0.5">
-                              {entry.pageHint ? `Trang ${entry.pageHint} · ` : ''}
+                              {entry.pageHint
+                                ? entry.endPageHint && entry.endPageHint > entry.pageHint
+                                  ? `Trang ${entry.pageHint}–${entry.endPageHint} · `
+                                  : `Trang ${entry.pageHint} · `
+                                : ''}
                               {formCnt} sơ đồ · {imgCnt} ảnh
                             </div>
                           </td>
@@ -1755,7 +1903,7 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                                   : 'bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800'
                               }`}
                             >
-                              {isSelected ? 'Đang xem' : 'Phân tích'}
+                              {isSelected ? 'Đang mở' : 'Chọn tiết'}
                             </button>
                           </td>
                         </tr>
@@ -1764,20 +1912,6 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                   </tbody>
                 </table>
               </div>
-
-              {filteredWeeklyEntries.length > 6 && (
-                <div className="px-4 py-2 bg-slate-50 border-t border-slate-200 flex items-center justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowAllWeeklyRows((v) => !v)}
-                    className="text-xs font-bold text-indigo-700 hover:text-indigo-900 transition"
-                  >
-                    {showAllWeeklyRows
-                      ? 'Thu gọn danh sách kế hoạch tuần'
-                      : `Xem đầy đủ tất cả ${filteredWeeklyEntries.length} tiết trong kế hoạch tuần`}
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -1786,9 +1920,9 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs sm:text-sm font-bold text-slate-900">
-                  {isViewingImportedLesson
-                    ? 'Bước 3: Xem & trải nghiệm trực tiếp trên giáo án thầy cô vừa nhập'
-                    : 'Bước 3: Xem thử trực quan trên giáo án thật'}
+                  {sandboxViewMode === 'original' && originalDocument
+                    ? 'Bước 3: Giáo án gốc nguyên vẹn 100% của thầy cô'
+                    : 'Bước 3: Chạy thử khung mẫu & ghép sơ đồ thư viện'}
                 </span>
                 {selectedBlueprint && (
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
@@ -1797,12 +1931,61 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                 )}
               </div>
 
-              <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+              {/* Clean 2-Mode Switcher: Verbatim Original (Default) vs Structured Blueprint Sandbox */}
+              {originalDocument ? (
+                <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setSandboxViewMode('original')}
+                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                      sandboxViewMode === 'original'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-white'
+                    }`}
+                  >
+                    <FileCheck2 className="w-3.5 h-3.5" />
+                    <span>Bản gốc nguyên vẹn (100%)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSandboxViewMode('structured')}
+                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition ${
+                      sandboxViewMode === 'structured'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:bg-white'
+                    }`}
+                  >
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    <span>Chạy thử khung mẫu &amp; Sơ đồ</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+                  <select
+                    value={previewPlanKey}
+                    onChange={(e) => setPreviewPlanKey(e.target.value)}
+                    className="max-w-full sm:max-w-[320px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    title="Chọn giáo án thầy cô nhập vào hoặc bài dạy có sẵn trong ứng dụng"
+                  >
+                    {samplePlanOptions.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {originalDocument && sandboxViewMode === 'structured' && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                <span className="text-slate-500 font-medium">
+                  Chọn bài học để chạy thử khung bố cục ({COLUMN_MODE_SPECS[selectedBlueprint?.columnMode || '4col_standard'].shortLabel}):
+                </span>
                 <select
                   value={previewPlanKey}
                   onChange={(e) => setPreviewPlanKey(e.target.value)}
-                  className="max-w-full sm:max-w-[320px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  title="Chọn giáo án thầy cô nhập vào hoặc bài dạy có sẵn trong ứng dụng"
+                  className="max-w-full sm:max-w-[340px] px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   {samplePlanOptions.map((opt) => (
                     <option key={opt.key} value={opt.key}>
@@ -1811,7 +1994,7 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                   ))}
                 </select>
               </div>
-            </div>
+            )}
 
             {selectedBlueprint && (
               <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
@@ -1875,17 +2058,17 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
             )}
           </div>
 
-          {/* Live A4 Sheet Render */}
+          {/* Live Document Viewport: Verbatim Original (100% Untouched) OR Structured Blueprint Sandbox */}
           {!selectedBlueprint ? (
             <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-10 text-center space-y-3">
               <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
                 <FileText className="w-7 h-7" />
               </div>
               <h4 className="text-base font-bold text-slate-900">
-                Bản xem trước A4 trực tiếp sẽ hiển thị tại đây
+                Bản xem trước giáo án trực tiếp sẽ hiển thị tại đây
               </h4>
               <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-                Hãy tải file giáo án Word (.docx) hoặc PDF mẫu của thầy cô ở khung bên trái, hoặc bấm thử nhanh 1 mẫu 2 cột / 3 cột / 5 cột để xem ứng dụng tự động khớp toàn bộ giáo án, tranh SGK và sơ đồ đội hình vào mẫu mới!
+                Hãy tải file giáo án Word (.docx) hoặc PDF của thầy cô ở khung bên trái để hiển thị <b>nguyên vẹn 100% nội dung, bảng biểu &amp; hình ảnh gốc</b>, hoặc bấm thử nhanh 1 mẫu 2 cột / 3 cột / 5 cột!
               </p>
               <div className="flex flex-wrap justify-center gap-2 pt-2">
                 <button
@@ -1911,6 +2094,32 @@ export const TabTemplateLab: React.FC<TabTemplateLabProps> = ({
                 </button>
               </div>
             </div>
+          ) : sandboxViewMode === 'original' && originalDocument ? (
+            <FaithfulOriginalDocumentViewer
+              document={originalDocument}
+              lockedStartPage={
+                weekScopeMode === 'single_period' && activeImportedEntry?.pageHint
+                  ? activeImportedEntry.pageHint
+                  : selectedWeekGroup?.startPage || activeImportedEntry?.pageHint || 1
+              }
+              lockedEndPage={
+                weekScopeMode === 'single_period' && activeImportedEntry?.endPageHint
+                  ? activeImportedEntry.endPageHint
+                  : selectedWeekGroup?.endPage || activeImportedEntry?.endPageHint
+              }
+              selectedWeekNumber={selectedWeekGroup?.week || activeImportedEntry?.week}
+              nextWeekNumber={selectedWeekGroup?.nextWeekNumber}
+              isMultiWeekDocument={distinctWeeksCount > 1}
+              targetLessonLabel={
+                selectedWeekGroup
+                  ? weekScopeMode === 'single_period' && activeImportedEntry
+                    ? `${activeImportedEntry.gradeLabel} · Tuần ${activeImportedEntry.week} · Tiết ${activeImportedEntry.period} – ${activeImportedEntry.lessonTitle}`
+                    : `${activeWorkspace?.detectedGradeLabel || ''} · Giáo án hoàn thiện Tuần ${selectedWeekGroup.week} (${selectedWeekGroup.entries
+                        .map((e) => `Tiết ${e.period}`)
+                        .join(' & ')})`
+                  : originalDocument.fileName
+              }
+            />
           ) : (
             <div className="bg-slate-200/70 rounded-2xl p-3 sm:p-5 border border-slate-300 overflow-x-auto">
               <div

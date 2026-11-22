@@ -18,6 +18,7 @@ import {
 } from '../data/formationDiagrams';
 import { parseLessonFile, ParsedLessonFileResult, parseTextLessonPlanMultiTask } from './documentParser';
 import { getAppStateDB, safeLocalStorageSet, setAppStateDB } from './db';
+import { saveOriginalDocumentDB, StoredOriginalDocument } from './originalDocumentStore';
 
 export const CUSTOM_LAYOUT_BLUEPRINTS_STORAGE_KEY = 'gdtc_custom_layout_blueprints_v1';
 export const ACTIVE_LAYOUT_BLUEPRINT_ID_STORAGE_KEY = 'gdtc_active_layout_blueprint_id_v1';
@@ -195,6 +196,7 @@ export interface BlueprintAnalysisOutput {
   blueprint: CustomLayoutBlueprint;
   parsedContent: ParsedLessonFileResult;
   workspace: ImportedTemplateWorkspace;
+  originalDocument: StoredOriginalDocument;
 }
 
 function cleanText(s?: string): string {
@@ -630,16 +632,17 @@ export async function analyzeLessonLayoutFile(
   onProgress?: (label: string, percent: number) => void
 ): Promise<BlueprintAnalysisOutput> {
   const lowerName = file.name.toLowerCase();
+  const rawArrayBuffer = await file.arrayBuffer();
   const parsedContent = await parseLessonFile(file, onProgress);
 
   let html: string | null = null;
   let sourceType: CustomLayoutBlueprint['sourceType'] = 'text';
+  let originalPlainText: string | undefined = undefined;
 
   if (lowerName.endsWith('.docx')) {
     sourceType = 'docx';
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const res = await mammoth.convertToHtml({ arrayBuffer });
+      const res = await mammoth.convertToHtml({ arrayBuffer: rawArrayBuffer.slice(0) });
       html = res.value || null;
     } catch {
       html = null;
@@ -650,12 +653,20 @@ export async function analyzeLessonLayoutFile(
       const txt = await file.text();
       if (/<table|<html|<p|<div/i.test(txt)) {
         html = txt;
+      } else {
+        originalPlainText = txt;
       }
     } catch {
       html = null;
     }
   } else if (lowerName.endsWith('.pdf')) {
     sourceType = 'pdf';
+  } else {
+    try {
+      originalPlainText = await file.text();
+    } catch {
+      originalPlainText = parsedContent.fullText || parsedContent.rawTextExcerpt || '';
+    }
   }
 
   let rawText = parsedContent.fullText || parsedContent.rawTextExcerpt || '';
@@ -672,13 +683,28 @@ export async function analyzeLessonLayoutFile(
     }
   }
 
-  onProgress?.('Đang phân tích khung bảng, kế hoạch tuần & ghép sơ đồ đội hình phù hợp...', 92);
+  onProgress?.('Đang phân tích khung bảng, kế hoạch tuần & bảo toàn nguyên vẹn bản gốc...', 92);
   const analysisTextSample = rawText.replace(/\[\[PAGE:\d+\]\]\n?/g, '').slice(0, 24000);
   const blueprint = analyzeStructureFromHtmlAndText(html, analysisTextSample, parsedContent, file.name, sourceType);
   const workspace = extractImportedWorkspaceFromParsed(blueprint, parsedContent, rawText);
-  onProgress?.('Hoàn tất phân tích mẫu giáo án!', 100);
 
-  return { blueprint, parsedContent, workspace };
+  const originalDocument: StoredOriginalDocument = {
+    blueprintId: blueprint.id,
+    fileName: file.name,
+    fileType: sourceType,
+    mimeType: file.type || (sourceType === 'pdf' ? 'application/pdf' : 'application/octet-stream'),
+    sizeBytes: file.size,
+    savedAt: Date.now(),
+    pdfBytes: sourceType === 'pdf' ? new Uint8Array(rawArrayBuffer.slice(0)) : undefined,
+    originalHtml: html || undefined,
+    rawBytes: sourceType !== 'pdf' ? new Uint8Array(rawArrayBuffer.slice(0)) : undefined,
+    originalText: originalPlainText
+  };
+  await saveOriginalDocumentDB(originalDocument);
+
+  onProgress?.('Hoàn tất tiếp nhận bản gốc nguyên vẹn!', 100);
+
+  return { blueprint, parsedContent, workspace, originalDocument };
 }
 
 /**
@@ -707,7 +733,19 @@ export function analyzeLessonLayoutText(rawText: string, templateName = 'Mẫu d
     parsedContent,
     parsedContent.fullText || rawText
   );
-  return { blueprint, parsedContent, workspace };
+  const originalDocument: StoredOriginalDocument = {
+    blueprintId: blueprint.id,
+    fileName: `${blueprint.name}.${isHtml ? 'html' : 'txt'}`,
+    fileType: isHtml ? 'html' : 'text',
+    mimeType: isHtml ? 'text/html' : 'text/plain',
+    sizeBytes: rawText.length,
+    savedAt: Date.now(),
+    originalHtml: isHtml ? rawText : undefined,
+    originalText: !isHtml ? rawText : undefined
+  };
+  saveOriginalDocumentDB(originalDocument).catch(() => {});
+
+  return { blueprint, parsedContent, workspace, originalDocument };
 }
 
 // =========================================================================
@@ -1479,8 +1517,21 @@ export function extractImportedWorkspaceFromParsed(
     });
   }
 
-  // Sort weekly schedule chronologically
+  // Sort weekly schedule chronologically and compute endPageHint for each lesson
   weeklySchedule.sort((a, b) => a.week - b.week || a.period - b.period);
+  for (let i = 0; i < weeklySchedule.length; i++) {
+    const curr = weeklySchedule[i];
+    const next = weeklySchedule[i + 1];
+    if (curr.pageHint) {
+      if (next && next.pageHint && next.pageHint > curr.pageHint) {
+        curr.endPageHint = next.pageHint - 1;
+      } else if (next && next.pageHint === curr.pageHint) {
+        curr.endPageHint = curr.pageHint;
+      } else if (parsedContent.totalPages && parsedContent.totalPages >= curr.pageHint) {
+        curr.endPageHint = Math.min(parsedContent.totalPages, curr.pageHint + 8);
+      }
+    }
+  }
 
   // Immediately run smart formation auto-matching on the first (active) lesson!
   let autoInsertedFormationsCount = 0;
