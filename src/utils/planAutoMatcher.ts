@@ -733,8 +733,8 @@ export const AUTHENTIC_TEXTBOOK_MAP: Record<string, { url: string; title: string
     title: 'Động tác Bụng - SGK Lớp 1 (Trang 49)'
   },
   phoi_hop: {
-    url: '',
-    title: 'Động tác Phối hợp - Cần tìm hình ảnh đúng Khối 1 trong Thư viện'
+    url: '/assets/aistudio/ban-in_80x60cm_300dpi_vector-chuan-in_90ca6925.png',
+    title: 'Động tác Phối hợp (Tranh Vector 5 Nhịp) - SGK GDTC Lớp 1'
   },
   dieu_hoa: {
     url: '',

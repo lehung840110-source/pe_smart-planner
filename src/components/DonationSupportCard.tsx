@@ -70,7 +70,7 @@ export const DonationSupportCard: React.FC<DonationSupportCardProps> = ({
             </span>
           </div>
           <p className="text-slate-700 leading-relaxed text-[11.5px]">
-            SmartPlan GDTC Pro được chia sẻ miễn phí cho cộng đồng giáo viên Giáo dục Thể chất. Nếu thầy cô thấy công cụ hữu ích và muốn ủng hộ tùy tâm, kinh phí đóng góp sẽ được ưu tiên cho{' '}
+            PE SmartPlan được chia sẻ miễn phí cho cộng đồng giáo viên Giáo dục Thể chất. Nếu thầy cô thấy công cụ hữu ích và muốn ủng hộ tùy tâm, kinh phí đóng góp sẽ được ưu tiên cho{' '}
             <strong className="text-slate-900">
               duy trì vận hành hệ thống/AI và mua sắm dụng cụ tập luyện, phần quà khích lệ, hỗ trợ học sinh có hoàn cảnh khó khăn
             </strong>
@@ -165,9 +165,9 @@ export const DonationSupportCard: React.FC<DonationSupportCardProps> = ({
 
             <a
               href={`mailto:${ADMIN_OWNER_EMAIL}?subject=${encodeURIComponent(
-                '[SmartPlan GDTC Pro] Chia sẻ & Ủng hộ duy trì hệ thống'
+                '[PE SmartPlan] Chia sẻ & Ủng hộ duy trì hệ thống'
               )}&body=${encodeURIComponent(
-                'Kính gửi thầy Lê Quốc Hưng,\n\nTôi vừa gửi chút tấm lòng ủng hộ duy trì SmartPlan GDTC Pro và quỹ mua quà, dụng cụ tập luyện hỗ trợ các em học sinh khó khăn.\n\nChúc thầy nhiều sức khỏe và tiếp tục lan tỏa giá trị cho cộng đồng giáo viên GDTC!'
+                'Kính gửi thầy Lê Quốc Hưng,\n\nTôi vừa gửi chút tấm lòng ủng hộ duy trì PE SmartPlan và quỹ mua quà, dụng cụ tập luyện hỗ trợ các em học sinh khó khăn.\n\nChúc thầy nhiều sức khỏe và tiếp tục lan tỏa giá trị cho cộng đồng giáo viên GDTC!'
               )}`}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-amber-50 text-slate-700 border border-slate-300 font-semibold text-[11px] transition"
             >

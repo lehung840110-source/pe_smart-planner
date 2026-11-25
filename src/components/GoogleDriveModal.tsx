@@ -389,7 +389,7 @@ export const GoogleDriveModal: React.FC<GoogleDriveModalProps> = ({
         onImportFileContent(file);
         setStatusMessage({
           type: 'success',
-          text: `Đã nạp tệp "${fileItem.name}" vào SmartPlan GDTC Pro thành công!`
+          text: `Đã nạp tệp "${fileItem.name}" vào PE SmartPlan thành công!`
         });
       }
     } catch (err: any) {

@@ -1,0 +1,35 @@
+{
+  "appId": "vn.pesmartplan.app",
+  "productName": "PE SmartPlan 2.0",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "desktop/electron-main.cjs",
+    "public/pwa-512x512.png"
+  ],
+  "extraMetadata": {
+    "main": "desktop/electron-main.cjs"
+  },
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "portable",
+        "arch": ["x64"]
+      }
+    ],
+    "icon": "public/pwa-512x512.png"
+  },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "PE SmartPlan 2.0"
+  }
+}

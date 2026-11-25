@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>/?tab=intro</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>/?tab=generator</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
+  <url><loc>/?tab=export</loc><changefreq>weekly</changefreq><priority>0.95</priority></url>
+  <url><loc>/?tab=scan</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=extract</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=library</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>/?tab=export&amp;khoi=1&amp;hocky=1</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=1&amp;hocky=2</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=1&amp;hocky=all</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=2&amp;hocky=1</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=2&amp;hocky=2</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=2&amp;hocky=all</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=3&amp;hocky=1</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=3&amp;hocky=2</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=3&amp;hocky=all</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=4&amp;hocky=1</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=4&amp;hocky=2</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=4&amp;hocky=all</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=5&amp;hocky=1</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=5&amp;hocky=2</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=export&amp;khoi=5&amp;hocky=all</loc><changefreq>monthly</changefreq><priority>0.9</priority></url>
+  <url><loc>/?tab=scan&amp;khoi=1</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>/?tab=scan&amp;khoi=2</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>/?tab=scan&amp;khoi=3</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>/?tab=scan&amp;khoi=4</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+  <url><loc>/?tab=scan&amp;khoi=5</loc><changefreq>monthly</changefreq><priority>0.85</priority></url>
+</urlset>

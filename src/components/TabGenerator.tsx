@@ -355,7 +355,7 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
     setLastAutoMatch(match);
 
     showToast(
-      `⚡ Đã áp dụng mẫu Nghĩa Hiệp & Kế hoạch tích hợp: Nhận diện ${match.detectedMovements.length} động tác, tự gắn ${match.matchedImages.length} ảnh kỹ thuật và ${match.matchedFormations.length} sơ đồ đội hình!`
+      `⚡ Đã áp dụng khung giáo án chuẩn & Kế hoạch tích hợp: Nhận diện ${match.detectedMovements.length} động tác, tự gắn ${match.matchedImages.length} ảnh kỹ thuật và ${match.matchedFormations.length} sơ đồ đội hình!`
     );
   };
 
@@ -834,13 +834,10 @@ export const TabGenerator: React.FC<TabGeneratorProps> = ({
               <ShieldCheck className="w-3.5 h-3.5" />
               Mẫu Mặc Định Đang Kích Hoạt
             </span>
-            <span className="text-blue-200 text-xs">
-              Trường TH &amp; THCS Nghĩa Hiệp (GV: Lê Quốc Hưng)
-            </span>
           </div>
           <h2 className="text-sm sm:text-base font-bold mt-1.5 text-white flex items-start sm:items-center gap-2 leading-snug">
             <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300 shrink-0 mt-0.5 sm:mt-0" />
-            <span>Sinh Giáo Án Tuần Kế Tiếp Từ Giáo Án Mẫu Nghĩa Hiệp</span>
+            <span>Sinh Giáo Án Tuần Kế Tiếp</span>
           </h2>
           <p className="text-blue-100 text-xs mt-1 max-w-2xl leading-relaxed">
             Giữ nguyên 100% khung sườn quy chuẩn, mục tiêu năng lực số (3.1TC1a/1.1TC1a), ATGT, cấu trúc 4 cột và chữ ký BGH. Chỉ cập nhật tên bài và tự động điền ảnh động tác &amp; sơ đồ đội hình.

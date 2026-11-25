@@ -3,13 +3,152 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232563eb'/%3E%3Cpath d='M12 34h10l6-14 8 24 6-10h10' fill='none' stroke='%23ffffff' stroke-width='5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
-    <title>SmartPlan GDTC Pro - Bóc Tách Ảnh SGK & Kế Hoạch Bài Dạy AI</title>
-    <meta name="description" content="Hệ thống quản lý giáo án Giáo dục Thể chất, bóc tách và phân loại hình ảnh SGK, thư viện kịch bản giảng dạy và tự động tạo kế hoạch bài dạy chuẩn GDPT 2018." />
-    <meta property="og:title" content="SmartPlan GDTC Pro - Bóc Tách Ảnh SGK & Kế Hoạch Bài Dạy AI" />
-    <meta property="og:description" content="Hệ thống quản lý giáo án Giáo dục Thể chất, bóc tách và phân loại hình ảnh SGK, thư viện kịch bản giảng dạy và tự động tạo kế hoạch bài dạy chuẩn GDPT 2018." />
+    <meta name="theme-color" content="#2563eb" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="author" content="PE SmartPlan" />
+    <meta name="application-name" content="PE SmartPlan 2.0" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="PE SmartPlan" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+    <title>PE SmartPlan 2.0 – Giáo Án GDTC Tiểu Học Kết Nối Tri Thức</title>
+    <meta
+      name="description"
+      content="Tải giáo án GDTC lớp 1–5 Kết nối tri thức theo tuần, trọn bộ học kỳ & giáo án tích hợp năm học. Kho ảnh động tác bài thể dục SGK, sơ đồ đội hình GDPT 2018."
+    />
+    <meta
+      name="keywords"
+      content="PE SmartPlan, giáo án GDTC lớp 1, giáo án GDTC lớp 2, giáo án GDTC lớp 3, giáo án GDTC lớp 4, giáo án GDTC lớp 5, kế hoạch dạy học tuần GDTC, sách giáo khoa GDTC tiểu học, bộ sách GDTC Kết nối tri thức với cuộc sống, hình ảnh động tác bài thể dục lớp 1, hình ảnh động tác bài thể dục lớp 2, hình ảnh động tác bài thể dục lớp 3, hình ảnh động tác bài thể dục lớp 4, hình ảnh động tác bài thể dục lớp 5, giáo án tuần thể dục tiểu học, tải trọn bộ giáo án GDTC theo học kỳ, giáo án GDTC học kỳ 1, giáo án GDTC học kỳ 2, giáo án tích hợp năm học GDTC, tích hợp năng lực số KNS BVMT ATGT QCN, kế hoạch bài dạy GDPT 2018 công văn 2345, sơ đồ đội hình thể dục tiểu học, học liệu số GDTC"
+    />
+
+    <!-- OpenGraph Social Share Card -->
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:site_name" content="PE SmartPlan" />
+    <meta property="og:title" content="PE SmartPlan 2.0 – Giáo Án GDTC Tiểu Học Kết Nối Tri Thức" />
+    <meta
+      property="og:description"
+      content="Tải giáo án GDTC lớp 1–5 Kết nối tri thức theo tuần, trọn bộ học kỳ & giáo án tích hợp năm học. Kho ảnh động tác bài thể dục SGK, sơ đồ đội hình GDPT 2018."
+    />
+    <meta property="og:image" content="/pwa-512x512.png" />
+    <meta property="og:image:alt" content="PE SmartPlan 2.0 – Hệ sinh thái Giáo án & Học liệu GDTC Tiểu học Kết nối tri thức" />
+
+    <!-- Twitter / X Social Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="PE SmartPlan 2.0 – Giáo Án GDTC Tiểu Học Kết Nối Tri Thức" />
+    <meta
+      name="twitter:description"
+      content="Tải giáo án GDTC lớp 1–5 Kết nối tri thức theo tuần, trọn bộ học kỳ & giáo án tích hợp năm học. Kho ảnh động tác bài thể dục SGK & xuất Word chuẩn GDPT 2018."
+    />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
+
+    <!-- Schema.org Structured Data (JSON-LD) -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            "name": "PE SmartPlan 2.0",
+            "alternateName": [
+              "PE SmartPlan",
+              "Phần mềm soạn giáo án GDTC Tiểu học Kết nối tri thức",
+              "Kho học liệu & giáo án Giáo dục Thể chất lớp 1 đến 5"
+            ],
+            "applicationCategory": "EducationalApplication",
+            "operatingSystem": "Windows, macOS, Android, iOS, Web",
+            "inLanguage": "vi",
+            "isAccessibleForFree": true,
+            "description": "Ứng dụng soạn kế hoạch bài dạy và tải trọn bộ giáo án Giáo dục Thể chất Tiểu học lớp 1–5 (Bộ sách Kết nối tri thức với cuộc sống) theo tuần, học kỳ 1, học kỳ 2 và giáo án tích hợp năm học chuẩn GDPT 2018.",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "VND"
+            },
+            "featureList": [
+              "Giáo án GDTC lớp 1, lớp 2, lớp 3, lớp 4, lớp 5 chuẩn Bộ sách Kết nối tri thức với cuộc sống",
+              "Kế hoạch dạy học tuần 1 đến tuần 35 và tải trọn bộ giáo án từng khối theo Học kỳ I, Học kỳ II, cả năm học",
+              "Giáo án tích hợp năm học: Kỹ năng sống (KNS), Bảo vệ môi trường (BVMT), Quyền trẻ em (QCN), An toàn giao thông (ATGT), Năng lực số (NLS)",
+              "Sách giáo khoa GDTC Tiểu học & kho bóc tách hình ảnh động tác bài thể dục lớp 1–5 sắc nét",
+              "Studio vẽ sơ đồ đội hình tập luyện & xuất file Word (.DOCX/.DOC) chuẩn in A4, hỗ trợ chạy Offline"
+            ],
+            "audience": {
+              "@type": "EducationalAudience",
+              "educationalRole": "teacher"
+            }
+          },
+          {
+            "@type": "LearningResource",
+            "name": "Bộ Giáo Án & Hình Ảnh SGK Giáo Dục Thể Chất Tiểu Học Lớp 1–5 (Kết Nối Tri Thức Với Cuộc Sống)",
+            "description": "Kho học liệu số đầy đủ 35 tuần (70 tiết/khối) gồm kế hoạch dạy học tuần, giáo án tích hợp năm học, hình ảnh động tác bài thể dục và sơ đồ đội hình cho môn Giáo dục Thể chất lớp 1, 2, 3, 4, 5.",
+            "inLanguage": "vi",
+            "learningResourceType": [
+              "Lesson Plan",
+              "Textbook Illustration",
+              "Curriculum Plan"
+            ],
+            "educationalLevel": [
+              "Lớp 1",
+              "Lớp 2",
+              "Lớp 3",
+              "Lớp 4",
+              "Lớp 5",
+              "Tiểu học"
+            ],
+            "about": [
+              "Giáo dục Thể chất Tiểu học",
+              "Bộ sách Kết nối tri thức với cuộc sống",
+              "Chương trình GDPT 2018",
+              "Giáo án tích hợp năm học"
+            ],
+            "isAccessibleForFree": true
+          },
+          {
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Có thể tải toàn bộ giáo án GDTC của từng khối lớp 1–5 theo học kỳ không?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Có. Trong PE SmartPlan 2.0, thầy cô có thể tải trọn bộ giáo án từng khối (Khối 1 đến Khối 5) theo Học kỳ I (Tuần 1–18), Học kỳ II (Tuần 19–35) hoặc trọn bộ Cả Năm Học dưới dạng gói ZIP tách từng tuần (.DOCX) hoặc 1 file Word gộp kèm bảng tổng hợp địa chỉ tích hợp năm học."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Giáo án GDTC trên PE SmartPlan theo bộ sách giáo khoa nào?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Hệ thống bám sát chương trình GDPT 2018 và Bộ sách Giáo dục Thể chất Kết nối tri thức với cuộc sống từ lớp 1 đến lớp 5, tích hợp sẵn phân phối chương trình 35 tuần và kho hình ảnh động tác bài thể dục chuẩn SGK."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Giáo án có tích hợp các nội dung liên môn trong năm học không?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Có. Mỗi tiết dạy và bản tải trọn bộ học kỳ/năm học đều tích hợp sẵn địa chỉ tích hợp chuẩn năm học gồm: Kỹ năng sống (KNS), Bảo vệ môi trường (BVMT), Quyền con người/Quyền trẻ em (QCN), An toàn giao thông (ATGT), Giáo dục QPAN và Năng lực số (NLS)."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "PE SmartPlan 2.0 có hỗ trợ cài đặt và sử dụng Offline trên máy tính không?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Có. Thầy cô có thể cài đặt trực tiếp lên màn hình Desktop Windows/Mac dạng ứng dụng PWA hoặc đóng gói thành bộ cài độc lập để soạn giáo án, xem ảnh động tác SGK và xuất file Word ngay cả khi không có kết nối Internet."
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Lexend:wght@400;500;600;700&display=swap" rel="stylesheet">

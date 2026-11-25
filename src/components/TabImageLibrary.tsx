@@ -54,7 +54,6 @@ import { deleteImageDB, saveImagesDB } from '../utils/db';
 import { ImageToImageModal } from './ImageToImageModal';
 import { BatchImageUploadModal } from './BatchImageUploadModal';
 import { EditImageModal } from './EditImageModal';
-import { CreateHdImageModal } from './CreateHdImageModal';
 import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { FormationStudioModal } from './FormationStudioModal';
@@ -96,7 +95,6 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
   const [sortMode, setSortMode] = useState<LibrarySortMode>('sgk');
   const [imageToImageModalItem, setImageToImageModalItem] = useState<SgkImageItem | null>(null);
   const [isBatchUploadOpen, setIsBatchUploadOpen] = useState<boolean>(false);
-  const [isCreateHdOpen, setIsCreateHdOpen] = useState<boolean>(false);
   const [studioRefImage, setStudioRefImage] = useState<SgkImageItem | null>(null);
 
   const [treeRevision, setTreeRevision] = useState<number>(0);
@@ -887,23 +885,6 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => {
-                if (isGuest && onRequireAuth) {
-                  onRequireAuth('Tạo mới ảnh minh họa chất lượng cao 2K/4K');
-                  return;
-                }
-                setIsCreateHdOpen(true);
-              }}
-              className="bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
-              title="Vẽ mới hoàn toàn tranh minh họa chuẩn SGK độ phân giải 2K/4K sắc nét, không cần cắt ảnh mờ"
-            >
-              <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>Tạo Ảnh Mới (2K/4K)</span>
-              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
-            </button>
-
             <button
               onClick={() => {
                 if (isGuest && onRequireAuth) {
@@ -2222,28 +2203,6 @@ export const TabImageLibrary: React.FC<TabImageLibraryProps> = ({
           }}
         />
       )}
-      {/* Studio Create Brand-New HD/2K/4K Image Modal */}
-      <CreateHdImageModal
-        isOpen={isCreateHdOpen}
-        onClose={() => setIsCreateHdOpen(false)}
-        defaultGrade={filterGrade === 'all' ? '1' : filterGrade}
-        onSaveToLibrary={(newImg) => {
-          setImages((prev) => {
-            const updated = [newImg, ...prev];
-            saveImagesDB(updated).catch(() => {});
-            return updated;
-          });
-        }}
-        onSaveAndAttachToLesson={(newImg) => {
-          setImages((prev) => {
-            const updated = [newImg, ...prev];
-            saveImagesDB(updated).catch(() => {});
-            return updated;
-          });
-          onOpenSelectCellModal(newImg);
-        }}
-        showToast={showToast}
-      />
     </div>
   );
 };

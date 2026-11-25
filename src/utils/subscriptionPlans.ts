@@ -21,56 +21,66 @@ export const EXPIRY_WARNING_DAYS = 7;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const ADMIN_OWNER_EMAIL = 'lehung840110@gmail.com';
 
+export const DOWNLOAD_PRICING = {
+  weekVnd: 20000,
+  semesterVnd: 360000,
+  fullYearVnd: 700000,
+} as const;
+
+export function formatVnd(amount: number): string {
+  return `${Math.round(amount).toLocaleString('vi-VN')} đ`;
+}
+
 export const SUBSCRIPTION_PLANS: SubscriptionPlanOption[] = [
   {
     id: 'week_1',
     codePrefix: 'W1',
-    name: 'Tính năng nâng cao (7 ngày)',
-    shortLabel: '7 ngày',
+    name: 'Gói Tải Lẻ 1 Tuần (7 ngày)',
+    shortLabel: '1 Tuần · 20k',
     durationDays: 7,
-    priceVnd: 0,
-    priceText: '',
-    perMonthText: '',
-    tagline: 'Mở khóa toàn bộ tính năng nâng cao trong 7 ngày'
+    priceVnd: 20000,
+    priceText: '20.000 đ',
+    perMonthText: '20.000 đ / tuần',
+    tagline: 'Mở khóa tải giáo án 1 tuần & gia hạn phần mềm sau dùng thử 120 ngày'
   },
   {
     id: 'month_1',
     codePrefix: 'M1',
-    name: 'Tính năng nâng cao (30 ngày)',
-    shortLabel: '30 ngày',
+    name: 'Gói 1 Tháng (30 ngày)',
+    shortLabel: '1 Tháng · 80k',
     durationDays: 30,
-    priceVnd: 0,
-    priceText: '',
-    perMonthText: '',
+    priceVnd: 80000,
+    priceText: '80.000 đ',
+    perMonthText: '80.000 đ / tháng',
     tagline: 'Mở khóa toàn bộ tính năng nâng cao trong 30 ngày'
   },
   {
     id: 'semester_1',
     codePrefix: 'S1',
-    name: 'Tính năng nâng cao (1 Học kỳ)',
-    shortLabel: '1 Học kỳ',
+    name: 'Gói Toàn Bộ 1 Học Kỳ (HK I / HK II)',
+    shortLabel: '1 Học kỳ · 360k',
     durationDays: 135,
-    priceVnd: 0,
-    priceText: '',
-    perMonthText: '',
-    tagline: 'Mở khóa toàn bộ tính năng nâng cao trọn 1 học kỳ',
+    priceVnd: 360000,
+    priceText: '360.000 đ',
+    perMonthText: 'Trọn bộ 1 Học kỳ',
+    tagline: 'Mở khóa tải toàn bộ giáo án 1 học kỳ & đăng ký sử dụng sau 120 ngày dùng thử',
     popular: true
   },
   {
     id: 'year_1',
     codePrefix: 'Y1',
-    name: 'Tính năng nâng cao (1 Năm học)',
-    shortLabel: '1 Năm học',
+    name: 'Gói Cả Năm Học (35 Tuần Tích Hợp)',
+    shortLabel: 'Cả năm · 700k',
     durationDays: 365,
-    priceVnd: 0,
-    priceText: '',
-    perMonthText: '',
-    tagline: 'Mở khóa toàn bộ tính năng nâng cao trọn 1 năm học',
+    priceVnd: 700000,
+    priceText: '700.000 đ',
+    perMonthText: 'Tiết kiệm 20.000 đ',
+    tagline: 'Mở khóa tải trọn bộ giáo án cả năm học & sử dụng phần mềm trọn 1 năm',
     bestValue: true
   }
 ];
 
-export const GROUP_DISCOUNT_LABEL = 'Hỗ trợ Tổ / Nhóm chuyên môn GDTC kích hoạt đồng bộ tính năng nâng cao';
+export const GROUP_DISCOUNT_LABEL = 'Liên hệ Thầy Lê Quốc Hưng (lehung840110@gmail.com) để đăng ký sử dụng phần mềm sau gói dùng thử 120 ngày';
 
 export const DONATION_BANK_INFO = {
   bankCode: 'VCB',
@@ -79,11 +89,11 @@ export const DONATION_BANK_INFO = {
   accountNumber: '0271000960686',
   accountHolder: 'Lê Quốc Hưng',
   accountHolderAscii: 'LE QUOC HUNG',
-  defaultTransferNote: 'Ung ho SmartPlan GDTC - [Tên / Trường]',
-  qrFallbackTransferNote: 'Ung ho SmartPlan GDTC',
+  defaultTransferNote: 'Ung ho PE SmartPlan - [Tên / Trường]',
+  qrFallbackTransferNote: 'Ung ho PE SmartPlan',
   title: 'Chung tay duy trì hệ thống & tiếp sức cho học sinh',
   purpose:
-    'SmartPlan GDTC Pro được chia sẻ miễn phí cho cộng đồng giáo viên Giáo dục Thể chất. Nếu thầy cô thấy công cụ hữu ích và muốn ủng hộ tùy tâm, kinh phí đóng góp sẽ được ưu tiên cho duy trì vận hành hệ thống/AI và mua sắm dụng cụ tập luyện, phần quà khích lệ, hỗ trợ học sinh có hoàn cảnh khó khăn.'
+    'PE SmartPlan được chia sẻ miễn phí cho cộng đồng giáo viên Giáo dục Thể chất. Nếu thầy cô thấy công cụ hữu ích và muốn ủng hộ tùy tâm, kinh phí đóng góp sẽ được ưu tiên cho duy trì vận hành hệ thống/AI và mua sắm dụng cụ tập luyện, phần quà khích lệ, hỗ trợ học sinh có hoàn cảnh khó khăn.'
 } as const;
 
 export function buildDonationVietQrUrl(amountVnd?: number, transferNote?: string): string {

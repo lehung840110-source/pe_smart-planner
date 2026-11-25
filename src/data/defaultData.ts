@@ -554,6 +554,22 @@ export const defaultSgkImages: SgkImageItem[] = [
     createdAt: Date.now() - 3430000
   },
   {
+    id: 'img_sgk_k1_phoi_hop',
+    title: 'Động tác Phối hợp (Tranh Vector 5 Nhịp) - SGK GDTC Lớp 1 (Trang 37)',
+    grade: '1',
+    topicId: 'k1_cd2',
+    topicTitle: 'CHỦ ĐỀ 2: BÀI THỂ DỤC',
+    lessonId: 'b3',
+    lessonTitle: 'Bài 3: Động tác Phối hợp và Động tác Điều hòa',
+    folder: 'kyThuat',
+    page: 37,
+    category: 'dong_tac',
+    imgUrl: '/assets/aistudio/ban-in_80x60cm_300dpi_vector-chuan-in_90ca6925.png',
+    caption: 'Động tác Phối hợp bản vector chuẩn in: TTCB Đứng nghiêm; Nhịp 1 chân trái bước chếch khuỵu gối hai tay chống hông; Nhịp 2 thu chân gập thân hai tay với mũi bàn chân; Nhịp 3 khuỵu hai gối hai tay dang ngang bàn tay ngửa; Nhịp 4 về đứng nghiêm; Nhịp 5,6,7,8 đổi chân.',
+    selected: false,
+    createdAt: Date.now() - 3425000
+  },
+  {
     id: 'img_sgk_k1_thang_bang_nang_chan_2d',
     title: 'Động tác Thăng bằng (Nâng chân ngang) - SGK Lớp 1',
     grade: '1',

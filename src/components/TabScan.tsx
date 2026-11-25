@@ -59,7 +59,6 @@ import { ImageProvenanceTooltip } from './ImageProvenanceTooltip';
 import { resolveImageUsageProvenance } from '../utils/imageProvenance';
 import { standardMovementsLibrary } from '../data/movementLibrary';
 import { standardFormationDiagrams } from '../data/formationDiagrams';
-import { CreateHdImageModal } from './CreateHdImageModal';
 
 // Set up pdf.js worker with local Vite asset URL
 if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
@@ -98,7 +97,6 @@ export const TabScan: React.FC<TabScanProps> = ({
   initialGrade,
   initialPage,
 }) => {
-  const [isCreateHdOpen, setIsCreateHdOpen] = useState<boolean>(false);
   // Active Grade & Textbook selection
   const [selectedGrade, setSelectedGrade] = useState<GradeLevel>(initialGrade || 1);
   const [fileName, setFileName] = useState<string>('SGK GDTC Lớp 1 (Kết nối tri thức)');
@@ -1271,16 +1269,6 @@ export const TabScan: React.FC<TabScanProps> = ({
 
           {/* Quick Upload or Auto Load */}
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setIsCreateHdOpen(true)}
-              className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-2xs whitespace-nowrap shrink-0"
-              title="Tạo mới hoàn toàn hình ảnh minh họa độ phân giải 2K/4K thay vì cắt từ trang SGK mờ"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Tạo Ảnh Mới (2K/4K)</span>
-            </button>
-
             {onOpenBatchUpload && (
               <button
                 onClick={onOpenBatchUpload}
@@ -2383,18 +2371,6 @@ export const TabScan: React.FC<TabScanProps> = ({
           </div>
         </div>
       )}
-
-      <CreateHdImageModal
-        isOpen={isCreateHdOpen}
-        onClose={() => setIsCreateHdOpen(false)}
-        defaultGrade={String(selectedGrade)}
-        onSaveToLibrary={(newImg) => {
-          onImageExtracted(newImg);
-        }}
-        showToast={(msg) => {
-          if (showToast) showToast(msg);
-        }}
-      />
     </div>
   );
 };

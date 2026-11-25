@@ -25,10 +25,12 @@ import {
   LayoutGrid,
   ChevronRight,
   MessageSquareHeart,
-  FlaskConical
+  FlaskConical,
+  Sparkles
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 import type { AuthUser } from '../contexts/AuthContext';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   activeTab: string;
@@ -40,6 +42,7 @@ interface HeaderProps {
   onOpenImport?: () => void;
   onOpenGoogleDrive?: () => void;
   onOpenFormationStudio?: () => void;
+  onOpenLovableStudio?: () => void;
   onOpenFormationLibrary?: () => void;
   onOpenPpctManager?: () => void;
   currentWeek?: number;
@@ -49,6 +52,7 @@ interface HeaderProps {
   isGuest?: boolean;
   onOpenAuth?: () => void;
   activeLayoutBlueprintName?: string | null;
+  showToast?: (msg: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -61,6 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenImport,
   onOpenGoogleDrive,
   onOpenFormationStudio,
+  onOpenLovableStudio,
   onOpenFormationLibrary,
   onOpenPpctManager,
   currentWeek = 9,
@@ -70,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   isGuest = false,
   onOpenAuth,
   activeLayoutBlueprintName = null,
+  showToast,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -126,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <div className="min-w-0">
                 <h1 className="font-bold text-sm text-slate-900 tracking-tight leading-tight whitespace-nowrap truncate">
-                  SmartPlan GDTC
+                  PE SmartPlan <span className="text-blue-600">2.0</span>
                 </h1>
                 <p className="text-[10.5px] text-slate-500 whitespace-nowrap truncate">
                   GDPT 2018 · Tuần {currentWeek}
@@ -186,7 +192,15 @@ export const Header: React.FC<HeaderProps> = ({
                       </span>
                     </>
                   ) : (
-                    <LogIn className="w-4 h-4 text-sky-300" />
+                    <>
+                      <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.87z" />
+                        <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09A12 12 0 0 0 12 24z" />
+                        <path fill="#FBBC05" d="M5.28 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12 12 0 0 0 0 10.76l3.99-3.09z" />
+                        <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z" />
+                      </svg>
+                      <span className="text-[11px] font-bold">Google</span>
+                    </>
                   )}
                 </button>
               )}
@@ -211,11 +225,14 @@ export const Header: React.FC<HeaderProps> = ({
                 <Activity className="w-5 h-5 text-white stroke-[2.5]" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   <h1 className="font-bold text-base text-slate-900 tracking-tight leading-tight whitespace-nowrap">
-                    SmartPlan GDTC Pro
+                    PE SmartPlan
                   </h1>
-                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md whitespace-nowrap">
+                  <span className="text-[11px] font-bold text-white bg-blue-600 px-1.5 py-0.5 rounded-md whitespace-nowrap tabular-nums">
+                    v2.0
+                  </span>
+                  <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md whitespace-nowrap hidden lg:inline">
                     GDPT 2018
                   </span>
                 </div>
@@ -225,167 +242,187 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             </div>
 
-            {/* Teacher and School badge + Quick tools */}
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
-              {onSelectCurrentWeek && (
-                <button
-                  onClick={onSelectCurrentWeek}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-sm transition whitespace-nowrap shrink-0 tabular-nums"
-                  title={`Nhấn để mở Kế hoạch bài dạy Tuần ${currentWeek} hiện hành`}
-                >
-                  <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>TUẦN HIỆN HÀNH ({currentWeek})</span>
-                </button>
-              )}
+            {/* Teacher and School badge + Quick tools (scrollable middle) + Pinned Account/Google Login on right */}
+            <div className="flex items-center gap-2 min-w-0 flex-1 justify-end">
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-1 min-w-0">
+                {onSelectCurrentWeek && (
+                  <button
+                    onClick={onSelectCurrentWeek}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs shadow-sm transition whitespace-nowrap shrink-0 tabular-nums"
+                    title={`Nhấn để mở Kế hoạch bài dạy Tuần ${currentWeek} hiện hành`}
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span className="hidden xl:inline">TUẦN HIỆN HÀNH ({currentWeek})</span>
+                    <span className="xl:hidden">TUẦN {currentWeek}</span>
+                  </button>
+                )}
 
-              {onOpenFormationLibrary && (
-                <button
-                  onClick={onOpenFormationLibrary}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title={isGuest ? 'Đăng nhập để mở & chèn từ Kho Sơ Đồ' : 'Mở Kho 32+ sơ đồ đội hình thể dục chuẩn và chèn vào giáo án'}
-                >
-                  <Users className="w-3.5 h-3.5 text-sky-200 shrink-0" />
-                  <span className="hidden lg:inline">Kho Sơ Đồ</span>
-                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
-                </button>
-              )}
+                {onOpenFormationLibrary && (
+                  <button
+                    onClick={onOpenFormationLibrary}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title={isGuest ? 'Đăng nhập để mở & chèn từ Kho Sơ Đồ' : 'Mở Kho 32+ sơ đồ đội hình thể dục chuẩn và chèn vào giáo án'}
+                  >
+                    <Users className="w-3.5 h-3.5 text-sky-200 shrink-0" />
+                    <span className="hidden xl:inline">Kho Sơ Đồ</span>
+                    {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                  </button>
+                )}
 
-              {onOpenFormationStudio && (
-                <button
-                  onClick={onOpenFormationStudio}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title={isGuest ? 'Đăng nhập để mở Studio Đội Hình' : 'Mở Studio thiết kế & sinh sơ đồ đội hình thể dục'}
-                >
-                  <Palette className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span className="hidden lg:inline">Studio Đội Hình</span>
-                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
-                </button>
-              )}
+                {onOpenFormationStudio && (
+                  <button
+                    onClick={onOpenFormationStudio}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title={isGuest ? 'Đăng nhập để mở Studio Đội Hình' : 'Mở Studio thiết kế & sinh sơ đồ đội hình thể dục'}
+                  >
+                    <Palette className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span className="hidden xl:inline">Studio Đội Hình</span>
+                    {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                  </button>
+                )}
 
-              {onOpenPpctManager && (
-                <button
-                  onClick={onOpenPpctManager}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title="Mở bảng Phân phối chương trình (PPCT) cả 5 khối và rà soát tiến độ tuần"
-                >
-                  <BookOpen className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
-                  <span className="hidden lg:inline">PPCT 5 Khối</span>
-                </button>
-              )}
+                {onOpenLovableStudio && (
+                  <button
+                    onClick={onOpenLovableStudio}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title="Mở ứng dụng tạo hình ảnh minh họa Lovable tích hợp sẵn và lưu thẳng vào Giáo án"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-200 shrink-0" />
+                    <span className="hidden xl:inline">Ảnh Lovable</span>
+                  </button>
+                )}
 
-              {onOpenImport && (
-                <button
-                  onClick={onOpenImport}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title={isGuest ? 'Đăng nhập để Nạp & phân tích file giáo án mới' : 'Nạp & phân tích đa nhiệm giáo án mới từ file Word (.docx), PDF, HTML hoặc JSON'}
-                >
-                  <FileUp className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden xl:inline">Nạp File Giáo Án</span>
-                  {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
-                </button>
-              )}
+                {onOpenPpctManager && (
+                  <button
+                    onClick={onOpenPpctManager}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title="Mở bảng Phân phối chương trình (PPCT) cả 5 khối và rà soát tiến độ tuần"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                    <span className="hidden 2xl:inline">PPCT 5 Khối</span>
+                  </button>
+                )}
 
-              {onOpenGoogleDrive && (
-                <button
-                  onClick={onOpenGoogleDrive}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title={isGuest ? 'Đăng nhập để kết nối Google Drive & Google Docs' : 'Lưu & xem kế hoạch bài dạy trên Google Docs / Google Drive'}
-                >
-                  <HardDrive className="w-3.5 h-3.5 shrink-0" />
-                  <span className="hidden xl:inline">Google Docs / Drive</span>
-                  {isGuest && <Lock className="w-3 h-3 text-amber-100 shrink-0" />}
-                </button>
-              )}
+                {onOpenImport && (
+                  <button
+                    onClick={onOpenImport}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title={isGuest ? 'Đăng nhập để Nạp & phân tích file giáo án mới' : 'Nạp & phân tích đa nhiệm giáo án mới từ file Word (.docx), PDF, HTML hoặc JSON'}
+                  >
+                    <FileUp className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden 2xl:inline">Nạp File</span>
+                    {isGuest && <Lock className="w-3 h-3 text-amber-300 shrink-0" />}
+                  </button>
+                )}
 
-              {onOpenBackupRestore && (
-                <button
-                  onClick={onOpenBackupRestore}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
-                  title="Sao lưu & Khôi phục toàn bộ ảnh và giáo án (Chuyển dữ liệu sang Vercel / Máy khác)"
-                >
-                  <Database className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span className="hidden xl:inline">Sao Lưu / Khôi Phục</span>
-                </button>
-              )}
+                {onOpenGoogleDrive && (
+                  <button
+                    onClick={onOpenGoogleDrive}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title={isGuest ? 'Đăng nhập để kết nối Google Drive & Google Docs' : 'Lưu & xem kế hoạch bài dạy trên Google Docs / Google Drive'}
+                  >
+                    <HardDrive className="w-3.5 h-3.5 shrink-0" />
+                    <span className="hidden 2xl:inline">Google Drive</span>
+                    {isGuest && <Lock className="w-3 h-3 text-amber-100 shrink-0" />}
+                  </button>
+                )}
 
-              {onOpenAuth && (
-                <button
-                  onClick={onOpenAuth}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0 ${
-                    authUser
-                      ? authUser.hasFullAccess === false
-                        ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
-                        : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white'
-                  }`}
-                  title={
-                    authUser
-                      ? authUser.planTier === 'admin_lifetime'
-                        ? `Quản trị viên: ${authUser.email} (Toàn quyền vĩnh viễn)`
-                        : authUser.hasFullAccess === false
-                        ? `Đã kết thúc giai đoạn trải nghiệm — Bấm để xem hỗ trợ & nhập mã kích hoạt`
-                        : `Đang đăng nhập: ${authUser.email} · Còn ${authUser.daysRemaining ?? 120} ngày Full`
-                      : 'Đăng nhập tài khoản cá nhân (không cần mật khẩu) · Mở Full miễn phí trọn 1 học kỳ'
-                  }
-                >
-                  {authUser ? (
-                    <>
-                      <UserCheck
-                        className={`w-3.5 h-3.5 shrink-0 ${
-                          authUser.hasFullAccess === false ? 'text-amber-600' : 'text-emerald-600'
-                        }`}
-                      />
-                      <span className="max-w-[96px] truncate">{authUser.fullName}</span>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold tabular-nums ${
-                          authUser.planTier === 'admin_lifetime'
-                            ? 'bg-indigo-600 text-white'
-                            : authUser.hasFullAccess === false
-                            ? 'bg-amber-600 text-white'
-                            : authUser.planTier === 'paid'
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-blue-600 text-white'
-                        }`}
-                      >
-                        {authUser.planTier === 'admin_lifetime'
-                          ? 'Admin'
+                {onOpenBackupRestore && (
+                  <button
+                    onClick={onOpenBackupRestore}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0"
+                    title="Sao lưu & Khôi phục toàn bộ ảnh và giáo án (Chuyển dữ liệu sang Vercel / Máy khác)"
+                  >
+                    <Database className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                    <span className="hidden 2xl:inline">Sao Lưu</span>
+                  </button>
+                )}
+
+                <PWAInstallButton variant="desktop" showToast={showToast} />
+              </div>
+
+              {/* Pinned Account / Google Sign-In + Settings (Never clipped off-screen) */}
+              <div className="flex items-center gap-1.5 shrink-0 pl-2 border-l border-slate-200">
+                {onOpenAuth && (
+                  <button
+                    onClick={onOpenAuth}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs transition whitespace-nowrap shrink-0 ${
+                      authUser
+                        ? authUser.hasFullAccess === false
+                          ? 'bg-amber-50 text-amber-900 border border-amber-300 hover:bg-amber-100'
+                          : 'bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100'
+                        : 'bg-white hover:bg-blue-50 text-slate-900 border-2 border-blue-600'
+                    }`}
+                    title={
+                      authUser
+                        ? authUser.planTier === 'admin_lifetime'
+                          ? `Quản trị viên: ${authUser.email} (Toàn quyền vĩnh viễn) — Bấm để quản lý tài khoản / đổi tài khoản Google`
                           : authUser.hasFullAccess === false
-                          ? 'Gia hạn'
-                          : `${authUser.daysRemaining ?? 120} ngày`}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="w-3.5 h-3.5 text-sky-300 shrink-0" />
-                      <span>Vào Free 1 Học Kỳ</span>
-                    </>
-                  )}
+                          ? `Đã kết thúc giai đoạn trải nghiệm — Bấm để xem hỗ trợ & nhập mã kích hoạt`
+                          : `Đang đăng nhập: ${authUser.email} · Còn ${authUser.daysRemaining ?? 120} ngày Full`
+                        : 'Đăng nhập bằng tài khoản Google (1 chạm · Không mật khẩu) · Mở Full miễn phí trọn 1 học kỳ'
+                    }
+                  >
+                    {authUser ? (
+                      <>
+                        <UserCheck
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            authUser.hasFullAccess === false ? 'text-amber-600' : 'text-emerald-600'
+                          }`}
+                        />
+                        <span className="max-w-[92px] truncate">{authUser.fullName}</span>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold tabular-nums ${
+                            authUser.planTier === 'admin_lifetime'
+                              ? 'bg-indigo-600 text-white'
+                              : authUser.hasFullAccess === false
+                              ? 'bg-amber-600 text-white'
+                              : authUser.planTier === 'paid'
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-blue-600 text-white'
+                          }`}
+                        >
+                          {authUser.planTier === 'admin_lifetime'
+                            ? 'Admin'
+                            : authUser.hasFullAccess === false
+                            ? 'Gia hạn'
+                            : `${authUser.daysRemaining ?? 120}n`}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.87z" />
+                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09A12 12 0 0 0 12 24z" />
+                          <path fill="#FBBC05" d="M5.28 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12 12 0 0 0 0 10.76l3.99-3.09z" />
+                          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z" />
+                        </svg>
+                        <span>Đăng nhập Google</span>
+                      </>
+                    )}
+                  </button>
+                )}
+
+                <button
+                  onClick={onOpenSettings}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-xs text-slate-700 font-medium whitespace-nowrap shrink-0"
+                  title={isGuest ? 'Đăng nhập để chỉnh sửa thông tin trường & giáo viên' : `Cài đặt trường & GV: ${schoolSettings.teacherName} · ${schoolSettings.schoolName}`}
+                >
+                  <School className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="hidden 2xl:inline font-semibold text-slate-900 max-w-[110px] truncate">
+                    {schoolSettings.teacherName}
+                  </span>
+                  {isGuest ? <Lock className="w-3 h-3 text-amber-500 shrink-0" /> : <Settings className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
                 </button>
-              )}
 
-              <button
-                onClick={onOpenSettings}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition text-xs text-slate-700 font-medium whitespace-nowrap shrink-0"
-                title={isGuest ? 'Đăng nhập để chỉnh sửa thông tin trường & giáo viên' : 'Cài đặt thông tin trường và giáo viên'}
-              >
-                <School className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span className="hidden lg:inline font-semibold text-slate-900">
-                  {schoolSettings.teacherName}
-                </span>
-                <span className="hidden xl:inline text-slate-400">·</span>
-                <span className="hidden xl:inline text-slate-500 truncate max-w-[140px]">
-                  {schoolSettings.schoolName}
-                </span>
-                {isGuest ? <Lock className="w-3 h-3 text-amber-500 ml-0.5 shrink-0" /> : <Settings className="w-3.5 h-3.5 text-slate-400 ml-0.5 shrink-0" />}
-              </button>
-
-              <button
-                onClick={onResetData}
-                className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition shrink-0"
-                title={isGuest ? 'Đăng nhập để khôi phục dữ liệu ban đầu' : 'Khôi phục dữ liệu ban đầu'}
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
+                <button
+                  onClick={onResetData}
+                  className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition shrink-0"
+                  title={isGuest ? 'Đăng nhập để khôi phục dữ liệu ban đầu' : 'Khôi phục dữ liệu ban đầu'}
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -570,6 +607,17 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
 
+                  {onOpenLovableStudio && (
+                    <button
+                      type="button"
+                      onClick={() => runToolAndClose(onOpenLovableStudio)}
+                      className="min-h-[48px] px-3 py-2.5 rounded-xl bg-fuchsia-50 border border-fuchsia-200 text-fuchsia-900 font-semibold text-xs flex items-center gap-2 text-left active:bg-fuchsia-100"
+                    >
+                      <Sparkles className="w-4 h-4 text-fuchsia-600 shrink-0" />
+                      <span className="leading-tight flex-1">Studio Ảnh Lovable</span>
+                    </button>
+                  )}
+
                   {onOpenImport && (
                     <button
                       type="button"
@@ -605,6 +653,8 @@ export const Header: React.FC<HeaderProps> = ({
                     </button>
                   )}
 
+                  <PWAInstallButton variant="mobile" showToast={showToast} />
+
                   <button
                     type="button"
                     onClick={() => runToolAndClose(onOpenSettings)}
@@ -627,7 +677,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <LogIn className="w-4 h-4 text-sky-300 shrink-0" />
                       )}
                       <span className="leading-tight truncate">
-                        {authUser ? authUser.fullName : 'Đăng nhập / ĐK'}
+                        {authUser ? authUser.fullName : 'Đăng nhập Google'}
                       </span>
                     </button>
                   )}

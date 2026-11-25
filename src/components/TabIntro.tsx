@@ -32,10 +32,18 @@ import {
   Mail,
   Cloud,
   Shapes,
-  MessageSquareHeart
+  MessageSquareHeart,
+  Download,
+  Share2,
+  Copy,
+  Check,
+  Globe,
+  FolderArchive
 } from 'lucide-react';
 import { IntroSlideDeck, IntroSlideLiveStats } from './IntroSlideDeck';
 import { DonationSupportCard } from './DonationSupportCard';
+import { GradeLevel } from '../types/gdtc';
+import { SemesterExportScope } from './SemesterBundleExportModal';
 
 interface TabIntroProps {
   onNavigateTab: (tabId: string) => void;
@@ -45,6 +53,9 @@ interface TabIntroProps {
   isGuest?: boolean;
   onOpenFormationStudio?: () => void;
   onOpenSettings?: () => void;
+  onOpenSemesterBundle?: (grade: GradeLevel, scope: SemesterExportScope) => void;
+  onOpenGradeTextbook?: (grade: GradeLevel) => void;
+  showToast?: (msg: string) => void;
   liveStats?: IntroSlideLiveStats;
 }
 
@@ -56,8 +67,12 @@ export const TabIntro: React.FC<TabIntroProps> = ({
   isGuest = false,
   onOpenFormationStudio,
   onOpenSettings,
+  onOpenSemesterBundle,
+  onOpenGradeTextbook,
+  showToast,
   liveStats
 }) => {
+  const [copiedShareBlock, setCopiedShareBlock] = useState(false);
   const [activeGuideStep, setActiveGuideStep] = useState<number>(0);
   const [showFeaturePlans, setShowFeaturePlans] = useState<boolean>(false);
   const introVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -242,7 +257,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             </div>
 
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white leading-snug">
-              SmartPlan GDTC Pro — Trợ Lý Thiết Kế & Chuẩn Hóa Giáo Án Giáo Dục Thể Chất
+              PE SmartPlan — Trợ Lý Thiết Kế & Chuẩn Hóa Giáo Án Giáo Dục Thể Chất
             </h2>
 
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
@@ -385,7 +400,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
             </div>
             <div className="min-w-0">
               <h3 className="text-sm sm:text-base font-extrabold text-white leading-snug">
-                Video Giới Thiệu Ứng Dụng SmartPlan GDTC Pro
+                Video Giới Thiệu Ứng Dụng PE SmartPlan
               </h3>
               <p className="text-[11.5px] text-blue-200/90 mt-0.5">
                 Xem tổng quan trực quan quy trình soạn giáo án GDTC chuẩn GDPT 2018, kho 308+ hình ảnh SGK &amp; Studio sơ đồ đội hình
@@ -435,7 +450,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
               Ưu Điểm Nổi Trội Độc Quyền Trong Một Ứng Dụng Duy Nhất
             </span>
             <h3 className="text-sm sm:text-base font-extrabold text-slate-900">
-              Vì Sao SmartPlan GDTC Pro Khác Biệt Hoàn Toàn So Với Các Công Cụ Soạn Thảo Thông Thường?
+              Vì Sao PE SmartPlan Khác Biệt Hoàn Toàn So Với Các Công Cụ Soạn Thảo Thông Thường?
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed">
               Không có ứng dụng đơn lẻ nào tích hợp trọn vẹn từ kho ảnh SGK chuẩn, công cụ vẽ sơ đồ đội hình chuyên sâu, sinh giáo án tự động theo PPCT đến kết nối trực tiếp tài liệu Google Docs &amp; Google Drive ngay trong cùng một không gian làm việc.
@@ -829,6 +844,165 @@ export const TabIntro: React.FC<TabIntroProps> = ({
         </div>
       </section>
 
+      {/* 4A. Curriculum Hub & Direct Semester / Integrated Yearly Lesson Plan Download (SEO & School Portal Discovery) */}
+      <section
+        aria-label="Danh mục giáo án GDTC Tiểu học Kết nối tri thức lớp 1 đến lớp 5"
+        className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+          <div className="space-y-1">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
+              <Globe className="w-3.5 h-3.5" />
+              Kho Học Liệu &amp; Giáo Án GDTC Tiểu Học (Kết Nối Tri Thức Với Cuộc Sống)
+            </span>
+            <h3 className="text-base sm:text-lg font-extrabold text-slate-900">
+              Tải Trọn Bộ Giáo Án Từng Khối Theo Học Kỳ &amp; Giáo Án Tích Hợp Năm Học
+            </h3>
+            <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+              Đầy đủ Kế hoạch dạy học 35 tuần (70 tiết/khối), Sách giáo khoa GDTC Tiểu học, hình ảnh động tác bài thể dục lớp 1–5 và tích hợp KNS, BVMT, QCN, ATGT, Năng lực số chuẩn GDPT 2018.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const origin = typeof window !== 'undefined' ? window.location.origin : '';
+              const shareText = [
+                'PE SmartPlan 2.0 – Kho Giáo Án GDTC Tiểu Học Lớp 1–5 (Bộ sách Kết nối tri thức với cuộc sống)',
+                '• Tải trọn bộ giáo án từng khối theo Học kỳ I, Học kỳ II & Giáo án tích hợp cả năm học (.DOCX / .ZIP)',
+                '• Kế hoạch dạy học 35 tuần chuẩn GDPT 2018 & Công văn 2345',
+                '• Kho Sách giáo khoa GDTC & hình ảnh động tác bài thể dục lớp 1–5, sơ đồ đội hình sắc nét',
+                `• Truy cập miễn phí & hỗ trợ chạy Offline: ${origin}/?tab=intro`
+              ].join('\n');
+              navigator.clipboard?.writeText(shareText).then(() => {
+                setCopiedShareBlock(true);
+                showToast?.('Đã sao chép nội dung giới thiệu & đường dẫn chuẩn để đăng lên Cổng thông tin trường / nhóm giáo viên!');
+                setTimeout(() => setCopiedShareBlock(false), 3000);
+              });
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-bold shadow-2xs transition shrink-0"
+          >
+            {copiedShareBlock ? (
+              <>
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>Đã chép bài giới thiệu</span>
+              </>
+            ) : (
+              <>
+                <Share2 className="w-4 h-4 text-sky-300" />
+                <span>Chép Link Chia Sẻ Lên Cổng Trường / Nhóm GV</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          {([
+            {
+              grade: 1 as GradeLevel,
+              topics: 'Đội hình đội ngũ · Bài thể dục lớp 1 · Tư thế & KNVĐ cơ bản · Thể thao tự chọn (Bóng rổ / Aerobic)'
+            },
+            {
+              grade: 2 as GradeLevel,
+              topics: 'Đội hình đội ngũ · Bài thể dục lớp 2 · Tư thế & KNVĐ cơ bản · Trò chơi vận động & Thể thao tự chọn'
+            },
+            {
+              grade: 3 as GradeLevel,
+              topics: 'Đội hình đội ngũ · Bài thể dục với hoa/vòng lớp 3 · Tư thế & KNVĐ · Thể thao tự chọn'
+            },
+            {
+              grade: 4 as GradeLevel,
+              topics: 'Đội hình đội ngũ · Bài thể dục phát triển chung lớp 4 · Tư thế & KNVĐ · Bóng rổ / Đá cầu'
+            },
+            {
+              grade: 5 as GradeLevel,
+              topics: 'Đội hình đội ngũ · Bài thể dục lớp 5 · Tư thế & KNVĐ cơ bản · Thể thao tự chọn & Đánh giá RLTT'
+            }
+          ]).map((item) => (
+            <article
+              key={item.grade}
+              className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 flex flex-col justify-between gap-3 hover:border-blue-300 hover:bg-blue-50/30 transition"
+            >
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-extrabold text-sm text-slate-900">
+                    Giáo án GDTC Lớp {item.grade}
+                  </h4>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-100 text-blue-800">
+                    70 tiết
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  {item.topics}
+                </p>
+              </div>
+
+              <div className="space-y-1.5 pt-2 border-t border-slate-200/80">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => onOpenSemesterBundle?.(item.grade, 'hk1')}
+                    className="px-2 py-1.5 rounded-lg bg-white hover:bg-blue-600 hover:text-white border border-slate-200 text-[11px] font-bold text-slate-800 flex items-center justify-center gap-1 transition"
+                    title={`Tải trọn bộ giáo án GDTC Lớp ${item.grade} Học kỳ I (Tuần 1–18)`}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>HK I</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenSemesterBundle?.(item.grade, 'hk2')}
+                    className="px-2 py-1.5 rounded-lg bg-white hover:bg-blue-600 hover:text-white border border-slate-200 text-[11px] font-bold text-slate-800 flex items-center justify-center gap-1 transition"
+                    title={`Tải trọn bộ giáo án GDTC Lớp ${item.grade} Học kỳ II (Tuần 19–35)`}
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>HK II</span>
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenSemesterBundle?.(item.grade, 'full_year')}
+                  className="w-full px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition"
+                >
+                  <FolderArchive className="w-3.5 h-3.5 text-amber-200" />
+                  <span>Tích hợp Cả Năm Học</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenGradeTextbook?.(item.grade)}
+                  className="w-full px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10.5px] font-semibold flex items-center justify-center gap-1 transition"
+                >
+                  <BookOpen className="w-3 h-3 text-blue-600" />
+                  <span>SGK &amp; Ảnh động tác Lớp {item.grade}</span>
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        {/* SEO Sitemap & Portal Index strip */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-100 text-[11px] text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-semibold text-slate-700">Từ khóa học liệu chuẩn:</span>
+            <span>Giáo án GDTC Lớp 1–5 Kết nối tri thức</span>
+            <span>·</span>
+            <span>Kế hoạch dạy học tuần 1–35</span>
+            <span>·</span>
+            <span>Hình ảnh động tác bài thể dục SGK</span>
+            <span>·</span>
+            <span>Giáo án tích hợp năm học</span>
+          </div>
+          <a
+            href="/sitemap.xml"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-blue-700 hover:underline font-semibold"
+          >
+            <Copy className="w-3 h-3" />
+            <span>Sitemap XML (Google / Cốc Cốc / Bing)</span>
+          </a>
+        </div>
+      </section>
+
       {/* 4B. Voluntary Community Support & Charitable Student Fund Card */}
       <DonationSupportCard />
 
@@ -855,7 +1029,7 @@ export const TabIntro: React.FC<TabIntroProps> = ({
           </div>
         </div>
         <span className="text-[11px] text-slate-500 sm:text-right">
-          SmartPlan GDTC Pro · Giải pháp tạo Kế hoạch bài dạy thông minh môn Giáo dục Thể chất
+          PE SmartPlan · Giải pháp tạo Kế hoạch bài dạy thông minh môn Giáo dục Thể chất
         </span>
       </footer>
     </div>

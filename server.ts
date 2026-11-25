@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { generateSgk2dSequenceSvg } from './src/utils/sgkVectorGenerator.js';
 
 import fs from 'fs';
+import http from 'http';
 import crypto from 'crypto';
 
 dotenv.config();
@@ -2268,6 +2269,7 @@ Hãy xuất ra JSON chính xác sư phạm, ngắn gọn, dễ hiểu cho học 
             subtitle: { type: Type.STRING },
             equipment: { type: Type.STRING },
             gameType: { type: Type.STRING },
+            bottomBadge: { type: Type.STRING },
             bottomNote: { type: Type.STRING },
             poses: {
               type: Type.ARRAY,
@@ -2316,7 +2318,8 @@ Hãy xuất ra JSON chính xác sư phạm, ngắn gọn, dễ hiểu cho học 
           gender,
           equipment: equipment !== 'none' ? equipment : (parsed.equipment || 'none'),
           gameType: parsed.gameType || undefined,
-          bottomNote: parsed.bottomNote || 'Thực hiện nhịp nhàng, đúng biên độ động tác và giữ lưng thẳng.',
+          bottomBadge: parsed.bottomBadge || 'NHỊP 5, 6, 7, 8',
+          bottomNote: parsed.bottomNote || 'Thực hiện như nhịp 1, 2, 3, 4, nhưng đổi chân.',
           poses: parsed.poses
         }
       });
@@ -3633,16 +3636,153 @@ ${rawText.slice(0, 9000)}`,
   });
 });
 
+// =========================================================================
+// SEO DISCOVERY: Dynamic robots.txt & sitemap.xml for Search Engines & Portals
+// =========================================================================
+function resolvePublicBaseUrl(req: express.Request): string {
+  const configured = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+  if (configured && /^https?:\/\//i.test(configured)) {
+    return configured;
+  }
+  const forwardedProto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim();
+  const proto = forwardedProto || req.protocol || 'https';
+  const host = req.get('host') || 'localhost:3000';
+  return `${proto}://${host}`;
+}
+
+app.get('/robots.txt', (req, res) => {
+  const baseUrl = resolvePublicBaseUrl(req);
+  res
+    .type('text/plain; charset=utf-8')
+    .set('Cache-Control', 'public, max-age=3600')
+    .send(
+      [
+        'User-agent: *',
+        'Allow: /',
+        'Disallow: /api/',
+        '',
+        `Sitemap: ${baseUrl}/sitemap.xml`,
+        ''
+      ].join('\n')
+    );
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const baseUrl = resolvePublicBaseUrl(req);
+  const today = new Date().toISOString().slice(0, 10);
+
+  const entries: Array<{ path: string; changefreq: string; priority: string }> = [
+    { path: '/', changefreq: 'weekly', priority: '1.0' },
+    { path: '/?tab=intro', changefreq: 'weekly', priority: '0.95' },
+    { path: '/?tab=generator', changefreq: 'weekly', priority: '0.95' },
+    { path: '/?tab=export', changefreq: 'weekly', priority: '0.95' },
+    { path: '/?tab=scan', changefreq: 'monthly', priority: '0.90' },
+    { path: '/?tab=extract', changefreq: 'monthly', priority: '0.90' },
+    { path: '/?tab=library', changefreq: 'monthly', priority: '0.85' },
+    { path: '/?tab=feedback', changefreq: 'monthly', priority: '0.70' },
+  ];
+
+  // Grade 1-5: Full Semester 1, Semester 2, Full Year Integrated Plans & Textbook Hubs
+  for (let g = 1; g <= 5; g++) {
+    entries.push({ path: `/?tab=export&khoi=${g}&hocky=1`, changefreq: 'monthly', priority: '0.92' });
+    entries.push({ path: `/?tab=export&khoi=${g}&hocky=2`, changefreq: 'monthly', priority: '0.92' });
+    entries.push({ path: `/?tab=export&khoi=${g}&hocky=all`, changefreq: 'monthly', priority: '0.95' });
+    entries.push({ path: `/?tab=scan&khoi=${g}`, changefreq: 'monthly', priority: '0.88' });
+    entries.push({ path: `/?tab=extract&khoi=${g}`, changefreq: 'monthly', priority: '0.86' });
+  }
+
+  // All 35 Weekly Teaching Plan URLs
+  for (let w = 1; w <= 35; w++) {
+    entries.push({ path: `/?tab=export&tuan=${w}`, changefreq: 'monthly', priority: '0.80' });
+  }
+
+  const escapeXml = (str: string) =>
+    str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+  const urlNodes = entries
+    .map(
+      (item) =>
+        `  <url>\n    <loc>${escapeXml(baseUrl + item.path)}</loc>\n    <lastmod>${today}</lastmod>\n    <changefreq>${item.changefreq}</changefreq>\n    <priority>${item.priority}</priority>\n  </url>`
+    )
+    .join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urlNodes}\n</urlset>\n`;
+  res
+    .type('application/xml; charset=utf-8')
+    .set('Cache-Control', 'public, max-age=3600')
+    .send(xml);
+});
+
 // Setup Vite middleware in dev or static files in production
 async function startServer() {
   const isProd = process.env.NODE_ENV === 'production';
+  const httpServer = http.createServer(app);
 
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
+    const enableHmr = process.env.ENABLE_HMR === 'true' && process.env.DISABLE_HMR !== 'true';
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        ws: enableHmr ? undefined : false,
+        hmr: enableHmr ? { server: httpServer } : false,
+      },
       appType: 'spa',
     });
+
+    if (!enableHmr) {
+      app.get('/@vite/client', (_req, res) => {
+        res.type('application/javascript; charset=utf-8').send(`
+const sheetsMap = new Map();
+export function updateStyle(id, content) {
+  let style = sheetsMap.get(id);
+  if (!style) {
+    style = document.createElement('style');
+    style.setAttribute('type', 'text/css');
+    style.setAttribute('data-vite-dev-id', id);
+    style.textContent = content;
+    document.head.appendChild(style);
+    sheetsMap.set(id, style);
+  } else {
+    style.textContent = content;
+  }
+}
+export function removeStyle(id) {
+  const style = sheetsMap.get(id);
+  if (style) {
+    document.head.removeChild(style);
+    sheetsMap.delete(id);
+  }
+}
+export function createHotContext() {
+  return {
+    data: {},
+    accept() {},
+    acceptExports() {},
+    dispose() {},
+    prune() {},
+    decline() {},
+    invalidate() {},
+    on() {},
+    off() {},
+    send() {},
+  };
+}
+export function injectQuery(url, queryToInject) {
+  if (!url || !queryToInject) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return url + sep + queryToInject;
+}
+export class ErrorOverlay extends HTMLElement {}
+`);
+      });
+    }
+
     app.use(vite.middlewares);
   } else {
     app.use(express.static(path.resolve(__dirname, 'dist')));
@@ -3651,8 +3791,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SmartPlan GDTC Pro server running on http://0.0.0.0:${PORT}`);
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`PE SmartPlan 2.0 server running on http://0.0.0.0:${PORT}`);
   });
 }
 

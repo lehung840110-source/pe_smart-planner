@@ -5,6 +5,8 @@
  */
 
 export type HdSceneMode = 'sequence_5' | 'single_pose' | 'pair_practice' | 'group_game';
+export type HdLayoutStyle = 'poster_80x60' | 'compact_a4';
+export type HdPosterTheme = 'sky_meadow' | 'mint_sport' | 'coral_energy';
 export type HdGender = 'male' | 'female';
 export type HdEquipment = 'none' | 'stick' | 'hoop' | 'ball' | 'rope' | 'cone' | 'flag';
 export type HdMotionArc =
@@ -25,6 +27,7 @@ export type HdPalmFacing = 'natural' | 'up' | 'down' | 'clap';
 export interface HdPoseSpec {
   label: string;
   caption: string;
+  customImageUrl?: string;
   facing?: HdFacing;
   gender?: HdGender;
   torsoTiltDeg?: number; // -35 (left) to +35 (right)
@@ -52,8 +55,11 @@ export interface HdSceneSpec {
   subtitle: string;
   grade: '1' | '2' | '3' | '4' | '5';
   sceneMode: HdSceneMode;
+  layoutStyle?: HdLayoutStyle;
+  posterTheme?: HdPosterTheme;
   gender: HdGender;
   equipment: HdEquipment;
+  bottomBadge?: string;
   bottomNote: string;
   poses: HdPoseSpec[];
   gameType?: 'relay' | 'circle' | 'tug_of_war' | 'rabbit_hop' | 'ball_pass' | 'cone_run';
@@ -127,22 +133,22 @@ function renderArticulatedStudent(
   const heelRaise = clamp(pose.heelRaisePx ?? 0, 0, 26);
   const useEquip = pose.showEquipment !== false && sceneEquipment !== 'none';
 
-  // Palette - Vietnamese Elementary PE Textbook style
-  const skin = '#fde2cc';
-  const skinShade = '#f2c3a4';
-  const hairMain = '#1e293b';
-  const hairHighlight = '#334155';
+  // Palette - Crisp Print-Ready Vietnamese Elementary PE Textbook Vector Style
+  const inkOutline = '#24303f';
+  const skin = '#ffe2c8';
+  const skinShade = '#f2c19e';
+  const hairMain = '#232834';
+  const hairHighlight = '#4a5568';
   const shirtFill = '#ffffff';
-  const shirtShade = '#e2e8f0';
-  const shirtBorder = '#94a3b8';
-  const collarBlue = '#1d4ed8';
-  const pantsMain = '#1e40af';
-  const pantsDark = '#172554';
-  const pantsLight = '#2563eb';
+  const shirtShade = '#e8eef7';
+  const shirtBorder = '#2c3a4f';
+  const collarBlue = '#2563eb';
+  const pantsMain = '#2764d8';
+  const pantsDark = '#1b47a3';
   const stripeWhite = '#f8fafc';
   const shoeMain = '#ffffff';
-  const shoeSole = '#334155';
-  const shoeAccent = '#2563eb';
+  const shoeSole = '#475569';
+  const shoeAccent = '#84cc16';
 
   const torsoLen = 62;
   const upperArmLen = 30;
@@ -272,34 +278,38 @@ function renderArticulatedStudent(
 
   function drawLeg(leg: { hx: number; hy: number; kx: number; ky: number; ax: number; ay: number }, side: -1 | 1, isBackLeg: boolean) {
     const shade = isBackLeg ? pantsDark : pantsMain;
-    const thigh = limbPath(leg.hx, leg.hy, leg.kx, leg.ky, 8.2, 6.6);
-    const shin = limbPath(leg.kx, leg.ky, leg.ax, leg.ay, 6.4, 5.0);
+    const thigh = limbPath(leg.hx, leg.hy, leg.kx, leg.ky, 8.8, 7.0);
+    const shin = limbPath(leg.kx, leg.ky, leg.ax, leg.ay, 6.8, 5.4);
 
-    // Side track stripe along outer edge
-    const stripeOffX = isProfile ? 0 : side * 4.2;
-    const stripe = `<path d="M ${(leg.hx + stripeOffX).toFixed(1)} ${(leg.hy + 3).toFixed(1)} L ${(leg.kx + stripeOffX * 0.85).toFixed(1)} ${leg.ky.toFixed(1)} L ${(leg.ax + stripeOffX * 0.7).toFixed(1)} ${(leg.ay - 2).toFixed(1)}" stroke="${stripeWhite}" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.92"/>`;
+    // Twin crisp white tracksuit side stripes (exact print-poster uniform signature)
+    const stripeOff1 = isProfile ? -1.4 : side * 5.0;
+    const stripeOff2 = isProfile ? 1.4 : side * 2.5;
+    const stripe = `
+      <path d="M ${(leg.hx + stripeOff1).toFixed(1)} ${(leg.hy + 3).toFixed(1)} L ${(leg.kx + stripeOff1 * 0.88).toFixed(1)} ${leg.ky.toFixed(1)} L ${(leg.ax + stripeOff1 * 0.72).toFixed(1)} ${(leg.ay - 2).toFixed(1)}" stroke="${stripeWhite}" stroke-width="1.45" stroke-linecap="round" fill="none" opacity="0.95"/>
+      <path d="M ${(leg.hx + stripeOff2).toFixed(1)} ${(leg.hy + 3).toFixed(1)} L ${(leg.kx + stripeOff2 * 0.88).toFixed(1)} ${leg.ky.toFixed(1)} L ${(leg.ax + stripeOff2 * 0.72).toFixed(1)} ${(leg.ay - 2).toFixed(1)}" stroke="${stripeWhite}" stroke-width="1.3" stroke-linecap="round" fill="none" opacity="0.85"/>
+    `;
 
-    // Sneaker
+    // Crisp White & Lime-Green Athletic Sneaker
     const shoeDir = isProfile ? dir : side;
-    const shoeWidth = isProfile ? 21 : 17;
-    const sx0 = isProfile ? leg.ax - shoeDir * 5 : leg.ax - (side === -1 ? 11 : 6);
+    const shoeWidth = isProfile ? 22 : 18.5;
+    const sx0 = isProfile ? leg.ax - shoeDir * 5 : leg.ax - (side === -1 ? 12 : 6.5);
     const shoe = `
       <g>
         <path d="M ${sx0.toFixed(1)} ${(leg.ay + 1).toFixed(1)}
-                 Q ${(sx0 + shoeWidth * 0.5).toFixed(1)} ${(leg.ay - 2).toFixed(1)} ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 4).toFixed(1)}
-                 L ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 9.5).toFixed(1)}
-                 L ${sx0.toFixed(1)} ${(leg.ay + 9.5).toFixed(1)} Z"
-              fill="${shoeMain}" stroke="${shoeSole}" stroke-width="1.3" stroke-linejoin="round"/>
-        <path d="M ${sx0.toFixed(1)} ${(leg.ay + 7.5).toFixed(1)} L ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 7.5).toFixed(1)}" stroke="${shoeSole}" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M ${(sx0 + 3).toFixed(1)} ${(leg.ay + 4.5).toFixed(1)} L ${(sx0 + shoeWidth - 4).toFixed(1)} ${(leg.ay + 4.5).toFixed(1)}" stroke="${shoeAccent}" stroke-width="2" stroke-linecap="round"/>
+                 Q ${(sx0 + shoeWidth * 0.52).toFixed(1)} ${(leg.ay - 2.6).toFixed(1)} ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 4.2).toFixed(1)}
+                 L ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 10.2).toFixed(1)}
+                 Q ${(sx0 + shoeWidth * 0.5).toFixed(1)} ${(leg.ay + 11.2).toFixed(1)} ${sx0.toFixed(1)} ${(leg.ay + 10.2).toFixed(1)} Z"
+              fill="${shoeMain}" stroke="${inkOutline}" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M ${(sx0 + 1.5).toFixed(1)} ${(leg.ay + 4.8).toFixed(1)} Q ${(sx0 + shoeWidth * 0.52).toFixed(1)} ${(leg.ay + 2.4).toFixed(1)} ${(sx0 + shoeWidth - 1.5).toFixed(1)} ${(leg.ay + 6.2).toFixed(1)} L ${(sx0 + shoeWidth - 1).toFixed(1)} ${(leg.ay + 8.6).toFixed(1)} L ${(sx0 + 1.5).toFixed(1)} ${(leg.ay + 8.6).toFixed(1)} Z" fill="${shoeAccent}" opacity="0.92"/>
+        <path d="M ${sx0.toFixed(1)} ${(leg.ay + 9.2).toFixed(1)} L ${(sx0 + shoeWidth).toFixed(1)} ${(leg.ay + 9.2).toFixed(1)}" stroke="${shoeSole}" stroke-width="2.2" stroke-linecap="round"/>
       </g>
     `;
 
     return `
       <g>
-        <path d="${thigh}" fill="${shade}" stroke="${pantsDark}" stroke-width="1.2" stroke-linejoin="round"/>
-        <path d="${shin}" fill="${shade}" stroke="${pantsDark}" stroke-width="1.2" stroke-linejoin="round"/>
-        <circle cx="${leg.kx.toFixed(1)}" cy="${leg.ky.toFixed(1)}" r="5.6" fill="${shade}"/>
+        <path d="${thigh}" fill="${shade}" stroke="${inkOutline}" stroke-width="1.65" stroke-linejoin="round"/>
+        <path d="${shin}" fill="${shade}" stroke="${inkOutline}" stroke-width="1.65" stroke-linejoin="round"/>
+        <circle cx="${leg.kx.toFixed(1)}" cy="${leg.ky.toFixed(1)}" r="5.8" fill="${shade}"/>
         ${stripe}
         ${shoe}
       </g>
@@ -334,19 +344,19 @@ function renderArticulatedStudent(
 
     return `
       <g>
-        <path d="${upperBarePath}" fill="${handColor}" stroke="#d19d7f" stroke-width="1"/>
-        <path d="${forearmPath}" fill="${handColor}" stroke="#d19d7f" stroke-width="1"/>
+        <path d="${upperBarePath}" fill="${handColor}" stroke="${inkOutline}" stroke-width="1.4"/>
+        <path d="${forearmPath}" fill="${handColor}" stroke="${inkOutline}" stroke-width="1.4"/>
         <circle cx="${arm.ex.toFixed(1)}" cy="${arm.ey.toFixed(1)}" r="4.1" fill="${handColor}"/>
-        <path d="${sleevePath}" fill="${isBackArm ? shirtShade : shirtFill}" stroke="${shirtBorder}" stroke-width="1.2"/>
-        <line x1="${(sleeveEndX - 4).toFixed(1)}" y1="${sleeveEndY.toFixed(1)}" x2="${(sleeveEndX + 4).toFixed(1)}" y2="${sleeveEndY.toFixed(1)}" stroke="${collarBlue}" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="${sleevePath}" fill="${isBackArm ? shirtShade : shirtFill}" stroke="${shirtBorder}" stroke-width="1.6"/>
+        <line x1="${(sleeveEndX - 4.5).toFixed(1)}" y1="${sleeveEndY.toFixed(1)}" x2="${(sleeveEndX + 4.5).toFixed(1)}" y2="${sleeveEndY.toFixed(1)}" stroke="${collarBlue}" stroke-width="2.2" stroke-linecap="round"/>
         ${handSvg}
       </g>
     `;
   }
 
-  // Torso polygon with polo collar and neat tuck shadow
-  const waistHalf = isProfile ? 9 : 16;
-  const chestHalf = isProfile ? 10.5 : 21;
+  // Torso polygon with crisp royal-blue polo collar, placket & neat tuck shadow
+  const waistHalf = isProfile ? 9.5 : 16.5;
+  const chestHalf = isProfile ? 11 : 21.5;
   const hipL = { x: -waistHalf, y: 2 };
   const hipR = { x: waistHalf, y: 2 };
   const shL = { x: neckX - chestHalf * perpX, y: neckY + 2 - chestHalf * perpY };
@@ -357,64 +367,71 @@ function renderArticulatedStudent(
       <path d="M ${shL.x.toFixed(1)} ${shL.y.toFixed(1)}
                L ${shR.x.toFixed(1)} ${shR.y.toFixed(1)}
                L ${hipR.x.toFixed(1)} ${hipR.y.toFixed(1)}
-               Q 0 6 ${hipL.x.toFixed(1)} ${hipL.y.toFixed(1)} Z"
-            fill="url(#shirtGrad_${uid})" stroke="${shirtBorder}" stroke-width="1.4" stroke-linejoin="round"/>
-      <!-- Blue athletic polo collar & chest stripe -->
-      <path d="M ${(neckX - 9 * perpX).toFixed(1)} ${(neckY + 2).toFixed(1)}
-               L ${neckX.toFixed(1)} ${(neckY + 13).toFixed(1)}
-               L ${(neckX + 9 * perpX).toFixed(1)} ${(neckY + 2).toFixed(1)}"
-            fill="none" stroke="${collarBlue}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-      <line x1="${hipL.x.toFixed(1)}" y1="${hipL.y.toFixed(1)}" x2="${hipR.x.toFixed(1)}" y2="${hipR.y.toFixed(1)}" stroke="${pantsDark}" stroke-width="2.2"/>
+               Q 0 7 ${hipL.x.toFixed(1)} ${hipL.y.toFixed(1)} Z"
+            fill="url(#shirtGrad_${uid})" stroke="${shirtBorder}" stroke-width="1.75" stroke-linejoin="round"/>
+      <!-- Royal-blue polo collar & button placket -->
+      <path d="M ${(neckX - 10 * perpX).toFixed(1)} ${(neckY + 1).toFixed(1)}
+               L ${(neckX - 2.5 * perpX).toFixed(1)} ${(neckY + 11.5).toFixed(1)}
+               L ${neckX.toFixed(1)} ${(neckY + 7.5).toFixed(1)}
+               L ${(neckX + 2.5 * perpX).toFixed(1)} ${(neckY + 11.5).toFixed(1)}
+               L ${(neckX + 10 * perpX).toFixed(1)} ${(neckY + 1).toFixed(1)} Z"
+            fill="${collarBlue}" stroke="${inkOutline}" stroke-width="1.15" stroke-linejoin="round"/>
+      <line x1="${neckX.toFixed(1)}" y1="${(neckY + 10).toFixed(1)}" x2="${neckX.toFixed(1)}" y2="${(neckY + 20).toFixed(1)}" stroke="${collarBlue}" stroke-width="2" stroke-linecap="round"/>
+      <line x1="${hipL.x.toFixed(1)}" y1="${hipL.y.toFixed(1)}" x2="${hipR.x.toFixed(1)}" y2="${hipR.y.toFixed(1)}" stroke="${inkOutline}" stroke-width="2"/>
     </g>
   `;
 
   // Head & Neck
-  const headCenterX = neckX + Math.sin(torsoRotRad * 0.7) * 16;
-  const headCenterY = neckY - (fwdBend > 0.65 ? 9 : 17);
+  const headCenterX = neckX + Math.sin(torsoRotRad * 0.7) * 16.5;
+  const headCenterY = neckY - (fwdBend > 0.65 ? 9 : 17.5);
   const headTilt = pose.headTiltDeg ?? 0;
 
   let hairSvg = '';
   if (gender === 'female') {
     hairSvg = `
-      <!-- Girl's neat bob + side ponytail -->
-      <circle cx="${isProfile ? -dir * 13 : -15}" cy="${isProfile ? -4 : -3}" r="6.5" fill="${hairMain}"/>
-      <circle cx="${isProfile ? -dir * 11 : -13}" cy="${isProfile ? -5 : -4}" r="2.2" fill="#38bdf8"/>
-      ${!isProfile ? `<circle cx="15" cy="-3" r="6.5" fill="${hairMain}"/><circle cx="13" cy="-4" r="2.2" fill="#38bdf8"/>` : ''}
-      <path d="M -15 -3 C -16 -19, 16 -19, 15 -3 C 11 -9, -11 -9, -15 -3 Z" fill="${hairMain}"/>
-      <path d="M -9 -11 Q 0 -15 9 -11" stroke="${hairHighlight}" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <!-- Girl's glossy school hair + playful high side ponytail with purple tie -->
+      <path d="M ${isProfile ? -dir * 13 : -15} -5 C ${isProfile ? -dir * 26 : -27} -10, ${isProfile ? -dir * 27 : -26} 11, ${isProfile ? -dir * 17 : -18} 16 C ${isProfile ? -dir * 21 : -20} 8, ${isProfile ? -dir * 16 : -15} 2, ${isProfile ? -dir * 12 : -13} -2 Z" fill="${hairMain}" stroke="${inkOutline}" stroke-width="1.2"/>
+      <ellipse cx="${isProfile ? -dir * 14 : -15.5}" cy="-5.5" rx="3.3" ry="2.4" fill="#a855f7" stroke="${inkOutline}" stroke-width="0.9"/>
+      <path d="M -16 -1 C -17.5 -20, 17.5 -20, 16 -1 C 12 -8, 6 -10, 2 -6 C -1 -10, -8 -9, -11 -5 C -13.5 -6, -15 -4, -16 -1 Z" fill="${hairMain}" stroke="${inkOutline}" stroke-width="1.2"/>
+      <path d="M -9 -11.5 Q 0 -16 9 -11.5" stroke="${hairHighlight}" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.75"/>
     `;
   } else {
     hairSvg = `
-      <!-- Boy's sporty school hair -->
-      <path d="M -15.5 -2 C -16.5 -19, 16.5 -19, 15.5 -2 C 12 -9, 3 -10, -2 -7 C -8 -10, -13 -8, -15.5 -2 Z" fill="${hairMain}"/>
-      <path d="M -8 -12 Q 2 -16 10 -11" stroke="${hairHighlight}" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      <!-- Boy's crisp sporty school hair -->
+      <path d="M -16 -1 C -17.5 -20, 17.5 -20, 16 -1 C 12.5 -9, 4 -11, -1 -7.5 C -7 -11, -13 -8.5, -16 -1 Z" fill="${hairMain}" stroke="${inkOutline}" stroke-width="1.2"/>
+      <path d="M -8 -12.5 Q 2 -16.5 10 -11.5" stroke="${hairHighlight}" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.75"/>
     `;
   }
 
   const faceDetails = isProfile
     ? `
-      <circle cx="${dir * 7}" cy="-1" r="1.7" fill="#0f172a"/>
-      <path d="M ${dir * 13} 1 L ${dir * 16} 3 L ${dir * 13.5} 4.5" fill="none" stroke="#c28e70" stroke-width="1.2" stroke-linecap="round"/>
-      <path d="M ${dir * 7} 7 Q ${dir * 11} 8 ${dir * 12} 6" stroke="#dc2626" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      <path d="M ${dir * 4.5} -5 Q ${dir * 7.5} -6.5 ${dir * 10} -5" stroke="${inkOutline}" stroke-width="1.25" fill="none" stroke-linecap="round"/>
+      <ellipse cx="${dir * 7.2}" cy="-0.8" rx="1.9" ry="2.3" fill="#0f172a"/>
+      <circle cx="${dir * 7.8}" cy="-1.6" r="0.75" fill="#ffffff"/>
+      <ellipse cx="${dir * 9.5}" cy="3.8" rx="2.6" ry="1.4" fill="#fda4af" opacity="0.6"/>
+      <path d="M ${dir * 13.5} 1 L ${dir * 16.5} 3 L ${dir * 13.8} 4.6" fill="none" stroke="#c28e70" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M ${dir * 7} 7.2 Q ${dir * 11} 8.4 ${dir * 12.2} 6.2" stroke="#e11d48" stroke-width="1.4" fill="none" stroke-linecap="round"/>
     `
     : `
-      <ellipse cx="-6.5" cy="4" rx="2.6" ry="1.4" fill="#fca5a5" opacity="0.55"/>
-      <ellipse cx="6.5" cy="4" rx="2.6" ry="1.4" fill="#fca5a5" opacity="0.55"/>
-      <circle cx="-5" cy="-0.5" r="1.7" fill="#0f172a"/>
-      <circle cx="5" cy="-0.5" r="1.7" fill="#0f172a"/>
-      <circle cx="-4.5" cy="-1.1" r="0.55" fill="#ffffff"/>
-      <circle cx="5.5" cy="-1.1" r="0.55" fill="#ffffff"/>
-      <path d="M -3.5 6.5 Q 0 9.5 3.5 6.5" stroke="#dc2626" stroke-width="1.35" fill="none" stroke-linecap="round"/>
+      <path d="M -8.5 -5.2 Q -5.5 -6.8 -3 -5.2" stroke="${inkOutline}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+      <path d="M 3 -5.2 Q 5.5 -6.8 8.5 -5.2" stroke="${inkOutline}" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="-7.5" cy="4.2" rx="3" ry="1.6" fill="#fda4af" opacity="0.65"/>
+      <ellipse cx="7.5" cy="4.2" rx="3" ry="1.6" fill="#fda4af" opacity="0.65"/>
+      <ellipse cx="-5.2" cy="-0.5" rx="2.0" ry="2.4" fill="#0f172a"/>
+      <ellipse cx="5.2" cy="-0.5" rx="2.0" ry="2.4" fill="#0f172a"/>
+      <circle cx="-4.5" cy="-1.4" r="0.8" fill="#ffffff"/>
+      <circle cx="5.9" cy="-1.4" r="0.8" fill="#ffffff"/>
+      <path d="M -3.6 6.4 Q 0 9.6 3.6 6.4" stroke="#e11d48" stroke-width="1.45" fill="none" stroke-linecap="round"/>
     `;
 
   const headSvg = `
     <g transform="translate(${headCenterX.toFixed(1)}, ${headCenterY.toFixed(1)}) rotate(${headTilt})">
       <!-- Neck -->
-      <rect x="-4.5" y="11" width="9" height="9" rx="3" fill="${skinShade}"/>
+      <rect x="-4.8" y="11" width="9.6" height="9.5" rx="3" fill="${skinShade}" stroke="${inkOutline}" stroke-width="1.2"/>
       <!-- Ears -->
-      ${!isProfile ? `<circle cx="-15" cy="1" r="3" fill="${skinShade}"/><circle cx="15" cy="1" r="3" fill="${skinShade}"/>` : `<circle cx="${-dir * 3}" cy="2" r="3" fill="${skinShade}"/>`}
-      <!-- Head circle -->
-      <circle cx="0" cy="0" r="15" fill="${skin}" stroke="#d6a082" stroke-width="1.2"/>
+      ${!isProfile ? `<circle cx="-15.5" cy="1" r="3.2" fill="${skin}" stroke="${inkOutline}" stroke-width="1.2"/><circle cx="15.5" cy="1" r="3.2" fill="${skin}" stroke="${inkOutline}" stroke-width="1.2"/>` : `<circle cx="${-dir * 3}" cy="2" r="3.2" fill="${skin}" stroke="${inkOutline}" stroke-width="1.2"/>`}
+      <!-- Head -->
+      <circle cx="0" cy="0" r="15.6" fill="${skin}" stroke="${inkOutline}" stroke-width="1.6"/>
       ${hairSvg}
       ${faceDetails}
     </g>
@@ -650,13 +667,318 @@ function renderGroupGameScene(spec: HdSceneSpec, uid: string): string {
   return `${courtBg}${actors}`;
 }
 
+interface PosterThemePalette {
+  bannerTop: string;
+  bannerBottom: string;
+  bannerBorder: string;
+  titleColor: string;
+  skyTop: string;
+  skyBottom: string;
+  hillBack: string;
+  hillFront: string;
+  groundFill: string;
+  stepHeaderBg: string;
+  stepHeaderText: string;
+  descCardBg: string;
+  descCardBorder: string;
+  footerBg: string;
+  footerBorder: string;
+  badgeBg: string;
+}
+
+const POSTER_THEMES: Record<HdPosterTheme, PosterThemePalette> = {
+  sky_meadow: {
+    bannerTop: '#dff4ff',
+    bannerBottom: '#82ccfb',
+    bannerBorder: '#79bde8',
+    titleColor: '#133a5c',
+    skyTop: '#d3ecff',
+    skyBottom: '#eef8ff',
+    hillBack: '#c4e797',
+    hillFront: '#99d157',
+    groundFill: '#f5ecd9',
+    stepHeaderBg: '#cde6b7',
+    stepHeaderText: '#133a5c',
+    descCardBg: '#fdf7df',
+    descCardBorder: '#eae0ba',
+    footerBg: '#fde2e4',
+    footerBorder: '#f6c2c7',
+    badgeBg: '#f16552',
+  },
+  mint_sport: {
+    bannerTop: '#d6f9ef',
+    bannerBottom: '#6ee7c8',
+    bannerBorder: '#52c8aa',
+    titleColor: '#0f3d36',
+    skyTop: '#d8f7f1',
+    skyBottom: '#f2fdfb',
+    hillBack: '#bcead5',
+    hillFront: '#73c7a2',
+    groundFill: '#f6efe0',
+    stepHeaderBg: '#bae8d4',
+    stepHeaderText: '#0f3d36',
+    descCardBg: '#f6fbf6',
+    descCardBorder: '#d3e9dc',
+    footerBg: '#e0f2fe',
+    footerBorder: '#bae6fd',
+    badgeBg: '#0284c7',
+  },
+  coral_energy: {
+    bannerTop: '#ffedd5',
+    bannerBottom: '#fdba74',
+    bannerBorder: '#f59e0b',
+    titleColor: '#7c2d12',
+    skyTop: '#e0f2fe',
+    skyBottom: '#f0f9ff',
+    hillBack: '#d9f99d',
+    hillFront: '#a3e635',
+    groundFill: '#fef3c7',
+    stepHeaderBg: '#fde68a',
+    stepHeaderText: '#78350f',
+    descCardBg: '#fffbeb',
+    descCardBorder: '#f5d98a',
+    footerBg: '#ffe4e6',
+    footerBorder: '#fecdd3',
+    badgeBg: '#e11d48',
+  },
+};
+
+function renderPoster80x60Svg(
+  spec: HdSceneSpec,
+  options: { background?: 'pure_white' | 'transparent' | 'studio_grid' } = {}
+): string {
+  const { background = 'pure_white' } = options;
+  const theme = POSTER_THEMES[spec.posterTheme || 'sky_meadow'];
+  const uid =
+    'pst_' +
+    Math.abs(
+      `${spec.title}_${spec.posterTheme || 'sky'}`.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)
+    ).toString(36);
+  const w = 1600;
+  const h = 1200;
+
+  let bgRect = `<rect width="100%" height="100%" fill="#ffffff"/>`;
+  if (background === 'transparent') {
+    bgRect = '';
+  } else if (background === 'studio_grid') {
+    bgRect = `
+      <rect width="100%" height="100%" fill="#ffffff"/>
+      <pattern id="grid_${uid}" width="28" height="28" patternUnits="userSpaceOnUse">
+        <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#f1f5f9" stroke-width="1"/>
+      </pattern>
+      <rect width="100%" height="100%" fill="url(#grid_${uid})"/>
+    `;
+  }
+
+  const upperTitle = (spec.title || 'ĐỘNG TÁC THỂ DỤC').toUpperCase();
+  const titleFontSize = upperTitle.length > 34 ? 44 : upperTitle.length > 24 ? 56 : upperTitle.length > 18 ? 64 : 74;
+
+  const defs = `
+    <defs>
+      <linearGradient id="shirtGrad_${uid}" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#ffffff"/>
+        <stop offset="100%" stop-color="#eef3f9"/>
+      </linearGradient>
+      <linearGradient id="bannerGrad_${uid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${theme.bannerTop}"/>
+        <stop offset="100%" stop-color="${theme.bannerBottom}"/>
+      </linearGradient>
+      <linearGradient id="skyGrad_${uid}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${theme.skyTop}"/>
+        <stop offset="100%" stop-color="${theme.skyBottom}"/>
+      </linearGradient>
+      <marker id="arrowBlue_${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+        <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#0284c7"/>
+      </marker>
+      <marker id="arrowOrange_${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+        <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#f97316"/>
+      </marker>
+      <marker id="arrowGreen_${uid}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+        <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="#16a34a"/>
+      </marker>
+      <clipPath id="bannerClip_${uid}">
+        <rect x="46" y="38" width="1508" height="168" rx="28"/>
+      </clipPath>
+    </defs>
+  `;
+
+  // Top Glossy Sky-Blue Print Banner with Fresh Decorative Leaf Pairs
+  const headerBanner = `
+    <g>
+      <rect x="46" y="38" width="1508" height="168" rx="28" fill="url(#bannerGrad_${uid})" stroke="${theme.bannerBorder}" stroke-width="2.5"/>
+      <g clip-path="url(#bannerClip_${uid})">
+        <path d="M 46 135 Q 420 82 810 132 T 1554 118 L 1554 206 L 46 206 Z" fill="#ffffff" opacity="0.22"/>
+        <path d="M 46 168 Q 520 132 980 165 T 1554 148 L 1554 206 L 46 206 Z" fill="#38bdf8" opacity="0.16"/>
+      </g>
+      <!-- Left Leaf Accents -->
+      <g transform="translate(158, 122)">
+        <path d="M 10 -46 C 32 -32, 34 -8, 12 8 C -8 -8, -10 -32, 10 -46 Z" fill="#f59e0b" transform="rotate(-24)"/>
+        <path d="M -22 8 C 4 -10, 32 2, 36 28 C 8 36, -18 24, -22 8 Z" fill="#76b900" transform="rotate(14)"/>
+      </g>
+      <!-- Right Leaf Accents -->
+      <g transform="translate(1442, 122) scale(-1, 1)">
+        <path d="M 10 -46 C 32 -32, 34 -8, 12 8 C -8 -8, -10 -32, 10 -46 Z" fill="#f59e0b" transform="rotate(-24)"/>
+        <path d="M -22 8 C 4 -10, 32 2, 36 28 C 8 36, -18 24, -22 8 Z" fill="#76b900" transform="rotate(14)"/>
+      </g>
+      <text x="800" y="${122 + Math.round(titleFontSize * 0.34)}" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="${titleFontSize}" font-weight="900" fill="${theme.titleColor}" text-anchor="middle" letter-spacing="1.5">${escapeXml(upperTitle)}</text>
+    </g>
+  `;
+
+  let bodySvg = '';
+
+  if (spec.sceneMode === 'group_game') {
+    // Full-width illustrated playground card + game instruction panel
+    const gameSvg = renderGroupGameScene(spec, uid);
+    const wrappedGameSub = wrapVietnameseLines(spec.subtitle || spec.bottomNote, 76, 3);
+    const subTspans = wrappedGameSub
+      .map((line, i) => `<tspan x="800" dy="${i === 0 ? 0 : 34}">${escapeXml(line)}</tspan>`)
+      .join('');
+
+    bodySvg = `
+      <g>
+        <rect x="46" y="232" width="1508" height="585" rx="22" fill="url(#skyGrad_${uid})" stroke="#cfe2f2" stroke-width="2.5"/>
+        <g transform="translate(115, 224) scale(1.14)">
+          ${gameSvg}
+        </g>
+        <rect x="46" y="832" width="1508" height="68" rx="14" fill="${theme.stepHeaderBg}"/>
+        <text x="800" y="876" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="30" font-weight="900" fill="${theme.stepHeaderText}" text-anchor="middle">TỔ CHỨC &amp; HƯỚNG DẪN TRÒ CHƠI VẬN ĐỘNG (KHỐI ${spec.grade})</text>
+        <rect x="46" y="902" width="1508" height="128" rx="14" fill="${theme.descCardBg}" stroke="${theme.descCardBorder}" stroke-width="2"/>
+        <text x="800" y="950" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="25" font-weight="700" fill="${theme.titleColor}" text-anchor="middle">${subTspans}</text>
+      </g>
+    `;
+  } else {
+    const poses = spec.poses.slice(
+      0,
+      spec.sceneMode === 'single_pose' ? 1 : spec.sceneMode === 'pair_practice' ? 2 : 5
+    );
+    const count = poses.length || 1;
+    const totalW = 1508;
+    const gap = count >= 5 ? 22 : 28;
+    const cardW = Math.floor((totalW - gap * (count - 1)) / count);
+    const startX = 46 + Math.floor((totalW - (cardW * count + gap * (count - 1))) / 2);
+
+    const artY = 232;
+    const artH = 472;
+    const groundY = artY + artH - 42;
+    const labelY = artY + artH + 14;
+    const labelH = 72;
+    const descY = labelY + labelH;
+    const descH = 240;
+
+    const figureScale =
+      count === 1 ? 1.82 : count === 2 ? 1.66 : count === 3 ? 1.56 : count === 4 ? 1.48 : 1.44;
+
+    bodySvg = poses
+      .map((pose, idx) => {
+        const cardX = startX + idx * (cardW + gap);
+        const cx = cardX + cardW / 2;
+        const clipId = `cardClip_${uid}_${idx}`;
+
+        // Normalize label to crisp textbook uppercase (TTCB -> TƯ THẾ CHUẨN BỊ)
+        const rawLabel = (pose.label || `NHỊP ${idx}`).trim();
+        const displayLabel =
+          rawLabel.toUpperCase() === 'TTCB' ? 'TƯ THẾ CHUẨN BỊ' : rawLabel.toUpperCase();
+        const labelFontSize =
+          displayLabel.length > 14 ? 23 : displayLabel.length > 10 ? 27 : 31;
+
+        const maxChars = count >= 5 ? 21 : count === 4 ? 26 : count === 2 ? 44 : 72;
+        const capLines = wrapVietnameseLines(pose.caption, maxChars, 7);
+        const lineHeight = 31;
+        const blockHeight = (capLines.length - 1) * lineHeight;
+        const textStartY = descY + descH / 2 - blockHeight / 2 + 8;
+        const capTspans = capLines
+          .map(
+            (line, li) =>
+              `<tspan x="${cx}" dy="${li === 0 ? 0 : lineHeight}">${escapeXml(line)}</tspan>`
+          )
+          .join('');
+
+        const artworkInner = pose.customImageUrl
+          ? `<image href="${escapeXml(pose.customImageUrl)}" x="${cardX + 8}" y="${artY + 8}" width="${cardW - 16}" height="${artH - 16}" preserveAspectRatio="xMidYMid meet"/>`
+          : `
+            <rect x="${cardX}" y="${artY}" width="${cardW}" height="${artH}" fill="url(#skyGrad_${uid})"/>
+            <!-- Sunlit Schoolyard Rolling Hills -->
+            <path d="M ${cardX - 10} ${artY + 355} Q ${cardX + cardW * 0.35} ${artY + 292} ${cardX + cardW * 0.78} ${artY + 336} T ${cardX + cardW + 10} ${artY + 322} L ${cardX + cardW + 10} ${artY + 390} L ${cardX - 10} ${artY + 390} Z" fill="${theme.hillBack}"/>
+            <path d="M ${cardX - 10} ${artY + 372} Q ${cardX + cardW * 0.62} ${artY + 318} ${cardX + cardW + 10} ${artY + 362} L ${cardX + cardW + 10} ${artY + 400} L ${cardX - 10} ${artY + 400} Z" fill="${theme.hillFront}" opacity="0.88"/>
+            <!-- Warm Cream Schoolyard Floor -->
+            <rect x="${cardX}" y="${artY + 376}" width="${cardW}" height="${artH - 376}" fill="${theme.groundFill}"/>
+            <line x1="${cardX}" y1="${artY + 376}" x2="${cardX + cardW}" y2="${artY + 376}" stroke="#e5d9be" stroke-width="2"/>
+            ${renderArticulatedStudent(
+              cx,
+              groundY,
+              figureScale,
+              pose,
+              spec.equipment,
+              spec.gender,
+              uid
+            )}
+          `;
+
+        return `
+          <g>
+            <defs>
+              <clipPath id="${clipId}">
+                <rect x="${cardX}" y="${artY}" width="${cardW}" height="${artH}" rx="16"/>
+              </clipPath>
+            </defs>
+            <!-- Top Artwork Panel -->
+            <g clip-path="url(#${clipId})">
+              ${artworkInner}
+            </g>
+            <rect x="${cardX}" y="${artY}" width="${cardW}" height="${artH}" rx="16" fill="none" stroke="#d1e3f2" stroke-width="2"/>
+
+            <!-- Middle Mint-Green Label Bar -->
+            <path d="M ${cardX + 12} ${labelY} L ${cardX + cardW - 12} ${labelY} Q ${cardX + cardW} ${labelY} ${cardX + cardW} ${labelY + 12} L ${cardX + cardW} ${labelY + labelH} L ${cardX} ${labelY + labelH} L ${cardX} ${labelY + 12} Q ${cardX} ${labelY} ${cardX + 12} ${labelY} Z" fill="${theme.stepHeaderBg}"/>
+            <text x="${cx}" y="${labelY + 46}" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="${labelFontSize}" font-weight="900" fill="${theme.stepHeaderText}" text-anchor="middle">${escapeXml(displayLabel)}</text>
+
+            <!-- Bottom Cream Technical Description Box -->
+            <path d="M ${cardX} ${descY} L ${cardX + cardW} ${descY} L ${cardX + cardW} ${descY + descH - 12} Q ${cardX + cardW} ${descY + descH} ${cardX + cardW - 12} ${descY + descH} L ${cardX + 12} ${descY + descH} Q ${cardX} ${descY + descH} ${cardX} ${descY + descH - 12} Z" fill="${theme.descCardBg}" stroke="${theme.descCardBorder}" stroke-width="1.8"/>
+            <text x="${cx}" y="${textStartY}" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="22" font-weight="700" fill="${theme.titleColor}" text-anchor="middle">${capTspans}</text>
+          </g>
+        `;
+      })
+      .join('\n');
+  }
+
+  // Bottom Pink Callout Banner ("NHỊP 5, 6, 7, 8 | Thực hiện như nhịp 1, 2, 3, 4, nhưng đổi chân.")
+  const badgeLabel = (spec.bottomBadge || 'NHỊP 5, 6, 7, 8').trim().toUpperCase();
+  const noteText = (spec.bottomNote || 'Thực hiện như nhịp 1, 2, 3, 4, nhưng đổi chân.').trim();
+  const badgeW = Math.min(420, Math.max(290, badgeLabel.length * 22 + 64));
+  const noteFontSize = noteText.length > 64 ? 26 : noteText.length > 48 ? 31 : 36;
+  const totalFooterContentW = badgeW + 38 + Math.min(960, noteText.length * (noteFontSize * 0.52));
+  const badgeX = Math.max(82, Math.round(800 - totalFooterContentW / 2));
+  const noteX = badgeX + badgeW + 36;
+
+  const footerBanner = `
+    <g>
+      <rect x="46" y="1054" width="1508" height="106" rx="22" fill="${theme.footerBg}" stroke="${theme.footerBorder}" stroke-width="2"/>
+      <rect x="${badgeX}" y="1070" width="${badgeW}" height="74" rx="20" fill="${theme.badgeBg}"/>
+      <text x="${badgeX + badgeW / 2}" y="1119" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="34" font-weight="900" fill="#ffffff" text-anchor="middle">${escapeXml(badgeLabel)}</text>
+      <text x="${noteX}" y="1119" font-family="'Be Vietnam Pro', 'Segoe UI', Roboto, Arial, sans-serif" font-size="${noteFontSize}" font-weight="800" fill="${theme.titleColor}" text-anchor="start">${escapeXml(noteText)}</text>
+    </g>
+  `;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+${defs}
+${bgRect}
+${headerBanner}
+${bodySvg}
+${footerBanner}
+</svg>`.trim();
+}
+
 /**
- * Main SVG generator (100% pure SVG, NO <foreignObject>, crisp 1200x540 viewBox)
+ * Main SVG generator (100% pure SVG, NO <foreignObject>).
+ * Supports both Print-Ready 80x60cm 300DPI Poster (1600x1200) and Compact A4 Strip (1200x540).
  */
 export function generateHdSgkSvg(
   spec: HdSceneSpec,
   options: { background?: 'pure_white' | 'transparent' | 'studio_grid' } = {}
 ): string {
+  if (spec.layoutStyle === 'poster_80x60') {
+    return renderPoster80x60Svg(spec, options);
+  }
+
   const { background = 'pure_white' } = options;
   const uid = 'hd_' + Math.abs(spec.title.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)).toString(36);
   const w = 1200;
@@ -748,15 +1070,17 @@ export function generateHdSgkSvg(
     const renderedFigures = poses
       .map((pose, idx) => {
         const cx = centers[idx] ?? 600;
-        const fig = renderArticulatedStudent(
-          cx,
-          groundY,
-          figureScale,
-          pose,
-          spec.equipment,
-          spec.gender,
-          uid
-        );
+        const fig = pose.customImageUrl
+          ? `<image href="${escapeXml(pose.customImageUrl)}" x="${cx - 95}" y="95" width="190" height="${groundY - 100}" preserveAspectRatio="xMidYMid meet"/>`
+          : renderArticulatedStudent(
+              cx,
+              groundY,
+              figureScale,
+              pose,
+              spec.equipment,
+              spec.gender,
+              uid
+            );
 
         const maxChars = count >= 5 ? 24 : count === 4 ? 28 : 38;
         const capLines = wrapVietnameseLines(pose.caption, maxChars, 3);
@@ -802,16 +1126,35 @@ ${footerNote}
 }
 
 /**
- * Renders any pure SVG string to a crisp high-resolution PNG Data URL (HD 1600 / 2K 2400 / 4K 3200)
+ * Generates an optimized print-ready AI poster prompt matching the 80x60cm 300DPI textbook poster aesthetic
+ */
+export function buildAiPosterPrompt(spec: HdSceneSpec): string {
+  const stepsText = spec.poses
+    .map((p, idx) => `- Khung ${idx + 1} (${p.label.toUpperCase()}): ${p.caption}`)
+    .join('\n');
+  return `Thiết kế tranh minh họa giáo dục thể chất chuẩn in vector 80x60cm 300DPI (tỉ lệ 4:3), phong cách tranh sách giáo khoa GDPT 2018 Việt Nam sắc nét:
+- Tiêu đề banner xanh dương bo tròn phía trên có lá xanh-cam trang trí hai bên: "${spec.title.toUpperCase()}"
+- Bố cục ${spec.poses.length} khung dọc đều nhau, mỗi khung gồm: nền trời xanh nhạt, đồi cỏ xanh dịu, sân tập màu kem, nhân vật học sinh ${spec.gender === 'female' ? 'nữ tóc buộc đuôi ngựa' : 'nam tóc gọn gàng'} mặc đồng phục thể dục áo polo trắng cổ xanh, quần thể thao xanh dương có 2 sọc trắng dọc thân, giày thể thao trắng viền xanh lá, mũi tên chỉ hướng chuyển động rõ nét.
+- Thanh nhãn xanh lá nhạt + hộp mô tả màu kem chữ tiếng Việt rõ dấu chuẩn chính tả ngay bên dưới từng khung:
+${stepsText}
+- Thanh chú thích màu hồng phấn dưới cùng có nhãn cam đỏ "${spec.bottomBadge || 'NHỊP 5, 6, 7, 8'}": "${spec.bottomNote}"
+- Nền ngoài trắng tinh, đường nét vector sạch, không lỗi chữ tiếng Việt.`;
+}
+
+/**
+ * Renders any pure SVG string to a crisp high-resolution PNG Data URL (HD 1600 / 2K 2400 / 4K 3200 / Print 3600)
  */
 export async function renderSvgToHdPngDataUrl(
   svgString: string,
-  targetWidth: 1600 | 2400 | 3200 = 2400,
+  targetWidth: 1600 | 2400 | 3200 | 3600 = 2400,
   transparentBg: boolean = false
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     try {
-      const targetHeight = Math.round((targetWidth * 540) / 1200);
+      const vbMatch = svgString.match(/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/i);
+      const srcW = vbMatch ? parseFloat(vbMatch[1]) : 1200;
+      const srcH = vbMatch ? parseFloat(vbMatch[2]) : 540;
+      const targetHeight = Math.round((targetWidth * srcH) / (srcW || 1200));
       const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
       const blobUrl = URL.createObjectURL(svgBlob);
 
@@ -1624,7 +1967,7 @@ export function buildHdSceneSpecFromKeyword(
     };
   }
 
-  // Default Phối hợp / Toàn thân exercise
+  // Default Phối hợp / Toàn thân exercise (Exact 5-beat Vietnamese GDTC textbook poster)
   return {
     title: name,
     subtitle,
@@ -1632,51 +1975,67 @@ export function buildHdSceneSpecFromKeyword(
     sceneMode,
     gender,
     equipment,
-    bottomNote: defaultBottom,
+    bottomBadge: 'NHỊP 5, 6, 7, 8',
+    bottomNote: 'Thực hiện như nhịp 1, 2, 3, 4, nhưng đổi chân.',
     poses: [
-      { ...POSE_TTCB },
       {
-        label: 'Nhịp 1',
-        caption: 'Chân trái bước lên trước khuỵu gối, hai tay đưa trước song song',
-        facing: 'profile_right',
+        ...POSE_TTCB,
+        label: 'TƯ THẾ CHUẨN BỊ',
+        caption: 'Đứng nghiêm.',
+      },
+      {
+        label: 'NHỊP 1',
+        caption:
+          'Chân trái bước lên một bước chếch sang trái, đồng thời khuỵu gối, chân phải thẳng, hai tay chống hông, thân thẳng, trọng tâm dồn vào chân trái.',
+        facing: 'front',
+        leftUpperDeg: 50,
+        leftElbowDeg: 108,
+        rightUpperDeg: 50,
+        rightElbowDeg: 108,
+        leftHipDeg: 28,
+        leftKneeDeg: 32,
+        rightHipDeg: 18,
+        rightKneeDeg: 0,
+        motionArc: 'side_left',
+      },
+      {
+        label: 'NHỊP 2',
+        caption:
+          'Chân trái thu về sát chân phải, cúi người, gập thân, hai chân thẳng, hai tay với mũi bàn chân.',
+        facing: 'front',
+        torsoForwardBend: 0.88,
+        leftUpperDeg: 10,
+        leftElbowDeg: 0,
+        rightUpperDeg: 10,
+        rightElbowDeg: 0,
+        leftHipDeg: 3,
+        leftKneeDeg: 0,
+        rightHipDeg: 3,
+        rightKneeDeg: 0,
+        motionArc: 'bend_down',
+      },
+      {
+        label: 'NHỊP 3',
+        caption: 'Khuỵu hai gối, lưng thẳng, hai tay dang ngang, bàn tay ngửa.',
+        facing: 'front',
+        kneeSquat: 0.62,
         leftUpperDeg: 90,
         leftElbowDeg: 0,
         rightUpperDeg: 90,
         rightElbowDeg: 0,
-        leftHipDeg: 32,
-        leftKneeDeg: 28,
-        rightHipDeg: -18,
+        leftHipDeg: 6,
+        leftKneeDeg: 0,
+        rightHipDeg: 6,
         rightKneeDeg: 0,
+        palmFacing: 'up',
         motionArc: 'arms_out',
       },
       {
-        label: 'Nhịp 2',
-        caption: 'Thu chân về TTCB, hai tay vươn cao chữ V, mắt nhìn lên',
-        leftUpperDeg: 146,
-        leftElbowDeg: 0,
-        rightUpperDeg: 146,
-        rightElbowDeg: 0,
-        leftHipDeg: 5,
-        leftKneeDeg: 0,
-        rightHipDeg: 5,
-        rightKneeDeg: 0,
-        motionArc: 'arms_up',
+        ...POSE_TTCB,
+        label: 'NHỊP 4',
+        caption: 'Về tư thế đứng nghiêm.',
+        motionArc: 'arms_down',
       },
-      {
-        label: 'Nhịp 3',
-        caption: 'Vặn mình sang trái, hai tay dang ngang bàn tay sấp',
-        torsoTiltDeg: -10,
-        leftUpperDeg: 90,
-        leftElbowDeg: 0,
-        rightUpperDeg: 90,
-        rightElbowDeg: 0,
-        leftHipDeg: 16,
-        leftKneeDeg: 0,
-        rightHipDeg: 16,
-        rightKneeDeg: 0,
-        palmFacing: 'down',
-      },
-      { ...POSE_TTCB, label: 'Nhịp 4', caption: 'Xoay người thu chân hạ tay về TTCB' },
     ],
   };
 }

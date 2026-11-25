@@ -113,7 +113,7 @@ export function buildRegistrationNotificationEmail(info: {
   confirmationCode: string;
 }): SendGmailParams {
   const formattedDate = new Date(info.registeredAt).toLocaleString('vi-VN');
-  const subject = `[SmartPlan GDTC] Xác nhận đăng ký tài khoản mới: ${info.fullName} (${info.email})`;
+  const subject = `[PE SmartPlan] Xác nhận đăng ký tài khoản mới: ${info.fullName} (${info.email})`;
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
       <div style="background: #1d4ed8; color: #ffffff; padding: 18px 24px;">
@@ -171,7 +171,7 @@ export function buildPasswordRecoveryEmail(info: {
   expiresAt: number;
 }): SendGmailParams {
   const expireStr = new Date(info.expiresAt).toLocaleTimeString('vi-VN');
-  const subject = `[SmartPlan GDTC] Mã khôi phục mật khẩu tài khoản: ${info.accountEmail}`;
+  const subject = `[PE SmartPlan] Mã khôi phục mật khẩu tài khoản: ${info.accountEmail}`;
   const htmlBody = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
       <div style="background: #0f766e; color: #ffffff; padding: 18px 24px;">

@@ -16,12 +16,14 @@ import { VisionAnalysisModal, VisionAnalysisResult } from './components/VisionAn
 import { ImportLessonModal } from './components/ImportLessonModal';
 import { SmartCleanModal } from './components/SmartCleanModal';
 import { FormationStudioModal } from './components/FormationStudioModal';
+import { LovableImageStudioModal } from './components/LovableImageStudioModal';
 import { SelectFormationModal } from './components/SelectFormationModal';
 import { GoogleDriveModal } from './components/GoogleDriveModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { AuthModal } from './components/AuthModal';
 import { LockedFeatureGate } from './components/LockedFeatureGate';
 import { GlobalFloatingTextCaseBar } from './components/TextCaseToolbar';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import {
   FormationDiagram,
   CUSTOM_FORMATIONS_CHANGED_EVENT,
@@ -117,6 +119,8 @@ import {
   getCloudAutoSyncPref,
   setCloudAutoSyncPref
 } from './services/cloudAutoSyncService';
+import { useSeoMeta } from './hooks/useSeoMeta';
+import { SemesterExportScope } from './components/SemesterBundleExportModal';
 
 export default function App() {
   const { user: authUser, isLoading: authLoading, pullWorkspace, pushWorkspace } = useAuth();
@@ -132,6 +136,11 @@ export default function App() {
       authUser.daysRemaining <= EXPIRY_WARNING_DAYS
   );
   const [activeTab, setActiveTab] = useState<string>('tab-generator');
+  const [semesterBundleTrigger, setSemesterBundleTrigger] = useState<{
+    grade: GradeLevel;
+    scope: SemesterExportScope;
+    nonce: number;
+  } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'billing'>('register');
   const [authGateReason, setAuthGateReason] = useState<string | null>(null);
@@ -290,6 +299,7 @@ export default function App() {
 
   // Formation Studio & Library Global States
   const [isGlobalStudioOpen, setIsGlobalStudioOpen] = useState<boolean>(false);
+  const [isLovableStudioOpen, setIsLovableStudioOpen] = useState<boolean>(false);
   const [isGlobalFormationLibraryOpen, setIsGlobalFormationLibraryOpen] = useState<boolean>(false);
 
   // Google Drive Modal State
@@ -326,6 +336,59 @@ export default function App() {
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const isDbLoadedRef = useRef<boolean>(false);
+
+  // Dynamic SEO metadata (title, description, canonical, OpenGraph) synced with current tab, grade & week
+  const safeGradeLevel: GradeLevel = (grade >= 1 && grade <= 5 ? grade : 1) as GradeLevel;
+  useSeoMeta({ activeTab, grade: safeGradeLevel, week, title });
+
+  // Parse SEO & shared deep-link query params (?tab=, ?khoi=, ?tuan=, ?hocky=) once on mount
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = (params.get('tab') || '').toLowerCase();
+      const khoiParam = parseInt(params.get('khoi') || '', 10);
+      const tuanParam = parseInt(params.get('tuan') || '', 10);
+      const hockyParam = (params.get('hocky') || '').toLowerCase();
+
+      const tabMap: Record<string, string> = {
+        scan: 'tab-scan',
+        extract: 'tab-img-library',
+        library: 'tab-library',
+        template: 'tab-template',
+        generator: 'tab-generator',
+        export: 'tab-export',
+        intro: 'tab-intro',
+        feedback: 'tab-feedback',
+      };
+
+      const validGrade: GradeLevel | null =
+        khoiParam >= 1 && khoiParam <= 5 ? (khoiParam as GradeLevel) : null;
+      if (validGrade) {
+        setGrade(validGrade);
+        setScanInitialGrade(validGrade);
+      }
+      if (tuanParam >= 1 && tuanParam <= 35) {
+        setWeek(tuanParam);
+      }
+      if (tabParam && tabMap[tabParam]) {
+        setActiveTab(tabMap[tabParam]);
+      } else if (hockyParam === '1' || hockyParam === '2' || hockyParam === 'all') {
+        setActiveTab('tab-export');
+      }
+
+      if (hockyParam === '1' || hockyParam === '2' || hockyParam === 'all') {
+        const mappedScope: SemesterExportScope =
+          hockyParam === '1' ? 'hk1' : hockyParam === '2' ? 'hk2' : 'full_year';
+        setSemesterBundleTrigger({
+          grade: validGrade || 1,
+          scope: mappedScope,
+          nonce: Date.now(),
+        });
+      }
+    } catch {
+      // Ignore malformed query strings
+    }
+  }, []);
 
   const openAuthModal = (mode: 'login' | 'register' | 'billing' = 'login', reason: string | null = null) => {
     setAuthGateReason(reason);
@@ -2308,6 +2371,7 @@ export default function App() {
         onOpenFormationStudio={() =>
           isAccessLocked ? requireAuth('Studio thiết kế & tự vẽ Sơ đồ đội hình') : setIsGlobalStudioOpen(true)
         }
+        onOpenLovableStudio={() => setIsLovableStudioOpen(true)}
         onOpenFormationLibrary={() =>
           isAccessLocked ? requireAuth('Kho 32+ sơ đồ đội hình & chèn vào giáo án') : setIsGlobalFormationLibraryOpen(true)
         }
@@ -2324,6 +2388,7 @@ export default function App() {
         isGuest={isAccessLocked}
         onOpenAuth={() => openAuthModal(isSubscriptionExpired ? 'billing' : 'login', null)}
         activeLayoutBlueprintName={activeLayoutBlueprint?.name || null}
+        showToast={showToast}
       />
 
       {/* Guest Banner: 1-Semester (120-Day) Passwordless Full Free Community Access */}
@@ -2342,19 +2407,24 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
-                onClick={() => openAuthModal('register', null)}
-                className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
+                onClick={() => openAuthModal('login', null)}
+                className="min-h-[36px] px-3.5 py-1.5 rounded-lg bg-white hover:bg-blue-50 text-slate-900 border-2 border-blue-600 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
               >
-                <UserPlus className="w-3.5 h-3.5 shrink-0" />
-                <span>Vào Dùng Miễn Phí</span>
+                <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.87z" />
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09A12 12 0 0 0 12 24z" />
+                  <path fill="#FBBC05" d="M5.28 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12 12 0 0 0 0 10.76l3.99-3.09z" />
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z" />
+                </svg>
+                <span>Đăng Nhập Google</span>
               </button>
               <button
                 type="button"
-                onClick={() => openAuthModal('login', null)}
-                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 font-semibold text-xs flex items-center justify-center gap-1.5 transition whitespace-nowrap"
+                onClick={() => openAuthModal('register', null)}
+                className="min-h-[36px] px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition whitespace-nowrap"
               >
-                <LogIn className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span>Đăng Nhập</span>
+                <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                <span>Dùng Email Cá Nhân</span>
               </button>
             </div>
           </div>
@@ -2722,6 +2792,7 @@ export default function App() {
             activeLayoutBlueprint={activeLayoutBlueprint}
             onClearActiveLayoutBlueprint={() => handleActivateLayoutBlueprint(null)}
             onNavigateToTemplateLab={() => handleTabChange('tab-template-lab')}
+            semesterBundleTrigger={semesterBundleTrigger}
           />
         )}
 
@@ -2765,6 +2836,23 @@ export default function App() {
             onOpenSettings={() =>
               isAccessLocked ? requireAuth('Cài đặt thông tin Trường & Giáo viên') : setIsSettingsOpen(true)
             }
+            onOpenSemesterBundle={(targetGrade, targetScope) => {
+              if (isAccessLocked) {
+                requireAuth('Tải trọn bộ giáo án theo Khối, Học kỳ & Giáo án tích hợp năm học');
+                return;
+              }
+              setGrade(targetGrade);
+              setActiveTab('tab-export');
+              setSemesterBundleTrigger({
+                grade: targetGrade,
+                scope: targetScope,
+                nonce: Date.now(),
+              });
+            }}
+            onOpenGradeTextbook={(targetGrade) => {
+              handleNavigateToScanFromLesson(targetGrade);
+            }}
+            showToast={showToast}
             isGuest={isAccessLocked}
             liveStats={{
               imageCount: images.length,
@@ -2932,6 +3020,22 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Integrated Lovable Image Studio Modal */}
+      <LovableImageStudioModal
+        isOpen={isLovableStudioOpen}
+        onClose={() => setIsLovableStudioOpen(false)}
+        defaultGrade={String(grade)}
+        images={images}
+        onSaveToLibrary={(newImg) => {
+          handleImageExtracted(newImg);
+        }}
+        onSaveAndAttachToLesson={(newImg) => {
+          handleImageExtracted(newImg);
+          handleOpenSelectCellModal(newImg);
+        }}
+        showToast={showToast}
+      />
 
       {/* Global Formation Library Modal */}
       {isGlobalFormationLibraryOpen && (
@@ -3149,6 +3253,7 @@ export default function App() {
 
       {/* Global quick uppercase/lowercase bar on text selection + Shift+F3 shortcut */}
       <GlobalFloatingTextCaseBar />
+      <OfflineIndicator />
     </div>
   );
 }

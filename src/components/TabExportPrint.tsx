@@ -35,8 +35,10 @@ import {
   FileEdit,
   Lock,
   Gamepad2,
-  FlaskConical
+  FlaskConical,
+  FolderArchive
 } from 'lucide-react';
+import { SemesterBundleExportModal, SemesterExportScope } from './SemesterBundleExportModal';
 import mammoth from 'mammoth';
 import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel, CustomLayoutBlueprint } from '../types/gdtc';
 import {
@@ -191,6 +193,7 @@ interface TabExportPrintProps {
   activeLayoutBlueprint?: CustomLayoutBlueprint | null;
   onClearActiveLayoutBlueprint?: () => void;
   onNavigateToTemplateLab?: () => void;
+  semesterBundleTrigger?: { grade: GradeLevel; scope: SemesterExportScope; nonce: number } | null;
 }
 
 export const TabExportPrint: React.FC<TabExportPrintProps> = ({
@@ -230,7 +233,8 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   onRequireAuth,
   activeLayoutBlueprint = null,
   onClearActiveLayoutBlueprint,
-  onNavigateToTemplateLab
+  onNavigateToTemplateLab,
+  semesterBundleTrigger = null
 }) => {
   // 1. Dynamic Week Selection (Weeks 1 to 35)
   const [selectedWeek, setSelectedWeek] = useState<number>(() => {
@@ -2824,6 +2828,79 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     return weeklyScheduleRows.filter((row) => selectedBundleGrades.includes(row.grade));
   }, [weeklyScheduleRows, selectedBundleGrades]);
 
+  const [isSemesterBundleOpen, setIsSemesterBundleOpen] = useState(false);
+  const safeInitialGrade: GradeLevel = (initialGrade >= 1 && initialGrade <= 5 ? initialGrade : 1) as GradeLevel;
+  const [semesterBundleGrade, setSemesterBundleGrade] = useState<GradeLevel>(safeInitialGrade);
+  const [semesterBundleScope, setSemesterBundleScope] = useState<SemesterExportScope>('hk1');
+
+  useEffect(() => {
+    if (semesterBundleTrigger && semesterBundleTrigger.nonce > 0) {
+      setSemesterBundleGrade(semesterBundleTrigger.grade);
+      setSemesterBundleScope(semesterBundleTrigger.scope);
+      setIsSemesterBundleOpen(true);
+    }
+  }, [semesterBundleTrigger]);
+
+  // Resolve all plans for a given (week, grade) across Weeks 1–35 for Semester / Full-Year Bundle Export
+  const resolveWeekPlansForGrade = (targetW: number, targetGrade: GradeLevel) => {
+    const ppct = getGradePpctInfo(targetGrade, targetW);
+    const wDate = getWeekDateInfo(targetW);
+
+    let resolvedDateRange = targetW === 9 ? 'Từ ngày 02-06 tháng 11 năm 2026' : wDate.dateRangeText;
+    let resolvedApprovalDate = targetW === 9 ? 'Vệ Giang, ngày 06 tháng 11 năm 2026' : wDate.approvalDateText;
+    try {
+      const savedDates = localStorage.getItem(`gdtc_dates_w${targetW}`);
+      if (savedDates) {
+        const parsed = JSON.parse(savedDates);
+        if (parsed.dateRange) resolvedDateRange = parsed.dateRange;
+        if (parsed.approvalDate) resolvedApprovalDate = parsed.approvalDate;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    let resolvedSchedule: WeeklyMasterScheduleRow[] =
+      targetW === 9 ? defaultWeek9Schedule : getDefaultWeeklySchedule(targetW);
+    try {
+      const savedSchedule = localStorage.getItem(`gdtc_schedule_w${targetW}`);
+      if (savedSchedule) {
+        const parsed = JSON.parse(savedSchedule);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          resolvedSchedule = parsed;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    let resolvedThemes: WeeklyIntegrationThemes | null = null;
+    try {
+      const savedThemes = localStorage.getItem(`gdtc_themes_w${targetW}`);
+      if (savedThemes) resolvedThemes = JSON.parse(savedThemes);
+    } catch {
+      resolvedThemes = null;
+    }
+
+    const overrides = {
+      week: targetW,
+      scheduleRows: resolvedSchedule,
+      dateRange: resolvedDateRange,
+      approvalDate: resolvedApprovalDate,
+      themes: resolvedThemes
+    };
+
+    const p1 = resolvePlan(targetGrade, ppct.periods[0], `k${targetGrade}_t15`, overrides);
+    const p2 = resolvePlan(targetGrade, ppct.periods[1], `k${targetGrade}_t16`, overrides);
+
+    return {
+      plans: [p1, p2],
+      dateRange: resolvedDateRange,
+      approvalDate: resolvedApprovalDate,
+      scheduleRows: resolvedSchedule,
+      themes: resolvedThemes || getWeeklyIntegrationThemes(targetW)
+    };
+  };
+
   const handleExportWord = async (forceJoint = false, format: 'doc' | 'docx' = 'doc') => {
     if (isGuest && onRequireAuth) {
       onRequireAuth(`Xuất & tải về file Word (.${format.toUpperCase()})`);
@@ -3180,6 +3257,37 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (isGuest && onRequireAuth) {
+                    onRequireAuth('Tải trọn bộ giáo án theo từng khối, Học kỳ I / Học kỳ II & Giáo án tích hợp năm học');
+                    return;
+                  }
+                  const activeGradeFromView: GradeLevel =
+                    viewMode === 'grade_1'
+                      ? 1
+                      : viewMode === 'grade_2'
+                      ? 2
+                      : viewMode === 'grade_3'
+                      ? 3
+                      : viewMode === 'grade_4'
+                      ? 4
+                      : viewMode === 'grade_5'
+                      ? 5
+                      : safeInitialGrade;
+                  setSemesterBundleGrade(activeGradeFromView);
+                  setSemesterBundleScope(selectedWeek <= 18 ? 'hk1' : 'hk2');
+                  setIsSemesterBundleOpen(true);
+                }}
+                className="bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-700 hover:to-teal-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+                title="Tải toàn bộ giáo án của từng khối theo Học kỳ I (Tuần 1–18), Học kỳ II (Tuần 19–35) hoặc trọn bộ Giáo án tích hợp Cả năm học"
+              >
+                <FolderArchive className="w-4 h-4 text-amber-200" />
+                <span>Tải Trọn Bộ Học Kỳ / Năm Học</span>
+                {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+              </button>
 
               {onOpenGoogleDrive && (
                 <button
@@ -6521,6 +6629,21 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
           }}
         />
       )}
+
+      <SemesterBundleExportModal
+        isOpen={isSemesterBundleOpen}
+        onClose={() => setIsSemesterBundleOpen(false)}
+        initialGrade={semesterBundleGrade}
+        initialScope={semesterBundleScope}
+        currentWeek={selectedWeek}
+        schoolSettings={localSettings}
+        resolveWeekPlansForGrade={resolveWeekPlansForGrade}
+        lessonPlanColWidths={lessonCols.widths}
+        scheduleColWidths={scheduleCols.widths}
+        imageMaxHeightPt={Math.max(82, Math.min(120, Math.round(imageHeight * 0.85)))}
+        layoutBlueprint={activeLayoutBlueprint || null}
+        showToast={showToast}
+      />
     </div>
   );
 };

@@ -21,6 +21,7 @@ import {
   localAdminExtendUser
 } from '../utils/localAuthFallback';
 import type { PlanTier, SubscriptionPlanId } from '../utils/subscriptionPlans';
+import { logoutGoogle } from '../services/googleAuth';
 
 export interface AuthUser {
   id: string;
@@ -485,6 +486,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       } catch {}
     }
+    try {
+      await logoutGoogle();
+    } catch {}
     clearStoredToken();
     setToken(null);
     setUser(null);

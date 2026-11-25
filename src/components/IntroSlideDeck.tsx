@@ -69,7 +69,7 @@ const SLIDE_META: SlideMeta[] = [
     kicker: 'NGUYÊN TẮC CỐT LÕI',
     durationMs: 6000,
     speakerNote:
-      'Khi xây dựng SmartPlan GDTC Pro, tôi giữ một nguyên tắc bất di bất dịch: AI chỉ là trợ lý làm phần tốn thời gian, còn giáo viên vẫn là người quyết định chuyên môn — đảm bảo thống nhất chương trình, trực quan sinh động và thật dễ thao tác.'
+      'Khi xây dựng PE SmartPlan, tôi giữ một nguyên tắc bất di bất dịch: AI chỉ là trợ lý làm phần tốn thời gian, còn giáo viên vẫn là người quyết định chuyên môn — đảm bảo thống nhất chương trình, trực quan sinh động và thật dễ thao tác.'
   },
   {
     id: 4,
@@ -316,7 +316,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                     <span>22:45 · Đêm Chủ Nhật</span>
                   </span>
                   <span className="text-[#91AA95]">·</span>
-                  <span>SmartPlan GDTC Pro</span>
+                  <span>PE SmartPlan</span>
                 </div>
 
                 <h3 className="mt-3 text-2xl sm:text-4xl lg:text-[40px] font-semibold tracking-tight leading-[1.16] text-[#18291C]">
@@ -468,7 +468,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
                   <div className="p-5 space-y-3 bg-emerald-50/40">
                     <div className="flex items-baseline justify-between border-b border-emerald-200/80 pb-2.5">
                       <span className="text-xs font-semibold text-[#144A2B] uppercase tracking-wider">
-                        Có SmartPlan GDTC Pro hỗ trợ
+                        Có PE SmartPlan hỗ trợ
                       </span>
                       <span className="text-xl font-bold text-[#144A2B] tabular-nums">~10 – 15 phút / tuần</span>
                     </div>
@@ -1291,7 +1291,7 @@ export const IntroSlideDeck: React.FC<IntroSlideDeckProps> = ({
           className="fixed inset-0 z-50 bg-[#0B1D13]/95 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center overflow-y-auto"
           role="dialog"
           aria-modal="true"
-          aria-label="Trình chiếu 10 slide SmartPlan GDTC Pro"
+          aria-label="Trình chiếu 10 slide PE SmartPlan"
         >
           <DeckBody fullscreen={true} />
         </div>

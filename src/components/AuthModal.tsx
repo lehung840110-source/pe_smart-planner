@@ -386,11 +386,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   const buildRenewalMailtoHref = () => {
-    const subject = `[SmartPlan GDTC Pro] Liên hệ hỗ trợ kích hoạt Tính năng nâng cao - ${user?.email || email}`;
+    const subject = `[PE SmartPlan] Liên hệ hỗ trợ kích hoạt Tính năng nâng cao - ${user?.email || email}`;
     const body = [
       'Kính gửi thầy Lê Quốc Hưng,',
       '',
-      'Tôi muốn liên hệ tìm hiểu và kích hoạt Tính năng nâng cao trên SmartPlan GDTC Pro:',
+      'Tôi muốn liên hệ tìm hiểu và kích hoạt Tính năng nâng cao trên PE SmartPlan:',
       `- Tài khoản Email: ${user?.email || email || '(chưa nhập)'}`,
       `- Họ và tên: ${user?.fullName || fullName || '(chưa nhập)'}`,
       `- Đơn vị / Trường: ${user?.schoolName || schoolName || '(chưa nhập)'}`,
@@ -419,11 +419,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
       const params: SendGmailParams = {
         to: ADMIN_NOTIFICATION_EMAIL,
-        subject: `[SmartPlan GDTC Pro] Liên hệ hỗ trợ kích hoạt Tính năng nâng cao - ${user.email}`,
+        subject: `[PE SmartPlan] Liên hệ hỗ trợ kích hoạt Tính năng nâng cao - ${user.email}`,
         htmlBody: `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;">
             <h2 style="color: #1d4ed8;">Yêu Cầu Hỗ Trợ Kích Hoạt Tính Năng Nâng Cao</h2>
-            <p>Thầy/cô vừa gửi yêu cầu hỗ trợ tài khoản SmartPlan GDTC Pro:</p>
+            <p>Thầy/cô vừa gửi yêu cầu hỗ trợ tài khoản PE SmartPlan:</p>
             <ul>
               <li><strong>Họ và tên:</strong> ${user.fullName}</li>
               <li><strong>Email tài khoản:</strong> ${user.email}</li>
@@ -519,7 +519,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   ? 'Đăng Nhập 1 Chạm — Miễn Phí Trọn 1 Học Kỳ'
                   : isExpired
                   ? 'Ủng Hộ & Gia Hạn Duy Trì Hệ Thống'
-                  : 'Tài Khoản & Trải Nghiệm SmartPlan GDTC Pro'}
+                  : 'Tài Khoản & Trải Nghiệm PE SmartPlan'}
               </h3>
               <p className="text-[11px] text-slate-600 truncate">
                 {!user
@@ -799,6 +799,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                     <button
                       type="button"
+                      disabled={isGoogleLoading}
+                      onClick={handleGoogleQuickSignIn}
+                      className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-blue-50 text-slate-800 border-2 border-blue-600/80 font-bold flex items-center justify-center gap-2 transition disabled:opacity-50"
+                    >
+                      {isGoogleLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                      ) : (
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.54 5.54 0 0 1-2.4 3.63v3h3.88c2.27-2.09 3.54-5.17 3.54-8.87z" />
+                          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.09A12 12 0 0 0 12 24z" />
+                          <path fill="#FBBC05" d="M5.28 14.29a7.2 7.2 0 0 1 0-4.58V6.62H1.29a12 12 0 0 0 0 10.76l3.99-3.09z" />
+                          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0A12 12 0 0 0 1.29 6.62l3.99 3.09c.95-2.85 3.6-4.96 6.72-4.96z" />
+                        </svg>
+                      )}
+                      <span>
+                        {user.authMethod === 'google'
+                          ? 'Đổi Tài Khoản Google Khác'
+                          : 'Chuyển Sang Đăng Nhập Bằng Tài Khoản Google'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={handleLogout}
                       className="w-full py-2.5 px-4 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold flex items-center justify-center gap-2 transition"
                     >
@@ -816,7 +839,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <DonationSupportCard
                     compact
                     defaultShowQr
-                    suggestedTransferNote={`Ung ho SmartPlan GDTC - ${user.fullName || user.email.split('@')[0]}`}
+                    suggestedTransferNote={`Ung ho PE SmartPlan - ${user.fullName || user.email.split('@')[0]}`}
                     onShowToast={showToast}
                   />
 

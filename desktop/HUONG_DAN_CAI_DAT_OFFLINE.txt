@@ -1,0 +1,34 @@
+HƯỚNG DẪN CÀI ĐẶT & ĐÓNG GÓI PE SMARTPLAN 2.0 CHẠY OFFLINE TRÊN MÁY TÍNH
+========================================================================
+
+CÁCH 1: CÀI TRỰC TIẾP LÀM PHẦN MỀM DESKTOP (NHANH NHẤT - 10 GIÂY, KHÔNG CẦN CÀI NODE.JS)
+---------------------------------------------------------------------------------------
+1. Mở đường dẫn ứng dụng PE SmartPlan 2.0 trực tiếp trên trình duyệt Google Chrome hoặc Microsoft Edge.
+2. Bấm nút "Cài Offline" trên thanh công cụ màu xanh của ứng dụng (hoặc bấm biểu tượng hình màn hình máy tính có mũi tên tải xuống ở góc phải thanh địa chỉ Chrome/Edge).
+3. Bấm "Cài đặt" (Install).
+=> Ứng dụng sẽ xuất hiện biểu tượng ngay trên màn hình Desktop & Start Menu, mở ra như một phần mềm Windows riêng biệt, tự động lưu bộ nhớ đệm (Service Worker + IndexedDB) để dùng OFFLINE hoàn toàn khi không có mạng!
+
+
+CÁCH 2: ĐÓNG GÓI THÀNH FILE CÀI ĐẶT WINDOWS ĐỘC LẬP (.EXE) HOẶC CHẠY QUA USB
+----------------------------------------------------------------------------
+Yêu cầu duy nhất để đóng gói 1 lần: Máy tính đã cài Node.js LTS (https://nodejs.org).
+
+Bước 1: Tải mã nguồn ứng dụng về máy tính (từ GitHub hoặc xuất file ZIP) và giải nén vào 1 thư mục (ví dụ: D:\PE-SmartPlan).
+
+Bước 2: Chọn 1 trong 2 cách sau trong thư mục "desktop":
+  • Chạy Offline ngay (không cần đóng gói .exe):
+    Nháy đúp file: desktop\Start-SmartPlan-Offline.bat
+    -> Lần đầu tự tải thư viện & build, từ lần sau tắt mạng hoàn toàn vẫn mở được như phần mềm Desktop!
+
+  • Tạo file cài đặt Windows (.exe) để cài cho nhiều máy không cần Node.js:
+    Nháy đúp file: desktop\Build-Installer-EXE.bat
+    -> Chờ khoảng 2-3 phút, máy sẽ xuất ra 2 file trong thư mục "release\":
+       1) PE SmartPlan 2.0 Setup x.x.x.exe  (File cài đặt chuẩn Windows, tạo icon Desktop)
+       2) PE SmartPlan 2.0 x.x.x.exe        (Bản Portable copy vào USB chạy ngay không cần cài)
+
+
+LƯU Ý DỮ LIỆU KHI DÙNG OFFLINE:
+-------------------------------
+- Toàn bộ giáo án, thư viện ảnh SGK đã bóc tách, sơ đồ đội hình, cấu hình trường lớp và xuất file Word (.docx) đều hoạt động 100% OFFLINE trên máy tính.
+- Nên định kỳ dùng nút "Sao Lưu / Khôi Phục" để xuất 1 file dự phòng (.json) lưu ra ổ D hoặc USB.
+- Riêng các tính năng cần Internet (đồng bộ Google Drive, phân tích AI trực tuyến) sẽ tự hoạt động lại khi máy tính có mạng.

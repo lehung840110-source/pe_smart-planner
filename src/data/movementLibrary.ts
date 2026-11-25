@@ -565,12 +565,17 @@ export const standardMovementsLibrary: MovementTechnicalItem[] = [
     grade: 1,
     keywords: ['phối hợp', 'phoi hop', 'động tác phối hợp', 'bài 3'],
     category: 'dong_tac_moi',
-    cues: ['Bước chân trái chếch trước, khuỵu gối chân trước, chân sau thẳng', 'Hai tay vươn chếch cao chữ V', 'Cúi gập thân sâu hai tay chạm mũi chân', 'Đứng thẳng hai tay dang ngang'],
-    commonErrors: ['Chân sau bị chùng gối', 'Cúi gập người bị co gối'],
-    svgDataUrl: '/assets/sgk_chuan/k1_phoi_hop.svg',
+    cues: [
+      'Nhịp 1: Chân trái bước chếch sang trái, khuỵu gối, chân phải thẳng, hai tay chống hông',
+      'Nhịp 2: Thu chân trái sát chân phải, cúi gập thân, hai chân thẳng, hai tay với mũi bàn chân',
+      'Nhịp 3: Khuỵu hai gối, lưng thẳng, hai tay dang ngang, bàn tay ngửa',
+      'Nhịp 4: Về tư thế đứng nghiêm (Nhịp 5, 6, 7, 8 đổi chân)'
+    ],
+    commonErrors: ['Chân sau bị chùng gối ở nhịp 1', 'Cúi gập người bị co gối ở nhịp 2', 'Lưng bị khom khi khuỵu hai gối ở nhịp 3'],
+    svgDataUrl: '/assets/aistudio/ban-in_80x60cm_300dpi_vector-chuan-in_90ca6925.png',
     defaultLvd: "5 - 7'",
-    gvExplanation: '- Làm mẫu kết hợp phân tích nhịp: nhịp 1 bước khuỵu gối, nhịp 2 gập sâu giữ chân thẳng, nhịp 3 mở rộng lồng ngực.',
-    hsTask: '- Tập mô phỏng theo nhịp hô chậm, giữ thăng bằng chân trước chân sau.'
+    gvExplanation: '- Làm mẫu chuẩn kết hợp tranh minh họa 5 nhịp: nhịp 1 bước chếch khuỵu gối chống hông, nhịp 2 thu chân gập thân thẳng gối, nhịp 3 khuỵu hai gối dang ngang bàn tay ngửa, nhịp 4 về đứng nghiêm.',
+    hsTask: '- Quan sát tranh 5 nhịp, tập mô phỏng chậm theo nhịp hô và đổi chân ở nhịp 5, 6, 7, 8.'
   },
   {
     id: 'mv_k1_toan_than',

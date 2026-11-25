@@ -432,7 +432,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
       setComment('');
       setSubmitNotice({
         type: 'success',
-        text: 'Cảm ơn Quý thầy/cô! Đánh giá và góp ý đã được ghi nhận vào Không gian góp ý SmartPlan GDTC Pro.'
+        text: 'Cảm ơn Quý thầy/cô! Đánh giá và góp ý đã được ghi nhận vào Không gian góp ý PE SmartPlan.'
       });
       showToast?.('💖 Cảm ơn Quý thầy/cô đã gửi đánh giá & góp ý!');
     } finally {
@@ -473,7 +473,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
   };
 
   const buildDirectEmailHref = () => {
-    const subject = `[Góp ý SmartPlan GDTC Pro] ${CATEGORY_META[category].label} - ${authorName || 'Giáo viên GDTC'}`;
+    const subject = `[Góp ý PE SmartPlan] ${CATEGORY_META[category].label} - ${authorName || 'Giáo viên GDTC'}`;
     const bodyLines = [
       `Kính gửi tác giả Lê Quốc Hưng,`,
       ``,
@@ -514,11 +514,11 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
             </div>
 
             <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight leading-snug">
-              Nhận Xét Chi Tiết &amp; Hòm Thư Góp Ý — SmartPlan GDTC Pro
+              Nhận Xét Chi Tiết &amp; Hòm Thư Góp Ý — PE SmartPlan
             </h2>
 
             <p className="text-xs sm:text-sm text-blue-100/90 leading-relaxed">
-              Mọi phản hồi, đánh giá thực tế từ sân tập và đề xuất nâng cấp của Quý thầy cô là động lực quý giá nhất để SmartPlan GDTC Pro ngày càng hoàn thiện hơn, phục vụ thiết thực cho bộ môn Giáo dục Thể chất.
+              Mọi phản hồi, đánh giá thực tế từ sân tập và đề xuất nâng cấp của Quý thầy cô là động lực quý giá nhất để PE SmartPlan ngày càng hoàn thiện hơn, phục vụ thiết thực cho bộ môn Giáo dục Thể chất.
             </p>
 
             {/* Quick Section Filter & Direct Actions */}
@@ -558,7 +558,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
               </div>
 
               <a
-                href={`mailto:${AUTHOR_EMAIL}?subject=${encodeURIComponent('[Đóng góp ý kiến] SmartPlan GDTC Pro')}`}
+                href={`mailto:${AUTHOR_EMAIL}?subject=${encodeURIComponent('[Đóng góp ý kiến] PE SmartPlan')}`}
                 className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition"
               >
                 <Mail className="w-3.5 h-3.5" />
@@ -628,7 +628,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
                   Đánh Giá Chuyên Môn Chi Tiết
                 </span>
                 <h3 className="text-base sm:text-lg font-extrabold text-slate-900 mt-1 flex items-center gap-2">
-                  <span>✅ Điểm mạnh — Những điều SmartPlan GDTC Pro đã làm cực kỳ xuất sắc</span>
+                  <span>✅ Điểm mạnh — Những điều PE SmartPlan đã làm cực kỳ xuất sắc</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Từ góc độ người xem và hiểu rõ nhu cầu thực tế của giáo viên Thể dục tại Việt Nam — phân tích trung thực và đầy đủ nhất
@@ -695,7 +695,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
                   <span>🔧 Điểm có thể cải thiện trong tương lai — Góp ý xây dựng</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Định hướng nâng cấp lộ trình để SmartPlan GDTC Pro ngày càng toàn diện hơn cho cộng đồng giáo viên Thể dục
+                  Định hướng nâng cấp lộ trình để PE SmartPlan ngày càng toàn diện hơn cho cộng đồng giáo viên Thể dục
                 </p>
               </div>
               <span className="text-[11px] font-semibold bg-blue-50 text-blue-800 border border-blue-200 px-2.5 py-1 rounded-lg">
@@ -774,7 +774,7 @@ export const TabFeedback: React.FC<TabFeedbackProps> = ({
                   <Quote className="w-5 h-5" />
                 </div>
                 <blockquote className="text-sm sm:text-[15px] font-medium leading-relaxed text-emerald-50 italic">
-                  “SmartPlan GDTC Pro không chỉ là một ứng dụng công nghệ — đó là sự tập kết kinh nghiệm, tâm huyết và trách nhiệm của một giáo viên với môn học, với nghề nghiệp. Sản phẩm này không cần quá hoa mỹ, vì giá trị thực tế mà nó mang lại đã đủ nói lên tất cả. Bạn đã làm một việc mà ai cũng cần nhưng chưa ai làm một cách hoàn chỉnh như vậy. Đó chính là thành công lớn nhất rồi.”
+                  “PE SmartPlan không chỉ là một ứng dụng công nghệ — đó là sự tập kết kinh nghiệm, tâm huyết và trách nhiệm của một giáo viên với môn học, với nghề nghiệp. Sản phẩm này không cần quá hoa mỹ, vì giá trị thực tế mà nó mang lại đã đủ nói lên tất cả. Bạn đã làm một việc mà ai cũng cần nhưng chưa ai làm một cách hoàn chỉnh như vậy. Đó chính là thành công lớn nhất rồi.”
                 </blockquote>
               </div>
 
