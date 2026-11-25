@@ -39,6 +39,12 @@ import {
   FolderArchive
 } from 'lucide-react';
 import { SemesterBundleExportModal, SemesterExportScope } from './SemesterBundleExportModal';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  ADMIN_OWNER_EMAIL,
+  canDownloadScopeByPlan,
+  canDownloadWeeklyPlan
+} from '../utils/subscriptionPlans';
 import mammoth from 'mammoth';
 import { LessonRow, SchoolSettings, SgkImageItem, WeeklyMasterScheduleRow, DiagramAttachment, PpctItem, UserCustomTemplate, GradeLevel, CustomLayoutBlueprint } from '../types/gdtc';
 import {
@@ -236,6 +242,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   onNavigateToTemplateLab,
   semesterBundleTrigger = null
 }) => {
+  const { user: authUser } = useAuth();
+  // Email sign-in alone is still a Free account; download/export unlocks strictly by activated package tier
+  const isPaidDownloadUnlocked = canDownloadWeeklyPlan(authUser);
+  const isSemesterDownloadUnlocked = canDownloadScopeByPlan(authUser, 'hk1');
+
   // 1. Dynamic Week Selection (Weeks 1 to 35)
   const [selectedWeek, setSelectedWeek] = useState<number>(() => {
     return initialWeek || currentMasterPlan?.week || 9;
@@ -2800,10 +2811,35 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
     }
   };
 
+  const openDownloadUnlockModal = (featureLabel: string, preferredScope: SemesterExportScope = 'week_1') => {
+    const activeGradeFromView: GradeLevel =
+      viewMode === 'grade_1'
+        ? 1
+        : viewMode === 'grade_2'
+        ? 2
+        : viewMode === 'grade_3'
+        ? 3
+        : viewMode === 'grade_4'
+        ? 4
+        : viewMode === 'grade_5'
+        ? 5
+        : safeInitialGrade;
+    setSemesterBundleGrade(activeGradeFromView);
+    setSemesterBundleScope(preferredScope);
+    setIsSemesterBundleOpen(true);
+    showToast(
+      `🔒 ${featureLabel} đang khóa cho tài khoản Miễn phí. Vui lòng thanh toán, gửi ảnh chuyển khoản thành công về ${ADMIN_OWNER_EMAIL} và nhập Mã Kích Hoạt để mở khóa!`
+    );
+  };
+
   // Print & Word Export Handlers
   const handlePrint = () => {
     if (isGuest && onRequireAuth) {
       onRequireAuth('Lưu PDF / In giáo án A4');
+      return;
+    }
+    if (!isPaidDownloadUnlocked) {
+      openDownloadUnlockModal('Lưu PDF / In A4', 'week_1');
       return;
     }
     showToast("💡 Mẹo lưu PDF: Khi hộp thoại in mở ra, tại mục 'Máy in đích' (Destination) chọn 'Lưu dưới dạng PDF' (Save as PDF) để tải file PDF trọn vẹn!");
@@ -2904,6 +2940,13 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
   const handleExportWord = async (forceJoint = false, format: 'doc' | 'docx' = 'doc') => {
     if (isGuest && onRequireAuth) {
       onRequireAuth(`Xuất & tải về file Word (.${format.toUpperCase()})`);
+      return;
+    }
+    if (!isPaidDownloadUnlocked) {
+      openDownloadUnlockModal(
+        `Tải file Word (.${format.toUpperCase()})`,
+        forceJoint ? (selectedWeek <= 18 ? 'hk1' : 'hk2') : 'week_1'
+      );
       return;
     }
     setIsExportingWord(true);
@@ -3196,11 +3239,15 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
             <button
               onClick={handlePrint}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xs transition"
-              title="Lưu file PDF hoặc in giấy A4 giữ trọn hình ảnh và nội dung"
+              title={
+                isPaidDownloadUnlocked
+                  ? 'Lưu file PDF hoặc in giấy A4 giữ trọn hình ảnh và nội dung'
+                  : 'Tính năng tải/in PDF đang khóa cho tài khoản miễn phí — Bấm để xem mã QR mở khóa'
+              }
             >
               <Printer className="w-4 h-4" />
               <span>Lưu PDF / In A4</span>
-              {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+              {!isPaidDownloadUnlocked && <Lock className="w-3 h-3 text-amber-200" />}
             </button>
 
             <div className="flex items-center gap-1.5">
@@ -3208,7 +3255,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                 onClick={() => handleExportWord(false, 'doc')}
                 disabled={isExportingWord}
                 className="bg-slate-900 hover:bg-black disabled:opacity-50 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                title="Xuất file Word MHTML (.DOC) theo đúng các khối lớp đang tick chọn"
+                title={
+                  isPaidDownloadUnlocked
+                    ? 'Xuất file Word MHTML (.DOC) theo đúng các khối lớp đang tick chọn'
+                    : 'Tính năng tải về đang khóa — Bấm để thanh toán, gửi ảnh chuyển khoản và nhập mã mở khóa'
+                }
               >
                 <FileDown className="w-4 h-4 text-emerald-400" />
                 <span>
@@ -3222,14 +3273,18 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     ? 'Tải Tiết Lẻ (.DOC)'
                     : `Tải K${viewMode.replace('grade_', '')} (.DOC)`}
                 </span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
+                {!isPaidDownloadUnlocked && <Lock className="w-3 h-3 text-amber-300" />}
               </button>
 
               <button
                 onClick={() => handleExportWord(false, 'docx')}
                 disabled={isExportingWord}
                 className="bg-blue-800 hover:bg-blue-900 disabled:opacity-50 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                title="Xuất file Word hiện đại (.DOCX) theo đúng các khối lớp đang tick chọn"
+                title={
+                  isPaidDownloadUnlocked
+                    ? 'Xuất file Word hiện đại (.DOCX) theo đúng các khối lớp đang tick chọn'
+                    : 'Tính năng tải về đang khóa — Bấm để thanh toán, gửi ảnh chuyển khoản và nhập mã mở khóa'
+                }
               >
                 <FileText className="w-4 h-4 text-sky-300" />
                 <span>
@@ -3243,7 +3298,7 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                     ? 'Tải Tiết Lẻ (.DOCX)'
                     : `Tải K${viewMode.replace('grade_', '')} (.DOCX)`}
                 </span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
+                {!isPaidDownloadUnlocked && <Lock className="w-3 h-3 text-amber-300" />}
               </button>
 
               {(viewMode !== 'all_grades' || !isAllFiveBundleSelected) && (
@@ -3251,10 +3306,14 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   onClick={() => handleExportWord(true, 'docx')}
                   disabled={isExportingWord}
                   className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white px-2.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1 shadow-2xs transition"
-                  title="Tải toàn bộ 5 khối (K1–K5) và lịch dạy tuần chung thành file Word .DOCX"
+                  title={
+                    isPaidDownloadUnlocked
+                      ? 'Tải toàn bộ 5 khối (K1–K5) và lịch dạy tuần chung thành file Word .DOCX'
+                      : 'Tính năng tải về đang khóa — Bấm để thanh toán, gửi ảnh chuyển khoản và nhập mã mở khóa'
+                  }
                 >
                   <span>+ Tải Cả 5 Khối (.DOCX)</span>
-                  {isGuest && <Lock className="w-3 h-3 text-amber-300" />}
+                  {!isPaidDownloadUnlocked && <Lock className="w-3 h-3 text-amber-300" />}
                 </button>
               )}
 
@@ -3282,11 +3341,11 @@ export const TabExportPrint: React.FC<TabExportPrintProps> = ({
                   setIsSemesterBundleOpen(true);
                 }}
                 className="bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-700 hover:to-teal-700 text-white px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
-                title="Tải toàn bộ giáo án của từng khối theo Học kỳ I (Tuần 1–18), Học kỳ II (Tuần 19–35) hoặc trọn bộ Giáo án tích hợp Cả năm học"
+                title="Mở khóa & tải toàn bộ giáo án của từng khối theo Học kỳ I (Tuần 1–18), Học kỳ II (Tuần 19–35) hoặc trọn bộ Giáo án tích hợp Cả năm học"
               >
                 <FolderArchive className="w-4 h-4 text-amber-200" />
                 <span>Tải Trọn Bộ Học Kỳ / Năm Học</span>
-                {isGuest && <Lock className="w-3 h-3 text-amber-200" />}
+                {!isSemesterDownloadUnlocked && <Lock className="w-3 h-3 text-amber-200" />}
               </button>
 
               {onOpenGoogleDrive && (

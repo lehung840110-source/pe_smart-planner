@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { SchoolSettings } from '../types/gdtc';
 import type { AuthUser } from '../contexts/AuthContext';
+import { getShortPaidPlanBadge } from '../utils/subscriptionPlans';
 import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
@@ -188,7 +189,9 @@ export const Header: React.FC<HeaderProps> = ({
                           ? 'Admin'
                           : authUser.hasFullAccess === false
                           ? 'Gia hạn'
-                          : `${authUser.daysRemaining ?? 120}n`}
+                          : authUser.planTier === 'paid'
+                          ? `${getShortPaidPlanBadge(authUser.paidPlanId)}·${authUser.daysRemaining ?? 7}n`
+                          : `Free·${authUser.daysRemaining ?? 120}n`}
                       </span>
                     </>
                   ) : (
@@ -386,7 +389,9 @@ export const Header: React.FC<HeaderProps> = ({
                             ? 'Admin'
                             : authUser.hasFullAccess === false
                             ? 'Gia hạn'
-                            : `${authUser.daysRemaining ?? 120}n`}
+                            : authUser.planTier === 'paid'
+                            ? `${getShortPaidPlanBadge(authUser.paidPlanId)} · ${authUser.daysRemaining ?? 7}n`
+                            : `Miễn phí · ${authUser.daysRemaining ?? 120}n`}
                         </span>
                       </>
                     ) : (

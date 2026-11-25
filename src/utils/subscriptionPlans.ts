@@ -184,10 +184,62 @@ export interface ComputedSubscriptionState {
   trialStartedAt: number;
   trialEndsAt: number;
   paidUntil?: number;
+  paidPlanId?: SubscriptionPlanId;
+  paidPlanLabel?: string;
   planTier: PlanTier;
   activeUntil: number | null;
   daysRemaining: number;
   hasFullAccess: boolean;
+}
+
+export const PLAN_TIER_RANK: Record<SubscriptionPlanId, number> = {
+  week_1: 1,
+  month_1: 2,
+  semester_1: 3,
+  year_1: 4
+};
+
+export function inferPlanIdFromDays(days: number): SubscriptionPlanId {
+  if (days >= 300) return 'year_1';
+  if (days >= 100) return 'semester_1';
+  if (days >= 25) return 'month_1';
+  return 'week_1';
+}
+
+export function getShortPaidPlanBadge(planId?: SubscriptionPlanId): string {
+  switch (planId) {
+    case 'year_1':
+      return 'Cả Năm';
+    case 'semester_1':
+      return 'Học Kỳ';
+    case 'month_1':
+      return '1 Tháng';
+    case 'week_1':
+    default:
+      return '1 Tuần';
+  }
+}
+
+export function canDownloadWeeklyPlan(
+  user: { planTier?: PlanTier; hasFullAccess?: boolean } | null | undefined
+): boolean {
+  if (!user) return false;
+  if (user.planTier === 'admin_lifetime') return true;
+  return user.planTier === 'paid' && user.hasFullAccess !== false;
+}
+
+export function canDownloadScopeByPlan(
+  user: { planTier?: PlanTier; hasFullAccess?: boolean; paidPlanId?: SubscriptionPlanId } | null | undefined,
+  scope: 'week_1' | 'hk1' | 'hk2' | 'full_year'
+): boolean {
+  if (!user) return false;
+  if (user.planTier === 'admin_lifetime') return true;
+  if (user.planTier !== 'paid' || user.hasFullAccess === false) return false;
+  const activeRank = PLAN_TIER_RANK[user.paidPlanId || 'week_1'] || 1;
+  if (scope === 'week_1') return activeRank >= 1;
+  if (scope === 'hk1' || scope === 'hk2') return activeRank >= 3; // semester_1 or year_1
+  if (scope === 'full_year') return activeRank >= 4; // year_1
+  return false;
 }
 
 export function computeSubscriptionState(input: {
@@ -196,6 +248,8 @@ export function computeSubscriptionState(input: {
   trialStartedAt?: number;
   trialEndsAt?: number;
   paidUntil?: number;
+  paidPlanId?: SubscriptionPlanId;
+  paidPlanLabel?: string;
 }): ComputedSubscriptionState {
   const now = Date.now();
   const created = Number(input.createdAt) || now;
@@ -208,6 +262,8 @@ export function computeSubscriptionState(input: {
       trialStartedAt,
       trialEndsAt,
       paidUntil,
+      paidPlanId: 'year_1',
+      paidPlanLabel: 'Quản trị viên · Toàn quyền',
       planTier: 'admin_lifetime',
       activeUntil: null,
       daysRemaining: 9999,
@@ -216,14 +272,18 @@ export function computeSubscriptionState(input: {
   }
 
   if (paidUntil && paidUntil > now) {
-    const activeUntil = Math.max(paidUntil, trialEndsAt);
+    const remainingDays = Math.max(1, Math.ceil((paidUntil - now) / DAY_MS));
+    const resolvedPlanId = input.paidPlanId || inferPlanIdFromDays(remainingDays);
+    const resolvedPlanLabel = input.paidPlanLabel || getSubscriptionPlanById(resolvedPlanId).name;
     return {
       trialStartedAt,
       trialEndsAt,
       paidUntil,
+      paidPlanId: resolvedPlanId,
+      paidPlanLabel: resolvedPlanLabel,
       planTier: 'paid',
-      activeUntil,
-      daysRemaining: Math.max(1, Math.ceil((activeUntil - now) / DAY_MS)),
+      activeUntil: paidUntil,
+      daysRemaining: remainingDays,
       hasFullAccess: true
     };
   }

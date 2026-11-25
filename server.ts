@@ -2345,6 +2345,7 @@ const SECRET_FILE = path.join(DATA_DIR, '.session_secret');
 const RECOVERY_CODES_FILE = path.join(DATA_DIR, 'recovery_codes.json');
 const REG_NOTIFICATIONS_FILE = path.join(DATA_DIR, 'registration_notifications.json');
 const LICENSE_KEYS_FILE = path.join(DATA_DIR, 'license_keys.json');
+const PAYMENT_REQUESTS_FILE = path.join(DATA_DIR, 'payment_requests.json');
 const ADMIN_NOTIFICATION_EMAIL = 'lehung840110@gmail.com';
 const TRIAL_DURATION_DAYS = 120;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -2362,6 +2363,8 @@ interface StoredUser {
   trialStartedAt?: number;
   trialEndsAt?: number;
   paidUntil?: number;
+  paidPlanId?: 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+  paidPlanLabel?: string;
   registrationConfirmed?: boolean;
   confirmedAt?: number;
 }
@@ -2378,6 +2381,29 @@ interface StoredLicenseKey {
   createdBy: string;
   redeemedAt?: number;
   redeemedByEmail?: string;
+}
+
+interface StoredPaymentProofRequest {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  schoolName: string;
+  planId: 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+  scopeLabel: string;
+  gradeLabel: string;
+  amountVnd: number;
+  transferNote: string;
+  proofImageDataUrl: string;
+  viewToken?: string;
+  createdAt: number;
+  status: 'pending' | 'approved';
+  licenseCode?: string;
+  activationLink?: string;
+  approvedAt?: number;
+  approvedBy?: string;
+  activationEmailSent?: boolean;
+  activationEmailSentAt?: number;
 }
 
 interface StoredRecoveryCode {
@@ -2413,6 +2439,35 @@ function ensureAuthStorage() {
   if (!fs.existsSync(RECOVERY_CODES_FILE)) fs.writeFileSync(RECOVERY_CODES_FILE, '[]', 'utf8');
   if (!fs.existsSync(REG_NOTIFICATIONS_FILE)) fs.writeFileSync(REG_NOTIFICATIONS_FILE, '[]', 'utf8');
   if (!fs.existsSync(LICENSE_KEYS_FILE)) fs.writeFileSync(LICENSE_KEYS_FILE, '[]', 'utf8');
+  if (!fs.existsSync(PAYMENT_REQUESTS_FILE)) fs.writeFileSync(PAYMENT_REQUESTS_FILE, '[]', 'utf8');
+}
+
+function readPaymentRequests(): StoredPaymentProofRequest[] {
+  ensureAuthStorage();
+  try {
+    const raw = fs.readFileSync(PAYMENT_REQUESTS_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    let mutated = false;
+    const normalized = parsed.map((item: StoredPaymentProofRequest) => {
+      if (!item.viewToken) {
+        mutated = true;
+        return { ...item, viewToken: crypto.randomBytes(12).toString('hex') };
+      }
+      return item;
+    });
+    if (mutated) {
+      fs.writeFileSync(PAYMENT_REQUESTS_FILE, JSON.stringify(normalized.slice(0, 200), null, 2), 'utf8');
+    }
+    return normalized;
+  } catch {
+    return [];
+  }
+}
+
+function writePaymentRequests(items: StoredPaymentProofRequest[]) {
+  ensureAuthStorage();
+  fs.writeFileSync(PAYMENT_REQUESTS_FILE, JSON.stringify(items.slice(0, 200), null, 2), 'utf8');
 }
 
 function getSessionSecret(): string {
@@ -2542,6 +2597,20 @@ function verifyServerSignedCode(rawCode: string): {
   return entry ? { valid: true, normalizedCode: normalized, planId: entry[0] } : { valid: false, normalizedCode: normalized };
 }
 
+const SERVER_PLAN_RANK: Record<'week_1' | 'month_1' | 'semester_1' | 'year_1', number> = {
+  week_1: 1,
+  month_1: 2,
+  semester_1: 3,
+  year_1: 4
+};
+
+function inferPlanIdFromDays(days: number): 'week_1' | 'month_1' | 'semester_1' | 'year_1' {
+  if (days >= 300) return 'year_1';
+  if (days >= 100) return 'semester_1';
+  if (days >= 25) return 'month_1';
+  return 'week_1';
+}
+
 function computeUserSubscription(u: StoredUser) {
   const now = Date.now();
   const trialStartedAt = u.trialStartedAt || u.createdAt || now;
@@ -2553,6 +2622,8 @@ function computeUserSubscription(u: StoredUser) {
       trialStartedAt,
       trialEndsAt,
       paidUntil,
+      paidPlanId: 'year_1' as const,
+      paidPlanLabel: 'Quản trị viên · Toàn quyền',
       planTier: 'admin_lifetime' as const,
       activeUntil: null as number | null,
       daysRemaining: 9999,
@@ -2561,14 +2632,18 @@ function computeUserSubscription(u: StoredUser) {
   }
 
   if (paidUntil && paidUntil > now) {
-    const activeUntil = Math.max(paidUntil, trialEndsAt);
+    const remainingPaidDays = Math.max(1, Math.ceil((paidUntil - now) / DAY_MS));
+    const resolvedPlanId = u.paidPlanId || inferPlanIdFromDays(remainingPaidDays);
+    const resolvedPlanLabel = u.paidPlanLabel || SERVER_PLANS[resolvedPlanId]?.label || 'Gói bản quyền';
     return {
       trialStartedAt,
       trialEndsAt,
       paidUntil,
+      paidPlanId: resolvedPlanId,
+      paidPlanLabel: resolvedPlanLabel,
       planTier: 'paid' as const,
-      activeUntil,
-      daysRemaining: Math.max(1, Math.ceil((activeUntil - now) / DAY_MS)),
+      activeUntil: paidUntil,
+      daysRemaining: remainingPaidDays,
       hasFullAccess: true
     };
   }
@@ -2578,6 +2653,8 @@ function computeUserSubscription(u: StoredUser) {
       trialStartedAt,
       trialEndsAt,
       paidUntil,
+      paidPlanId: undefined,
+      paidPlanLabel: undefined,
       planTier: 'trial' as const,
       activeUntil: trialEndsAt,
       daysRemaining: Math.max(1, Math.ceil((trialEndsAt - now) / DAY_MS)),
@@ -2589,6 +2666,8 @@ function computeUserSubscription(u: StoredUser) {
     trialStartedAt,
     trialEndsAt,
     paidUntil,
+    paidPlanId: undefined,
+    paidPlanLabel: undefined,
     planTier: 'expired' as const,
     activeUntil: paidUntil && paidUntil > trialEndsAt ? paidUntil : trialEndsAt,
     daysRemaining: 0,
@@ -2696,6 +2775,8 @@ function toPublicUser(u: StoredUser) {
     trialStartedAt: sub.trialStartedAt,
     trialEndsAt: sub.trialEndsAt,
     paidUntil: sub.paidUntil,
+    paidPlanId: sub.paidPlanId,
+    paidPlanLabel: sub.paidPlanLabel,
     planTier: sub.planTier,
     activeUntil: sub.activeUntil,
     daysRemaining: sub.daysRemaining,
@@ -2703,18 +2784,28 @@ function toPublicUser(u: StoredUser) {
   };
 }
 
+function isHttpsRequest(req?: Request): boolean {
+  if (!req) return false;
+  const forwarded = String(req.headers['x-forwarded-proto'] || '').toLowerCase();
+  return Boolean(req.secure || forwarded.includes('https'));
+}
+
 function setSessionCookie(res: Response, token: string, rememberMe = true) {
   const maxAgePart = rememberMe ? `; Max-Age=${30 * 24 * 60 * 60}` : '';
+  const secureAttrs = isHttpsRequest(res.req) ? '; SameSite=None; Secure' : '; SameSite=Lax';
   res.setHeader(
     'Set-Cookie',
-    `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax${maxAgePart}`
+    `gdtc_session=${encodeURIComponent(token)}; Path=/; HttpOnly${secureAttrs}${maxAgePart}`
   );
 }
 
 // Passwordless personal account sign-in (Google 1-tap or Personal Email — NO password required!)
-// Automatically grants 30 days full-feature free trial on first sign-in (never resets on re-login).
+// Automatically grants 120 days full-feature free trial on first sign-in (never resets on re-login).
 app.post('/api/auth/passwordless', (req: Request, res: Response) => {
-  const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+  const rawEmail = String(req.body?.email || '')
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, '')
+    .trim()
+    .toLowerCase();
   const fullNameInput = String(req.body?.fullName || '').trim();
   const schoolNameInput = String(req.body?.schoolName || '').trim();
   const provider = req.body?.provider === 'google' ? 'google' : 'email_passwordless';
@@ -3149,8 +3240,9 @@ app.post('/api/auth/notifications/:id/confirm', (req: Request, res: Response) =>
   return res.json({ success: true, notification: notifications[idx] });
 });
 
-app.post('/api/auth/logout', (_req: Request, res: Response) => {
-  res.setHeader('Set-Cookie', 'gdtc_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+app.post('/api/auth/logout', (req: Request, res: Response) => {
+  const secureAttrs = isHttpsRequest(req) ? '; SameSite=None; Secure' : '; SameSite=Lax';
+  res.setHeader('Set-Cookie', `gdtc_session=; Path=/; HttpOnly${secureAttrs}; Max-Age=0`);
   return res.json({ success: true });
 });
 
@@ -3178,10 +3270,38 @@ app.post('/api/subscription/redeem', (req: Request, res: Response) => {
   let keyIdx = keys.findIndex((k) => k.code.toUpperCase() === rawCode);
   let durationDays = 0;
   let planLabel = '';
+  let redeemedPlanId: 'week_1' | 'month_1' | 'semester_1' | 'year_1' = 'week_1';
 
   if (keyIdx >= 0) {
     const keyRec = keys[keyIdx];
+    redeemedPlanId = keyRec.planId || inferPlanIdFromDays(keyRec.durationDays);
     if (keyRec.redeemedAt) {
+      if (keyRec.redeemedByEmail?.toLowerCase() === authUser.email.toLowerCase()) {
+        // Ensure paidPlanId & paidUntil are up-to-date on this user
+        const usersRef = readUsersList();
+        const uIdx = usersRef.findIndex((u) => u.id === authUser.id);
+        let refreshedUser = authUser;
+        if (uIdx >= 0) {
+          const nowTs = Date.now();
+          if (!usersRef[uIdx].paidUntil || usersRef[uIdx].paidUntil! <= nowTs) {
+            usersRef[uIdx].paidUntil = nowTs + keyRec.durationDays * DAY_MS;
+          }
+          if (!usersRef[uIdx].paidPlanId || SERVER_PLAN_RANK[redeemedPlanId] > SERVER_PLAN_RANK[usersRef[uIdx].paidPlanId!]) {
+            usersRef[uIdx].paidPlanId = redeemedPlanId;
+            usersRef[uIdx].paidPlanLabel = keyRec.planLabel;
+          }
+          writeUsersList(usersRef);
+          refreshedUser = usersRef[uIdx];
+        }
+        return res.json({
+          success: true,
+          alreadyActivated: true,
+          planId: redeemedPlanId,
+          planLabel: keyRec.planLabel,
+          durationDays: keyRec.durationDays,
+          user: toPublicUser(refreshedUser)
+        });
+      }
       return res.status(400).json({
         success: false,
         error: `Mã kích hoạt này đã được sử dụng trước đó (${keyRec.redeemedByEmail || 'tài khoản khác'}).`
@@ -3208,6 +3328,7 @@ app.post('/api/subscription/redeem', (req: Request, res: Response) => {
       });
     }
     const plan = SERVER_PLANS[sigCheck.planId];
+    redeemedPlanId = sigCheck.planId;
     durationDays = plan.durationDays;
     planLabel = plan.label;
     keys.unshift({
@@ -3231,13 +3352,21 @@ app.post('/api/subscription/redeem', (req: Request, res: Response) => {
   }
 
   const now = Date.now();
-  const baseTime = Math.max(now, users[userIdx].paidUntil || 0, users[userIdx].trialEndsAt || 0);
+  const isCurrentlyPaid = Boolean(users[userIdx].paidUntil && users[userIdx].paidUntil! > now);
+  const baseTime = isCurrentlyPaid ? users[userIdx].paidUntil! : now;
   users[userIdx].paidUntil = baseTime + durationDays * DAY_MS;
+
+  const existingRank = isCurrentlyPaid && users[userIdx].paidPlanId ? SERVER_PLAN_RANK[users[userIdx].paidPlanId!] : 0;
+  const nextPlanId =
+    SERVER_PLAN_RANK[redeemedPlanId] >= existingRank ? redeemedPlanId : users[userIdx].paidPlanId!;
+  users[userIdx].paidPlanId = nextPlanId;
+  users[userIdx].paidPlanLabel = SERVER_PLANS[nextPlanId]?.label || planLabel;
   writeUsersList(users);
 
   return res.json({
     success: true,
-    planLabel,
+    planId: nextPlanId,
+    planLabel: users[userIdx].paidPlanLabel,
     durationDays,
     user: toPublicUser(users[userIdx])
   });
@@ -3316,14 +3445,231 @@ app.post('/api/admin/extend-user', (req: Request, res: Response) => {
   }
 
   const now = Date.now();
-  const baseTime = Math.max(now, users[idx].paidUntil || 0, users[idx].trialEndsAt || 0);
+  const isCurrentlyPaid = Boolean(users[idx].paidUntil && users[idx].paidUntil! > now);
+  const baseTime = isCurrentlyPaid ? users[idx].paidUntil! : now;
   users[idx].paidUntil = baseTime + durationDays * DAY_MS;
+  const inferredPlan = inferPlanIdFromDays(durationDays);
+  const existingRank = isCurrentlyPaid && users[idx].paidPlanId ? SERVER_PLAN_RANK[users[idx].paidPlanId!] : 0;
+  const nextPlan = SERVER_PLAN_RANK[inferredPlan] >= existingRank ? inferredPlan : users[idx].paidPlanId!;
+  users[idx].paidPlanId = nextPlan;
+  users[idx].paidPlanLabel = SERVER_PLANS[nextPlan]?.label || 'Gói bản quyền';
   writeUsersList(users);
 
   return res.json({
     success: true,
     user: toPublicUser(users[idx])
   });
+});
+
+// User submits uploaded bank transfer screenshot for admin verification
+app.post('/api/payment-requests', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  const rawEmail = String(authUser?.email || req.body?.email || '')
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, '')
+    .trim()
+    .toLowerCase();
+
+  if (!rawEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+    return res.status(400).json({ success: false, error: 'Vui lòng đăng nhập Email trước khi gửi ảnh chuyển khoản.' });
+  }
+
+  const proofImageDataUrl = String(req.body?.proofImageDataUrl || '').trim();
+  if (!proofImageDataUrl.startsWith('data:image/') || proofImageDataUrl.length > 2_500_000) {
+    return res.status(400).json({
+      success: false,
+      error: 'Vui lòng tải lên hình ảnh chuyển khoản thành công hợp lệ (dung lượng dưới 2MB).'
+    });
+  }
+
+  const planIdRaw = String(req.body?.planId || 'week_1') as 'week_1' | 'month_1' | 'semester_1' | 'year_1';
+  const planId = SERVER_PLANS[planIdRaw] ? planIdRaw : 'week_1';
+  const plan = SERVER_PLANS[planId];
+  const now = Date.now();
+  const shortCode = crypto.randomBytes(2).toString('hex').toUpperCase();
+
+  const record: StoredPaymentProofRequest = {
+    id: `YC-${shortCode}-${String(now).slice(-4)}`,
+    userId: authUser?.id || `guest_${rawEmail}`,
+    email: rawEmail,
+    fullName: String(req.body?.fullName || authUser?.fullName || rawEmail.split('@')[0]).trim().slice(0, 100),
+    schoolName: String(req.body?.schoolName || authUser?.schoolName || '').trim().slice(0, 140),
+    planId,
+    scopeLabel: String(req.body?.scopeLabel || plan.label).trim().slice(0, 120),
+    gradeLabel: String(req.body?.gradeLabel || 'Khối 1–5').trim().slice(0, 60),
+    amountVnd: Number(req.body?.amountVnd || plan.priceVnd),
+    transferNote: String(req.body?.transferNote || '').trim().slice(0, 160),
+    proofImageDataUrl,
+    viewToken: crypto.randomBytes(12).toString('hex'),
+    createdAt: now,
+    status: 'pending'
+  };
+
+  const list = readPaymentRequests();
+  list.unshift(record);
+  writePaymentRequests(list);
+
+  return res.json({
+    success: true,
+    request: { ...record, proofImageDataUrl: undefined }
+  });
+});
+
+// View uploaded transfer screenshot directly via secure link (for email notification / Admin preview)
+app.get('/api/payment-requests/:id/image', (req: Request, res: Response) => {
+  const reqId = String(req.params.id || '').trim();
+  const keyParam = String(req.query?.k || '').trim();
+  const authUser = authenticateRequest(req);
+  const isAdmin = Boolean(authUser && authUser.email === ADMIN_NOTIFICATION_EMAIL);
+
+  const item = readPaymentRequests().find((r) => r.id === reqId);
+  if (!item || !item.proofImageDataUrl) {
+    return res.status(404).send('Không tìm thấy hình ảnh chuyển khoản.');
+  }
+
+  const validToken = Boolean(item.viewToken && keyParam && keyParam === item.viewToken);
+  if (!isAdmin && !validToken) {
+    return res.status(403).send('Liên kết xem ảnh không hợp lệ hoặc đã hết quyền truy cập.');
+  }
+
+  const match = item.proofImageDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) {
+    return res.status(400).send('Định dạng ảnh không hợp lệ.');
+  }
+  const mimeType = match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  res.setHeader('Content-Type', mimeType);
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  return res.send(buffer);
+});
+
+// User checks their own payment request status
+app.get('/api/payment-requests/mine', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser) {
+    return res.status(401).json({ success: false, error: 'Chưa đăng nhập.' });
+  }
+  const mine = readPaymentRequests()
+    .filter((r) => r.email.toLowerCase() === authUser.email.toLowerCase())
+    .slice(0, 10)
+    .map((r) => ({ ...r, proofImageDataUrl: '' }));
+  return res.json({ success: true, requests: mine });
+});
+
+// Admin views all uploaded transfer screenshots (pending + approved)
+app.get('/api/admin/payment-requests', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới có quyền xem ảnh chuyển khoản.' });
+  }
+  const requests = readPaymentRequests().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return res.json({ success: true, requests });
+});
+
+// Admin approves receipt -> auto-generates license key, builds activation link & activates account immediately
+app.post('/api/admin/payment-requests/:id/approve', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới được duyệt thanh toán.' });
+  }
+
+  const reqId = String(req.params.id || '').trim();
+  const requests = readPaymentRequests();
+  const idx = requests.findIndex((r) => r.id === reqId);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy yêu cầu thanh toán.' });
+  }
+
+  const item = requests[idx];
+  const plan = SERVER_PLANS[item.planId] || SERVER_PLANS.week_1;
+  const originRaw = String(req.body?.originUrl || '').trim().replace(/\/+$/, '');
+  const origin =
+    /^https?:\/\//i.test(originRaw)
+      ? originRaw
+      : `${isHttpsRequest(req) ? 'https' : 'http'}://${req.headers.host || 'localhost:3000'}`;
+
+  let code = item.licenseCode;
+  const now = Date.now();
+
+  const keys = readLicenseKeys();
+  let keyRecord: StoredLicenseKey | undefined = code ? keys.find((k) => k.code === code) : undefined;
+
+  if (!code || !keyRecord) {
+    code = generateServerLicenseCode(item.planId);
+    keyRecord = {
+      code,
+      planId: item.planId,
+      planLabel: plan.label,
+      durationDays: plan.durationDays,
+      priceVnd: plan.priceVnd,
+      targetEmail: item.email,
+      note: `Duyệt ảnh CK #${item.id} (${item.scopeLabel})`,
+      createdAt: now,
+      createdBy: authUser.email
+    };
+    keys.unshift(keyRecord);
+    writeLicenseKeys(keys.slice(0, 500));
+  }
+
+  // Ensure teacher account exists; account unlocks package downloads when the teacher enters the code (or clicks the emailed activation link)
+  const users = readUsersList();
+  let userIdx = users.findIndex((u) => u.email.toLowerCase() === item.email.toLowerCase());
+  if (userIdx < 0) {
+    const newUser: StoredUser = {
+      id: `usr_${now}_${crypto.randomBytes(4).toString('hex')}`,
+      email: item.email,
+      fullName: item.fullName || item.email.split('@')[0],
+      schoolName: item.schoolName || 'TRƯỜNG TIỂU HỌC & THCS',
+      role: 'teacher',
+      passwordHash: hashPassword(crypto.randomBytes(24).toString('hex')),
+      authMethod: 'email_passwordless',
+      createdAt: now,
+      lastLoginAt: now,
+      trialStartedAt: now,
+      trialEndsAt: now + TRIAL_DURATION_DAYS * DAY_MS,
+      registrationConfirmed: true,
+      confirmedAt: now
+    };
+    users.push(newUser);
+    writeUsersList(users);
+    userIdx = users.length - 1;
+  }
+
+  const activationLink = `${origin}/?activate=${encodeURIComponent(code)}&email=${encodeURIComponent(item.email)}`;
+
+  requests[idx] = {
+    ...item,
+    status: 'approved',
+    licenseCode: code,
+    activationLink,
+    approvedAt: item.approvedAt || now,
+    approvedBy: authUser.email
+  };
+  writePaymentRequests(requests);
+
+  return res.json({
+    success: true,
+    request: requests[idx],
+    key: keyRecord,
+    activationLink,
+    user: toPublicUser(users[userIdx])
+  });
+});
+
+app.post('/api/admin/payment-requests/:id/mark-emailed', (req: Request, res: Response) => {
+  const authUser = authenticateRequest(req);
+  if (!authUser || authUser.email !== ADMIN_NOTIFICATION_EMAIL) {
+    return res.status(403).json({ success: false, error: 'Chỉ quản trị viên mới có quyền cập nhật.' });
+  }
+  const reqId = String(req.params.id || '').trim();
+  const requests = readPaymentRequests();
+  const idx = requests.findIndex((r) => r.id === reqId);
+  if (idx < 0) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy yêu cầu.' });
+  }
+  requests[idx].activationEmailSent = true;
+  requests[idx].activationEmailSentAt = Date.now();
+  writePaymentRequests(requests);
+  return res.json({ success: true, request: requests[idx] });
 });
 
 app.get('/api/workspace', (req: Request, res: Response) => {

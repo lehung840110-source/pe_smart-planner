@@ -7,11 +7,13 @@ import type {
 } from '../contexts/AuthContext';
 import {
   DAY_MS,
+  PLAN_TIER_RANK,
   TRIAL_DURATION_DAYS,
   SubscriptionPlanId,
   computeSubscriptionState,
   generateSignedLicenseCode,
   getSubscriptionPlanById,
+  inferPlanIdFromDays,
   verifySignedLicenseCode
 } from './subscriptionPlans';
 
@@ -37,6 +39,8 @@ interface LocalStoredUser {
   trialStartedAt?: number;
   trialEndsAt?: number;
   paidUntil?: number;
+  paidPlanId?: SubscriptionPlanId;
+  paidPlanLabel?: string;
   registrationConfirmed?: boolean;
   confirmedAt?: number;
 }
@@ -202,7 +206,9 @@ function toPublicUser(u: LocalStoredUser): AuthUser {
     createdAt: u.createdAt,
     trialStartedAt: u.trialStartedAt,
     trialEndsAt: u.trialEndsAt,
-    paidUntil: u.paidUntil
+    paidUntil: u.paidUntil,
+    paidPlanId: u.paidPlanId,
+    paidPlanLabel: u.paidPlanLabel
   });
   return {
     id: u.id,
@@ -218,6 +224,8 @@ function toPublicUser(u: LocalStoredUser): AuthUser {
     trialStartedAt: sub.trialStartedAt,
     trialEndsAt: sub.trialEndsAt,
     paidUntil: sub.paidUntil,
+    paidPlanId: sub.paidPlanId,
+    paidPlanLabel: sub.paidPlanLabel,
     planTier: sub.planTier,
     activeUntil: sub.activeUntil,
     daysRemaining: sub.daysRemaining,
@@ -788,6 +796,7 @@ export function localRedeemLicenseKey(
 ): {
   success: boolean;
   error?: string;
+  planId?: SubscriptionPlanId;
   planLabel?: string;
   durationDays?: number;
   user?: AuthUser;
@@ -808,6 +817,7 @@ export function localRedeemLicenseKey(
   const keys = readLocalLicenseKeys();
   const keyIdx = keys.findIndex((k) => k.code.toUpperCase() === normalized);
   let durationDays = 0;
+  let planId: SubscriptionPlanId = 'week_1';
   let planLabel = '';
 
   if (keyIdx >= 0) {
@@ -819,6 +829,7 @@ export function localRedeemLicenseKey(
       return { success: false, error: `Mã kích hoạt này được cấp riêng cho email ${rec.targetEmail}.` };
     }
     durationDays = rec.durationDays;
+    planId = rec.planId || inferPlanIdFromDays(rec.durationDays);
     planLabel = rec.planLabel;
     keys[keyIdx].redeemedAt = Date.now();
     keys[keyIdx].redeemedByEmail = authUser.email;
@@ -832,6 +843,7 @@ export function localRedeemLicenseKey(
       };
     }
     durationDays = sig.plan.durationDays;
+    planId = sig.plan.id;
     planLabel = sig.plan.name;
     keys.unshift({
       code: sig.normalizedCode,
@@ -853,12 +865,23 @@ export function localRedeemLicenseKey(
     return { success: false, error: 'Không tìm thấy tài khoản.' };
   }
   const now = Date.now();
-  const baseTime = Math.max(now, users[userIdx].paidUntil || 0, users[userIdx].trialEndsAt || 0);
+  const existingPaidUntil = Number(users[userIdx].paidUntil || 0);
+  const isCurrentlyPaid = existingPaidUntil > now;
+  const baseTime = isCurrentlyPaid ? existingPaidUntil : now;
   users[userIdx].paidUntil = baseTime + durationDays * DAY_MS;
+
+  const prevRank =
+    isCurrentlyPaid && users[userIdx].paidPlanId ? PLAN_TIER_RANK[users[userIdx].paidPlanId!] || 0 : 0;
+  const newRank = PLAN_TIER_RANK[planId] || 1;
+  if (!isCurrentlyPaid || newRank >= prevRank) {
+    users[userIdx].paidPlanId = planId;
+    users[userIdx].paidPlanLabel = planLabel;
+  }
   writeUsers(users);
 
   return {
     success: true,
+    planId,
     planLabel,
     durationDays,
     user: toPublicUser(users[userIdx])

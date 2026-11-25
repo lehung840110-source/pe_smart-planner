@@ -46,7 +46,7 @@ import {
   extractGameNameFromRowText,
   doGameNamesMatch
 } from './utils/planAutoMatcher';
-import { useAuth } from './contexts/AuthContext';
+import { useAuth, PaymentProofRequest } from './contexts/AuthContext';
 import {
   defaultSchoolSettings,
   defaultScenarios,
@@ -78,7 +78,7 @@ import {
   setAppStateDB,
   clearImagesDB,
 } from './utils/db';
-import { CheckCircle2, Loader2, Lock, UserPlus, LogIn, Clock, Coffee, Sparkles } from 'lucide-react';
+import { CheckCircle2, Loader2, Lock, UserPlus, LogIn, Clock, Coffee, Sparkles, Download, X } from 'lucide-react';
 import { EXPIRY_WARNING_DAYS, formatVnDate } from './utils/subscriptionPlans';
 import {
   PlanVersionStore,
@@ -123,7 +123,16 @@ import { useSeoMeta } from './hooks/useSeoMeta';
 import { SemesterExportScope } from './components/SemesterBundleExportModal';
 
 export default function App() {
-  const { user: authUser, isLoading: authLoading, pullWorkspace, pushWorkspace } = useAuth();
+  const {
+    user: authUser,
+    isLoading: authLoading,
+    pullWorkspace,
+    pushWorkspace,
+    passwordlessSignIn,
+    redeemLicenseKey,
+    refreshUser,
+    adminGetPaymentRequests
+  } = useAuth();
   const isGuest = !authLoading && !authUser;
   const isSubscriptionExpired = Boolean(!authLoading && authUser && authUser.hasFullAccess === false);
   const isAccessLocked = isGuest || isSubscriptionExpired;
@@ -142,8 +151,15 @@ export default function App() {
     nonce: number;
   } | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'billing'>('register');
+  const [authModalMode, setAuthModalMode] = useState<'login' | 'register' | 'billing' | 'admin'>('register');
   const [authGateReason, setAuthGateReason] = useState<string | null>(null);
+  const [activationSuccessBanner, setActivationSuccessBanner] = useState<{
+    email?: string;
+    planLabel?: string;
+    code?: string;
+  } | null>(null);
+  const [pendingAdminPayments, setPendingAdminPayments] = useState<PaymentProofRequest[]>([]);
+  const handledUrlActivationRef = useRef<boolean>(false);
   const [userCustomTemplates, setUserCustomTemplates] = useState<UserCustomTemplate[]>([]);
   const [activeCustomTemplateId, setActiveCustomTemplateId] = useState<string | null>(null);
   const userCustomTemplatesRef = useRef<UserCustomTemplate[]>([]);
@@ -390,11 +406,150 @@ export default function App() {
     }
   }, []);
 
-  const openAuthModal = (mode: 'login' | 'register' | 'billing' = 'login', reason: string | null = null) => {
+  const openAuthModal = (mode: 'login' | 'register' | 'billing' | 'admin' = 'login', reason: string | null = null) => {
     setAuthGateReason(reason);
     setAuthModalMode(mode);
     setIsAuthModalOpen(true);
   };
+
+  // Handle 1-click activation links (?activate=CODE&email=EMAIL) & Admin payment review link (?adminTab=payments)
+  useEffect(() => {
+    if (authLoading || handledUrlActivationRef.current) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const activateCode = (params.get('activate') || '').trim().toUpperCase();
+      const activateEmail = (params.get('email') || '').trim().toLowerCase();
+      const adminTabParam = (params.get('adminTab') || '').trim().toLowerCase();
+
+      if (!activateCode && !adminTabParam) return;
+      handledUrlActivationRef.current = true;
+
+      const cleanUrlParams = () => {
+        try {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete('activate');
+          nextUrl.searchParams.delete('email');
+          nextUrl.searchParams.delete('adminTab');
+          window.history.replaceState({}, '', nextUrl.pathname + nextUrl.search + nextUrl.hash);
+        } catch {
+          // ignore
+        }
+      };
+
+      if (adminTabParam === 'payments') {
+        cleanUrlParams();
+        openAuthModal('admin', null);
+        return;
+      }
+
+      if (activateCode) {
+        (async () => {
+          try {
+            let activeEmail = authUser?.email || '';
+            if (activateEmail && (!authUser || authUser.email.toLowerCase() !== activateEmail)) {
+              const signRes = await passwordlessSignIn({
+                email: activateEmail,
+                provider: 'email_passwordless',
+                rememberMe: true
+              });
+              if (!signRes.success) {
+                showToast(`⚠️ ${signRes.error || 'Vui lòng đăng nhập để hoàn tất kích hoạt.'}`);
+                openAuthModal('login', `Kích hoạt mã ${activateCode}`);
+                return;
+              }
+              activeEmail = signRes.user?.email || activateEmail;
+            } else if (!authUser) {
+              showToast(`🔑 Vui lòng đăng nhập Email để kích hoạt mã ${activateCode}.`);
+              openAuthModal('login', `Kích hoạt mã ${activateCode}`);
+              return;
+            }
+
+            const redeemRes = await redeemLicenseKey(activateCode);
+            await refreshUser();
+            cleanUrlParams();
+
+            if (redeemRes.success) {
+              setActivationSuccessBanner({
+                email: redeemRes.user?.email || activeEmail,
+                planLabel: redeemRes.planLabel || 'Bản quyền có phí',
+                code: activateCode
+              });
+              setActiveTab('tab-export');
+              showToast(
+                `🎉 Đã kích hoạt thành công ${redeemRes.planLabel || 'gói bản quyền'}! Tính năng tải giáo án theo gói đã được mở khóa.`
+              );
+            } else {
+              showToast(`⚠️ ${redeemRes.error || 'Mã kích hoạt không hợp lệ hoặc đã được dùng cho tài khoản khác.'}`);
+              openAuthModal('billing', null);
+            }
+          } catch {
+            showToast('⚠️ Không thể tự động kích hoạt lúc này. Vui lòng nhập mã trực tiếp trong phần Mở khóa.');
+          }
+        })();
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }, [authLoading, authUser, passwordlessSignIn, redeemLicenseKey, refreshUser]);
+
+  // Live notification bar for Admin owner whenever teachers upload bank transfer screenshots
+  useEffect(() => {
+    if (!authUser || authUser.planTier !== 'admin_lifetime') {
+      setPendingAdminPayments([]);
+      return;
+    }
+    let active = true;
+    const fetchPending = async () => {
+      try {
+        const res = await adminGetPaymentRequests();
+        if (active && res.success && res.requests) {
+          setPendingAdminPayments(res.requests.filter((r) => r.status === 'pending'));
+        }
+      } catch {
+        // ignore transient network issues
+      }
+    };
+    fetchPending();
+    const onFocus = () => fetchPending();
+    window.addEventListener('focus', onFocus);
+    const interval = window.setInterval(fetchPending, 30000);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', onFocus);
+      window.clearInterval(interval);
+    };
+  }, [authUser?.id, authUser?.planTier, isAuthModalOpen, adminGetPaymentRequests]);
+
+  useEffect(() => {
+    const onRedirectSuccess = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ user?: { fullName?: string; daysRemaining?: number; planTier?: string }; isNewUser?: boolean }>).detail;
+      setIsAuthModalOpen(false);
+      setAuthGateReason(null);
+      if (detail?.user?.planTier === 'admin_lifetime') {
+        showToast(`👑 Xin chào Quản trị viên ${detail.user.fullName || ''}! Toàn quyền vĩnh viễn đã sẵn sàng.`);
+      } else if (detail?.user) {
+        showToast(
+          detail.isNewUser
+            ? `🎉 Chào mừng ${detail.user.fullName || ''}! Đã mở khóa FULL tính năng miễn phí trọn 1 học kỳ (120 ngày)!`
+            : `✅ Đăng nhập Google thành công! Xin chào ${detail.user.fullName || ''}.`
+        );
+      }
+    };
+    const onRedirectError = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ error?: string }>).detail;
+      if (detail?.error) {
+        showToast(`⚠️ ${detail.error}`);
+        setAuthModalMode('login');
+        setIsAuthModalOpen(true);
+      }
+    };
+    window.addEventListener('gdtc_google_redirect_login_success', onRedirectSuccess);
+    window.addEventListener('gdtc_google_redirect_login_error', onRedirectError);
+    return () => {
+      window.removeEventListener('gdtc_google_redirect_login_success', onRedirectSuccess);
+      window.removeEventListener('gdtc_google_redirect_login_error', onRedirectError);
+    };
+  }, []);
 
   const requireAuth = (featureName: string, mode: 'login' | 'register' | 'billing' = 'register') => {
     if (isSubscriptionExpired) {
@@ -2391,6 +2546,68 @@ export default function App() {
         showToast={showToast}
       />
 
+      {/* Live Admin Notification Bar when teachers have uploaded bank transfer receipts */}
+      {authUser?.planTier === 'admin_lifetime' && pendingAdminPayments.length > 0 && (
+        <div className="bg-amber-500 text-slate-950 border-b border-amber-600 no-print">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 font-bold">
+              <Sparkles className="w-4 h-4 text-slate-900 shrink-0" />
+              <span>
+                Có {pendingAdminPayments.length} ảnh chuyển khoản mới chờ duyệt ({pendingAdminPayments[0].email} · #{pendingAdminPayments[0].id})
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => openAuthModal('admin', null)}
+              className="px-3 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs whitespace-nowrap shrink-0 transition"
+            >
+              Xem ảnh &amp; Duyệt gửi Mã kích hoạt
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Celebratory 1-Click Activation Success Banner */}
+      {activationSuccessBanner && (
+        <div className="bg-emerald-600 text-white border-b border-emerald-700 no-print">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div className="flex items-start sm:items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-100 shrink-0 mt-0.5 sm:mt-0" />
+              <div className="leading-snug">
+                <strong className="font-extrabold">
+                  Đã kích hoạt sử dụng phần mềm thành công!
+                </strong>{' '}
+                <span>
+                  {activationSuccessBanner.email ? `Tài khoản ${activationSuccessBanner.email} · ` : ''}
+                  {activationSuccessBanner.planLabel || 'Bản quyền có phí'} — Toàn bộ tính năng tải Word (.DOC/.DOCX), PDF &amp; trọn bộ Học kỳ / Cả năm đã được mở khóa.
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('tab-export');
+                  setActivationSuccessBanner(null);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white text-emerald-800 hover:bg-emerald-50 font-extrabold text-xs inline-flex items-center gap-1.5 shadow-2xs transition whitespace-nowrap"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải Giáo Án Ngay</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivationSuccessBanner(null)}
+                className="p-1.5 rounded-lg hover:bg-white/15 text-white transition"
+                title="Đóng thông báo"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Guest Banner: 1-Semester (120-Day) Passwordless Full Free Community Access */}
       {isGuest && (
         <div className="bg-gradient-to-r from-emerald-50 via-sky-50 to-blue-50 border-b border-emerald-200 no-print">
@@ -2942,17 +3159,21 @@ export default function App() {
         onAuthSuccess={async (mode) => {
           setAuthGateReason(null);
           hasPulledInitialWorkspaceRef.current = true;
-          if (mode === 'register') {
-            await pushWorkspace(buildWorkspaceSnapshot());
-            showToast('☁️ Đã tạo tài khoản và sao lưu dữ liệu làm việc hiện tại lên tài khoản!');
-          } else {
-            const ws = await pullWorkspace();
-            if (ws && (ws.planVersionStore || ws.userCustomTemplates?.length || ws.allMasterPlans)) {
-              await mergeAndApplyServerWorkspace(ws);
-              showToast('☁️ Đã đồng bộ các phiên bản giáo án & mẫu người dùng từ tài khoản!');
-            } else {
+          try {
+            if (mode === 'register') {
               await pushWorkspace(buildWorkspaceSnapshot());
+              showToast('☁️ Đã tạo tài khoản và sao lưu dữ liệu làm việc hiện tại lên tài khoản!');
+            } else {
+              const ws = await pullWorkspace();
+              if (ws && (ws.planVersionStore || ws.userCustomTemplates?.length || ws.allMasterPlans)) {
+                await mergeAndApplyServerWorkspace(ws);
+                showToast('☁️ Đã đồng bộ các phiên bản giáo án & mẫu người dùng từ tài khoản!');
+              } else {
+                await pushWorkspace(buildWorkspaceSnapshot());
+              }
             }
+          } catch {
+            // Do not break login flow if background workspace sync fails on mobile
           }
         }}
         onManualSyncUp={async () => {

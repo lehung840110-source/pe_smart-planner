@@ -21,7 +21,8 @@ import {
   localAdminExtendUser
 } from '../utils/localAuthFallback';
 import type { PlanTier, SubscriptionPlanId } from '../utils/subscriptionPlans';
-import { logoutGoogle } from '../services/googleAuth';
+import { logoutGoogle, consumeGoogleRedirectResult } from '../services/googleAuth';
+import { safeLocalStorageSet } from '../utils/db';
 
 export interface AuthUser {
   id: string;
@@ -37,6 +38,8 @@ export interface AuthUser {
   trialStartedAt?: number;
   trialEndsAt?: number;
   paidUntil?: number;
+  paidPlanId?: SubscriptionPlanId;
+  paidPlanLabel?: string;
   planTier?: PlanTier;
   activeUntil?: number | null;
   daysRemaining?: number;
@@ -166,11 +169,37 @@ interface AuthContextValue {
   }>;
   redeemLicenseKey: (code: string) => Promise<{
     success: boolean;
+    alreadyActivated?: boolean;
+    planId?: SubscriptionPlanId;
     planLabel?: string;
     durationDays?: number;
     user?: AuthUser;
     error?: string;
   }>;
+  submitPaymentProof: (params: {
+    planId: SubscriptionPlanId;
+    scopeLabel: string;
+    gradeLabel: string;
+    amountVnd: number;
+    transferNote: string;
+    proofImageDataUrl: string;
+    fullName?: string;
+    schoolName?: string;
+  }) => Promise<{ success: boolean; request?: PaymentProofRequest; error?: string }>;
+  getMyPaymentRequests: () => Promise<{ success: boolean; requests?: PaymentProofRequest[]; error?: string }>;
+  adminGetPaymentRequests: () => Promise<{ success: boolean; requests?: PaymentProofRequest[]; error?: string }>;
+  adminApprovePaymentRequest: (
+    id: string,
+    originUrl?: string
+  ) => Promise<{
+    success: boolean;
+    request?: PaymentProofRequest;
+    key?: LicenseKeyRecord;
+    activationLink?: string;
+    user?: AuthUser;
+    error?: string;
+  }>;
+  adminMarkPaymentRequestEmailed: (id: string) => Promise<{ success: boolean; error?: string }>;
   adminGetSubscriptions: () => Promise<{
     success: boolean;
     users?: AuthUser[];
@@ -191,31 +220,80 @@ interface AuthContextValue {
   pushWorkspace: (workspace: any) => Promise<boolean>;
 }
 
+export interface PaymentProofRequest {
+  id: string;
+  userId: string;
+  email: string;
+  fullName: string;
+  schoolName: string;
+  planId: SubscriptionPlanId;
+  scopeLabel: string;
+  gradeLabel: string;
+  amountVnd: number;
+  transferNote: string;
+  proofImageDataUrl?: string;
+  viewToken?: string;
+  createdAt: number;
+  status: 'pending' | 'approved';
+  licenseCode?: string;
+  activationLink?: string;
+  approvedAt?: number;
+  approvedBy?: string;
+  activationEmailSent?: boolean;
+  activationEmailSentAt?: number;
+}
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const TOKEN_STORAGE_KEY = 'gdtc_auth_token_v1';
 const REMEMBERED_ACCOUNTS_KEY = 'gdtc_remembered_accounts_v1';
 
+// In-memory mirrors prevent login failure in iOS Private Mode, strict mobile WebViews, or full localStorage
+let inMemoryToken: string | null = null;
+let inMemoryRemembered: RememberedAccount[] | null = null;
+
+function sanitizeEmailInput(raw: string): string {
+  return String(raw || '')
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, '')
+    .trim()
+    .toLowerCase();
+}
+
 function readStoredToken(): string | null {
   try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);
-  } catch {
-    return null;
-  }
+    const stored = localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (stored) {
+      inMemoryToken = stored;
+      return stored;
+    }
+  } catch {}
+  return inMemoryToken;
 }
 
 function saveStoredToken(token: string, rememberMe: boolean) {
+  inMemoryToken = token;
   try {
     if (rememberMe) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      const savedLocal = safeLocalStorageSet(TOKEN_STORAGE_KEY, token);
+      if (savedLocal) {
+        try {
+          sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        } catch {}
+      } else {
+        try {
+          sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
+        } catch {}
+      }
     } else {
       sessionStorage.setItem(TOKEN_STORAGE_KEY, token);
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      try {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch {}
     }
   } catch {}
 }
 
 function clearStoredToken() {
+  inMemoryToken = null;
   try {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     sessionStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -225,11 +303,11 @@ function clearStoredToken() {
 function readRememberedAccounts(): RememberedAccount[] {
   try {
     const raw = localStorage.getItem(REMEMBERED_ACCOUNTS_KEY);
-    if (!raw) return [];
+    if (!raw) return inMemoryRemembered || [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return [];
+    return inMemoryRemembered || [];
   }
 }
 
@@ -240,16 +318,19 @@ type BackendApiResult<T = any> =
 /**
  * Calls the Express backend API and distinguishes legitimate API JSON responses
  * (including 400/401/403/404/409/429 validation errors) from missing/unreachable
- * backend deployments (e.g., static Vercel hosting returning HTML 404/index.html or network errors).
+ * backend deployments (e.g., static hosting returning HTML, 5xx cold-start/proxy errors, or network timeouts).
  */
 async function tryBackendJson<T = any>(url: string, init?: RequestInit): Promise<BackendApiResult<T>> {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(() => controller.abort(), 5000) : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), 6500) : null;
   try {
     const res = await fetch(url, {
       ...init,
       ...(controller ? { signal: controller.signal } : {})
     });
+    if (res.status >= 500) {
+      return { unavailable: true };
+    }
     const contentType = (res.headers.get('content-type') || '').toLowerCase();
     if (!contentType.includes('application/json')) {
       return { unavailable: true };
@@ -305,8 +386,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         ...prev.filter((item) => item.email.toLowerCase() !== u.email.toLowerCase())
       ].slice(0, 5);
+      inMemoryRemembered = next;
       try {
-        localStorage.setItem(REMEMBERED_ACCOUNTS_KEY, JSON.stringify(next));
+        safeLocalStorageSet(REMEMBERED_ACCOUNTS_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -315,8 +397,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const removeRememberedAccount = useCallback((email: string) => {
     setRememberedAccounts((prev) => {
       const next = prev.filter((item) => item.email.toLowerCase() !== email.toLowerCase());
+      inMemoryRemembered = next;
       try {
-        localStorage.setItem(REMEMBERED_ACCOUNTS_KEY, JSON.stringify(next));
+        safeLocalStorageSet(REMEMBERED_ACCOUNTS_KEY, JSON.stringify(next));
       } catch {}
       return next;
     });
@@ -375,8 +458,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
     checkSession();
+
+    let lastFocusRefresh = 0;
+    const handleFocusRefresh = () => {
+      if (document.visibilityState && document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastFocusRefresh < 8000) return;
+      lastFocusRefresh = now;
+      checkSession();
+    };
+    window.addEventListener('focus', handleFocusRefresh);
+    document.addEventListener('visibilitychange', handleFocusRefresh);
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', handleFocusRefresh);
+      document.removeEventListener('visibilitychange', handleFocusRefresh);
     };
   }, [authHeaders, getActiveToken]);
 
@@ -769,23 +865,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [getActiveToken, user, authHeaders]
   );
 
-  const passwordlessSignIn = async (params: {
+  const passwordlessSignIn = useCallback(async (params: {
     email: string;
     fullName?: string;
     schoolName?: string;
     provider: 'google' | 'email_passwordless';
     rememberMe?: boolean;
   }) => {
+    const cleanEmail = sanitizeEmailInput(params.email);
     const rememberMe = params.rememberMe !== false;
+    const cleanParams = {
+      ...params,
+      email: cleanEmail,
+      rememberMe
+    };
+
     const apiRes = await tryBackendJson('/api/auth/passwordless', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ ...params, rememberMe })
+      body: JSON.stringify(cleanParams)
     });
 
     if (apiRes.unavailable) {
-      const localRes = await localPasswordlessAuth({ ...params, rememberMe });
+      const localRes = await localPasswordlessAuth(cleanParams);
       if (!localRes.success || !localRes.user) {
         return { success: false, error: localRes.error || 'Đăng nhập thất bại.' };
       }
@@ -823,7 +926,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user: data.user,
       registrationNotification: data.registrationNotification
     };
-  };
+  }, [upsertRememberedAccount]);
+
+  // Complete mobile Google signInWithRedirect seamlessly when returning to the app
+  useEffect(() => {
+    let cancelled = false;
+    async function handleMobileGoogleRedirectReturn() {
+      const redirectRes = await consumeGoogleRedirectResult();
+      if (cancelled) return;
+      if (redirectRes.profile) {
+        const res = await passwordlessSignIn({
+          email: redirectRes.profile.email,
+          fullName: redirectRes.profile.displayName,
+          provider: 'google',
+          rememberMe: true
+        });
+        if (!cancelled && res.success && res.user && typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('gdtc_google_redirect_login_success', {
+              detail: { user: res.user, isNewUser: Boolean(res.isNewUser) }
+            })
+          );
+        }
+      } else if (redirectRes.error && typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('gdtc_google_redirect_login_error', {
+            detail: { error: redirectRes.error }
+          })
+        );
+      }
+    }
+    handleMobileGoogleRedirectReturn();
+    return () => {
+      cancelled = true;
+    };
+  }, [passwordlessSignIn]);
 
   const redeemLicenseKey = useCallback(
     async (code: string) => {
@@ -858,6 +995,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user) setUser(data.user);
       return {
         success: true,
+        planId: data.planId,
         planLabel: data.planLabel,
         durationDays: data.durationDays,
         user: data.user
@@ -958,6 +1096,118 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [authHeaders, getActiveToken, user]
   );
 
+  const submitPaymentProof = useCallback(
+    async (params: {
+      planId: SubscriptionPlanId;
+      scopeLabel: string;
+      gradeLabel: string;
+      amountVnd: number;
+      transferNote: string;
+      proofImageDataUrl: string;
+      fullName?: string;
+      schoolName?: string;
+    }) => {
+      const activeToken = getActiveToken();
+      const apiRes = await tryBackendJson('/api/payment-requests', {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify({
+          ...params,
+          email: user?.email || ''
+        })
+      });
+      if (apiRes.unavailable) {
+        return {
+          success: false,
+          error: 'Máy chủ đang bận, vui lòng thử gửi lại sau vài giây.'
+        };
+      }
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể tải ảnh chuyển khoản lên hệ thống.' };
+      }
+      return { success: true, request: data.request as PaymentProofRequest };
+    },
+    [authHeaders, getActiveToken, user?.email]
+  );
+
+  const getMyPaymentRequests = useCallback(async () => {
+    const activeToken = getActiveToken();
+    if (!activeToken) return { success: true, requests: [] as PaymentProofRequest[] };
+    const apiRes = await tryBackendJson('/api/payment-requests/mine', {
+      method: 'GET',
+      headers: authHeaders(activeToken),
+      credentials: 'include'
+    });
+    if (apiRes.unavailable || !apiRes.ok || !apiRes.data?.success) {
+      return { success: false, requests: [] as PaymentProofRequest[] };
+    }
+    return { success: true, requests: (apiRes.data.requests || []) as PaymentProofRequest[] };
+  }, [authHeaders, getActiveToken]);
+
+  const adminGetPaymentRequests = useCallback(async () => {
+    const activeToken = getActiveToken();
+    const apiRes = await tryBackendJson('/api/admin/payment-requests', {
+      method: 'GET',
+      headers: authHeaders(activeToken),
+      credentials: 'include'
+    });
+    if (apiRes.unavailable) {
+      return { success: false, error: 'Không kết nối được máy chủ.' };
+    }
+    const data = apiRes.data;
+    if (!apiRes.ok || !data?.success) {
+      return { success: false, error: data?.error || 'Không thể tải danh sách ảnh chuyển khoản.' };
+    }
+    return { success: true, requests: (data.requests || []) as PaymentProofRequest[] };
+  }, [authHeaders, getActiveToken]);
+
+  const adminApprovePaymentRequest = useCallback(
+    async (id: string, originUrl?: string) => {
+      const activeToken = getActiveToken();
+      const apiRes = await tryBackendJson(`/api/admin/payment-requests/${encodeURIComponent(id)}/approve`, {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include',
+        body: JSON.stringify({
+          originUrl: originUrl || (typeof window !== 'undefined' ? window.location.origin : '')
+        })
+      });
+      if (apiRes.unavailable) {
+        return { success: false, error: 'Không kết nối được máy chủ.' };
+      }
+      const data = apiRes.data;
+      if (!apiRes.ok || !data?.success) {
+        return { success: false, error: data?.error || 'Không thể duyệt yêu cầu thanh toán.' };
+      }
+      return {
+        success: true,
+        request: data.request as PaymentProofRequest,
+        key: data.key as LicenseKeyRecord,
+        activationLink: data.activationLink as string,
+        user: data.user as AuthUser
+      };
+    },
+    [authHeaders, getActiveToken]
+  );
+
+  const adminMarkPaymentRequestEmailed = useCallback(
+    async (id: string) => {
+      const activeToken = getActiveToken();
+      const apiRes = await tryBackendJson(`/api/admin/payment-requests/${encodeURIComponent(id)}/mark-emailed`, {
+        method: 'POST',
+        headers: authHeaders(activeToken),
+        credentials: 'include'
+      });
+      if (apiRes.unavailable || !apiRes.ok || !apiRes.data?.success) {
+        return { success: false, error: 'Không cập nhật được trạng thái gửi email.' };
+      }
+      return { success: true };
+    },
+    [authHeaders, getActiveToken]
+  );
+
   const refreshUser = useCallback(async () => {
     const activeToken = getActiveToken();
     if (!activeToken) return;
@@ -990,6 +1240,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         passwordlessSignIn,
         redeemLicenseKey,
+        submitPaymentProof,
+        getMyPaymentRequests,
+        adminGetPaymentRequests,
+        adminApprovePaymentRequest,
+        adminMarkPaymentRequestEmailed,
         adminGetSubscriptions,
         adminCreateLicenseKey,
         adminExtendUser,

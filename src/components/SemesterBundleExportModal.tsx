@@ -14,7 +14,6 @@ import {
   Sparkles,
   AlertCircle,
   QrCode,
-  CreditCard,
   Copy,
   Check,
   Mail,
@@ -22,7 +21,10 @@ import {
   Lock,
   Unlock,
   Landmark,
-  Clock
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+  Send
 } from 'lucide-react';
 import {
   GradeLevel,
@@ -34,15 +36,23 @@ import { MasterPlanItem } from '../data/masterTemplateTuan8';
 import { WeeklyIntegrationThemes } from '../utils/academicCalendar';
 import { buildWordExportPackage } from '../utils/exportUtils';
 import { buildMasterPlanIntegrationsFromAddress } from '../data/integrationAddressesData';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, PaymentProofRequest } from '../contexts/AuthContext';
 import {
   ADMIN_OWNER_EMAIL,
   DONATION_BANK_INFO,
   DOWNLOAD_PRICING,
-  TRIAL_DURATION_DAYS,
+  SubscriptionPlanId,
   buildDonationVietQrUrl,
-  formatVnd
+  canDownloadScopeByPlan,
+  formatVnd,
+  getShortPaidPlanBadge
 } from '../utils/subscriptionPlans';
+import {
+  buildPaymentProofToAdminEmail,
+  buildGmailWebComposeUrl,
+  sendEmailViaGmailApi
+} from '../services/googleGmailService';
+import { getCachedAccessTokenSync, googleGmailSignIn } from '../services/googleAuth';
 
 export type SemesterExportScope = 'week_1' | 'hk1' | 'hk2' | 'full_year';
 export type BundleGradeTarget = GradeLevel | 'all';
@@ -93,52 +103,91 @@ function getWeeksForScope(scope: SemesterExportScope, activeWeek: number): numbe
 function getScopeMeta(scope: SemesterExportScope, activeWeek: number) {
   if (scope === 'week_1') {
     return {
-      label: `1 Tuần lẻ (Tuần ${activeWeek})`,
+      label: `1 Tuần (Tuần ${activeWeek})`,
       shortLabel: `Tuan_${pad2(activeWeek)}`,
       periodCount: 2,
       weekCount: 1,
       unitPriceVnd: DOWNLOAD_PRICING.weekVnd,
       priceShort: '20k',
       planCodeHint: 'W1',
+      planId: 'week_1' as SubscriptionPlanId,
     };
   }
   if (scope === 'hk1') {
     return {
-      label: 'Học kỳ I (Tuần 1 – Tuần 18)',
+      label: 'Học kỳ I (Tuần 1–18)',
       shortLabel: 'Hoc_Ky_1',
       periodCount: 36,
       weekCount: 18,
       unitPriceVnd: DOWNLOAD_PRICING.semesterVnd,
       priceShort: '360k',
       planCodeHint: 'S1',
+      planId: 'semester_1' as SubscriptionPlanId,
     };
   }
   if (scope === 'hk2') {
     return {
-      label: 'Học kỳ II (Tuần 19 – Tuần 35)',
+      label: 'Học kỳ II (Tuần 19–35)',
       shortLabel: 'Hoc_Ky_2',
       periodCount: 34,
       weekCount: 17,
       unitPriceVnd: DOWNLOAD_PRICING.semesterVnd,
       priceShort: '360k',
       planCodeHint: 'S1',
+      planId: 'semester_1' as SubscriptionPlanId,
     };
   }
   return {
-    label: 'Cả Năm Học — Giáo Án Tích Hợp (Tuần 1 – Tuần 35)',
+    label: 'Cả Năm Học (Tuần 1–35)',
     shortLabel: 'Ca_Nam_Hoc_Tich_Hop',
     periodCount: 70,
     weekCount: 35,
     unitPriceVnd: DOWNLOAD_PRICING.fullYearVnd,
     priceShort: '700k',
     planCodeHint: 'Y1',
+    planId: 'year_1' as SubscriptionPlanId,
   };
 }
 
 /**
- * Builds an official Word (.docx) summary table of Integrated Yearly/Semester Teaching Plans
- * (Kế hoạch dạy học & Địa chỉ tích hợp năm học: KNS, BVMT, QCN, ATGT, QPAN, Năng lực số)
+ * Compress uploaded receipt screenshot to a crisp JPEG data URL (max ~960px) so upload & Gmail attachment stay fast on phones.
  */
+async function compressReceiptImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Không đọc được file ảnh.'));
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      const img = new Image();
+      img.onerror = () => reject(new Error('File đã chọn không phải hình ảnh hợp lệ.'));
+      img.onload = () => {
+        const maxSide = 960;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxSide || h > maxSide) {
+          const ratio = Math.min(maxSide / w, maxSide / h);
+          w = Math.max(1, Math.round(w * ratio));
+          h = Math.max(1, Math.round(h * ratio));
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function buildIntegratedSummaryDocxBlob(
   grade: GradeLevel,
   scope: SemesterExportScope,
@@ -284,7 +333,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
   layoutBlueprint,
   showToast,
 }) => {
-  const { user, redeemLicenseKey } = useAuth();
+  const { user, redeemLicenseKey, submitPaymentProof, getMyPaymentRequests, refreshUser } = useAuth();
   const [targetGrade, setTargetGrade] = useState<BundleGradeTarget>(initialGrade);
   const [scope, setScope] = useState<SemesterExportScope>(initialScope);
   const [selectedSingleWeek, setSelectedSingleWeek] = useState<number>(currentWeek || 1);
@@ -295,23 +344,28 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
   const [progressLabel, setProgressLabel] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Payment & Unlock state
+  // Payment, Receipt Upload & Activation state
   const [showPaymentPanel, setShowPaymentPanel] = useState<boolean>(true);
   const [qrFailed, setQrFailed] = useState<boolean>(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [proofFileName, setProofFileName] = useState<string>('');
+  const [isUploadingProof, setIsUploadingProof] = useState<boolean>(false);
+  const [isSendingGmailNotice, setIsSendingGmailNotice] = useState<boolean>(false);
+  const [submittedRequest, setSubmittedRequest] = useState<PaymentProofRequest | null>(null);
+  const [proofNotice, setProofNotice] = useState<{ type: 'success' | 'error'; text: string; needsManualGmail?: boolean } | null>(null);
   const [licenseCodeInput, setLicenseCodeInput] = useState<string>('');
   const [isRedeemingKey, setIsRedeemingKey] = useState<boolean>(false);
   const [unlockNotice, setUnlockNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const cancelRef = useRef<boolean>(false);
   const paymentSectionRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isAdmin = user?.planTier === 'admin_lifetime';
   const isPaidActive = user?.planTier === 'paid' && user?.hasFullAccess !== false;
-  const isFreeTrialActive = user?.planTier === 'trial' && user?.hasFullAccess !== false;
-  const isFullLicenseUnlocked = isAdmin || isPaidActive;
-  const isFreeWeeklyAllowed = isFreeTrialActive && scope === 'week_1';
-  const canDownloadCurrentSelection = isFullLicenseUnlocked || isFreeWeeklyAllowed;
+  const isScopeUnlocked = (s: SemesterExportScope) => canDownloadScopeByPlan(user, s);
+  const canDownloadCurrentSelection = isScopeUnlocked(scope);
 
   useEffect(() => {
     if (isOpen) {
@@ -320,22 +374,35 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
       setSelectedSingleWeek(currentWeek || 1);
       setErrorMsg(null);
       setUnlockNotice(null);
+      setProofNotice(null);
       setProgressPercent(0);
       setProgressLabel('');
       setQrFailed(false);
-      setShowPaymentPanel(true);
+      setShowPaymentPanel(!canDownloadScopeByPlan(user, initialScope));
       cancelRef.current = false;
+
+      if (user) {
+        refreshUser();
+        getMyPaymentRequests().then((res) => {
+          if (res.success && res.requests && res.requests.length > 0) {
+            setSubmittedRequest(res.requests[0]);
+          }
+        });
+      }
     }
   }, [isOpen, initialGrade, initialScope, currentWeek]);
 
-  // When selecting all 5 grades, force ZIP packaging so Word never overflows memory
+  useEffect(() => {
+    if (!isOpen) return;
+    setShowPaymentPanel(!canDownloadScopeByPlan(user, scope));
+  }, [isOpen, scope, user?.planTier, user?.paidPlanId, user?.hasFullAccess]);
+
   useEffect(() => {
     if (targetGrade === 'all' && packageMode === 'single_docx') {
       setPackageMode('zip_by_week');
     }
   }, [targetGrade, packageMode]);
 
-  // Reset QR image fallback when price/note changes
   useEffect(() => {
     setQrFailed(false);
   }, [scope, targetGrade, selectedSingleWeek]);
@@ -347,7 +414,6 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
   const gradesToExport: GradeLevel[] = targetGrade === 'all' ? [1, 2, 3, 4, 5] : [targetGrade];
   const totalLessonsCount = gradesToExport.length * scopeMeta.periodCount;
 
-  // Pricing calculation: 20k / week, 360k / semester, 700k / full year
   const finalPriceVnd = scopeMeta.unitPriceVnd;
   const userTag = (user?.email?.split('@')[0] || user?.fullName || 'GV')
     .normalize('NFD')
@@ -355,6 +421,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
     .replace(/[^a-zA-Z0-9]/g, '')
     .slice(0, 18);
   const gradeCode = targetGrade === 'all' ? 'K1-5' : `K${targetGrade}`;
+  const gradeLabel = targetGrade === 'all' ? 'Cả 5 Khối (1–5)' : `Khối ${targetGrade}`;
   const scopeCode =
     scope === 'week_1'
       ? `T${pad2(selectedSingleWeek)}`
@@ -381,29 +448,210 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
     }, 60);
   };
 
-  const buildPaymentMailtoHref = () => {
-    const subject = `[PE SmartPlan] Xác nhận thanh toán mở khóa tải về (${formatVnd(finalPriceVnd)}) - ${user?.email || 'Giáo viên'}`;
-    const body = [
-      'Kính gửi Thầy Lê Quốc Hưng,',
-      '',
-      'Tôi đã thực hiện chuyển khoản mở khóa tải giáo án & đăng ký sử dụng phần mềm PE SmartPlan 2.0:',
-      `- Gói đã chọn: ${scopeMeta.label} (${targetGrade === 'all' ? 'Cả 5 Khối 1–5' : `Khối ${targetGrade}`})`,
-      `- Số tiền chuyển khoản: ${formatVnd(finalPriceVnd)}`,
-      `- Tài khoản nhận: ${DONATION_BANK_INFO.accountNumber} - ${DONATION_BANK_INFO.bankName} (${DONATION_BANK_INFO.accountHolder})`,
-      `- Nội dung chuyển khoản: ${transferNote}`,
-      `- Email tài khoản đăng nhập PE SmartPlan: ${user?.email || '(chưa đăng nhập)'}`,
-      `- Họ và tên / Trường: ${user?.fullName || schoolSettings.teacherName || ''} - ${user?.schoolName || schoolSettings.schoolName || ''}`,
-      '',
-      'Nhờ Thầy kiểm tra và gửi giúp Mã Kích Hoạt mở khóa tải về (sau gói dùng thử 120 ngày). Xin cảm ơn Thầy!'
-    ].join('\n');
-    return `mailto:${ADMIN_OWNER_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const handleSelectProofFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setProofNotice(null);
+    try {
+      const compressed = await compressReceiptImage(file);
+      setProofPreviewUrl(compressed);
+      setProofFileName(file.name);
+    } catch (err: any) {
+      setProofNotice({ type: 'error', text: err?.message || 'Không đọc được ảnh đã chọn.' });
+    } finally {
+      e.target.value = '';
+    }
   };
 
-  const handleRedeemUnlockKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = licenseCodeInput.trim().toUpperCase();
+  const getReceiptImageUrl = (req?: PaymentProofRequest | null): string => {
+    if (!req?.id) return '';
+    const tokenPart = req.viewToken ? `?k=${encodeURIComponent(req.viewToken)}` : '';
+    return `${window.location.origin}/api/payment-requests/${encodeURIComponent(req.id)}/image${tokenPart}`;
+  };
+
+  const buildPaymentGmailWebHref = (req?: PaymentProofRequest | null) => {
+    const requestId = req?.id;
+    const refPart = requestId ? ` · #${requestId}` : '';
+    const amountStr = req?.amountVnd ? formatVnd(req.amountVnd) : formatVnd(finalPriceVnd);
+    const emailStr = req?.email || user?.email || '(chưa đăng nhập)';
+    const scopeStr = req?.scopeLabel || scopeMeta.label;
+    const gradeStr = req?.gradeLabel || gradeLabel;
+    const noteStr = req?.transferNote || transferNote;
+    const receiptUrl = getReceiptImageUrl(req);
+    const adminReviewUrl = `${window.location.origin}/?adminTab=payments`;
+
+    const subject = `[PE SmartPlan] Đã CK ${amountStr} (${emailStr})${refPart}`;
+    const bodyLines = [
+      `Kính gửi Thầy Lê Quốc Hưng (${ADMIN_OWNER_EMAIL}),`,
+      '',
+      `Tôi đã chuyển khoản và tải ảnh biên lai lên hệ thống${requestId ? ` (Mã yêu cầu: #${requestId})` : ''}:`,
+      `- Email kích hoạt: ${emailStr}`,
+      `- Gói: ${scopeStr} · ${gradeStr} · ${amountStr}`,
+      `- Nội dung CK: ${noteStr}`,
+      ...(receiptUrl ? [`- Link xem ảnh chuyển khoản: ${receiptUrl}`] : []),
+      `- Link Quản trị duyệt & gửi mã kích hoạt: ${adminReviewUrl}`,
+      '',
+      'Nhờ Thầy xác nhận để hệ thống gửi mã & link kích hoạt. Xin cảm ơn Thầy!'
+    ];
+    return buildGmailWebComposeUrl({
+      to: ADMIN_OWNER_EMAIL,
+      subject,
+      body: bodyLines.join('\n')
+    });
+  };
+
+  const handleSendExistingRequestViaGmail = async () => {
+    if (!submittedRequest || !user?.email) return;
+    setIsSendingGmailNotice(true);
+    setProofNotice(null);
+    try {
+      let token = getCachedAccessTokenSync();
+      if (!token) {
+        const gRes = await googleGmailSignIn();
+        token = gRes?.accessToken || null;
+      }
+      if (!token) {
+        setProofNotice({
+          type: 'error',
+          text: 'Chưa cấp quyền gửi tự động qua Gmail. Hãy bấm nút "Mở Gmail" ngay bên cạnh để mở sẵn thư kèm link ảnh chuyển khoản.',
+          needsManualGmail: true
+        });
+        return;
+      }
+      const receiptImageUrl = getReceiptImageUrl(submittedRequest);
+      const adminReviewUrl = `${window.location.origin}/?adminTab=payments`;
+      const emailPayload = buildPaymentProofToAdminEmail({
+        requestId: submittedRequest.id,
+        email: submittedRequest.email,
+        fullName: submittedRequest.fullName || user.fullName || schoolSettings.teacherName || user.email.split('@')[0],
+        schoolName: submittedRequest.schoolName || user.schoolName || schoolSettings.schoolName || '',
+        scopeLabel: submittedRequest.scopeLabel,
+        gradeLabel: submittedRequest.gradeLabel,
+        amountText: formatVnd(submittedRequest.amountVnd),
+        transferNote: submittedRequest.transferNote,
+        adminReviewUrl,
+        receiptImageUrl
+      });
+      await sendEmailViaGmailApi(emailPayload);
+      setProofNotice({
+        type: 'success',
+        text: `✅ Đã gửi Email báo nhận ảnh chuyển khoản (#${submittedRequest.id}) trực tiếp tới ${ADMIN_OWNER_EMAIL}!`
+      });
+      showToast(`📧 Đã gửi email thông báo tới ${ADMIN_OWNER_EMAIL}!`);
+    } catch (err: any) {
+      setProofNotice({
+        type: 'error',
+        text:
+          err?.message ||
+          `Không gửi tự động qua Gmail được. Hãy bấm nút "Mở Gmail" để gửi nhanh tới ${ADMIN_OWNER_EMAIL}.`,
+        needsManualGmail: true
+      });
+    } finally {
+      setIsSendingGmailNotice(false);
+    }
+  };
+
+  const handleUploadAndSendProof = async () => {
+    if (!user?.email) {
+      setProofNotice({ type: 'error', text: 'Vui lòng đăng nhập Email trước khi tải ảnh chuyển khoản.' });
+      return;
+    }
+    if (!proofPreviewUrl) {
+      setProofNotice({ type: 'error', text: 'Vui lòng chọn hình ảnh chụp màn hình chuyển khoản thành công.' });
+      fileInputRef.current?.click();
+      return;
+    }
+
+    setIsUploadingProof(true);
+    setProofNotice(null);
+    try {
+      // 1. Obtain Gmail send permission inside the direct click gesture BEFORE async upload so popup is never blocked
+      let gmailToken = getCachedAccessTokenSync();
+      if (!gmailToken) {
+        const gRes = await googleGmailSignIn();
+        gmailToken = gRes?.accessToken || null;
+      }
+
+      // 2. Upload receipt image directly to server for Admin verification
+      const uploadRes = await submitPaymentProof({
+        planId: scopeMeta.planId,
+        scopeLabel: scopeMeta.label,
+        gradeLabel,
+        amountVnd: finalPriceVnd,
+        transferNote,
+        proofImageDataUrl: proofPreviewUrl,
+        fullName: user.fullName || schoolSettings.teacherName,
+        schoolName: user.schoolName || schoolSettings.schoolName
+      });
+
+      if (!uploadRes.success || !uploadRes.request) {
+        setProofNotice({
+          type: 'error',
+          text: uploadRes.error || 'Chưa tải được ảnh lên hệ thống. Vui lòng thử lại.'
+        });
+        return;
+      }
+
+      const savedReq = uploadRes.request;
+      setSubmittedRequest(savedReq);
+
+      const receiptImageUrl = getReceiptImageUrl(savedReq);
+      const adminReviewUrl = `${window.location.origin}/?adminTab=payments`;
+
+      // 3. Automatically send email WITH attached receipt image + direct view link via Gmail API
+      let sentViaGmail = false;
+      if (gmailToken) {
+        try {
+          const emailPayload = buildPaymentProofToAdminEmail({
+            requestId: savedReq.id,
+            email: user.email,
+            fullName: user.fullName || schoolSettings.teacherName || user.email.split('@')[0],
+            schoolName: user.schoolName || schoolSettings.schoolName || '',
+            scopeLabel: scopeMeta.label,
+            gradeLabel,
+            amountText: formatVnd(finalPriceVnd),
+            transferNote,
+            adminReviewUrl,
+            receiptImageUrl,
+            proofImageDataUrl: proofPreviewUrl
+          });
+          await sendEmailViaGmailApi(emailPayload);
+          sentViaGmail = true;
+        } catch {
+          sentViaGmail = false;
+        }
+      }
+
+      if (sentViaGmail) {
+        setProofNotice({
+          type: 'success',
+          text: `✅ Đã tải ảnh & gửi Email KÈM ẢNH chuyển khoản tới ${ADMIN_OWNER_EMAIL} (#${savedReq.id})! Quản trị viên duyệt xong sẽ tự động gửi Mã & Link kích hoạt về ${user.email}.`
+        });
+        showToast(`✅ Đã gửi email kèm ảnh chuyển khoản tới ${ADMIN_OWNER_EMAIL} (#${savedReq.id})!`);
+      } else {
+        setProofNotice({
+          type: 'success',
+          text: `Đã lưu ảnh chuyển khoản (#${savedReq.id}) lên hệ thống. Bấm nút "Mở Gmail Gửi Ngay" bên dưới để gửi báo ngay vào hộp thư ${ADMIN_OWNER_EMAIL} (đã điền sẵn link ảnh).`,
+          needsManualGmail: true
+        });
+        showToast(`✅ Đã lưu ảnh chuyển khoản (#${savedReq.id})! Bấm "Mở Gmail" để gửi thông báo vào mail.`);
+      }
+      setProofPreviewUrl(null);
+      setProofFileName('');
+    } catch (err: any) {
+      setProofNotice({
+        type: 'error',
+        text: err?.message || 'Có lỗi khi gửi ảnh chuyển khoản.'
+      });
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
+
+  const redeemCodeNow = async (rawCode: string) => {
+    const cleaned = rawCode.trim().toUpperCase();
     if (!cleaned) {
-      setUnlockNotice({ type: 'error', text: 'Vui lòng nhập mã kích hoạt nhận từ Thầy Lê Quốc Hưng.' });
+      setUnlockNotice({ type: 'error', text: 'Vui lòng nhập Mã Kích Hoạt.' });
       return;
     }
     setIsRedeemingKey(true);
@@ -412,27 +660,45 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
       const res = await redeemLicenseKey(cleaned);
       if (res.success) {
         setLicenseCodeInput('');
+        const unlockedCurrent = canDownloadScopeByPlan(res.user, scope);
+        let nextScope = scope;
+        if (!unlockedCurrent) {
+          if (res.planId === 'week_1' || res.planId === 'month_1') {
+            nextScope = 'week_1';
+            setScope('week_1');
+          } else if (res.planId === 'semester_1' && scope === 'full_year') {
+            nextScope = 'hk1';
+            setScope('hk1');
+          }
+        }
+        if (canDownloadScopeByPlan(res.user, nextScope)) {
+          setShowPaymentPanel(false);
+        }
+        const activeLabel = res.planLabel || getShortPaidPlanBadge(res.user?.paidPlanId);
         setUnlockNotice({
           type: 'success',
-          text: res.planLabel
-            ? `Đã kích hoạt thành công ${res.planLabel}! Thầy cô có thể bấm tải xuống ngay bây giờ.`
-            : 'Đã mở khóa tải về thành công! Thầy cô có thể bấm tải xuống ngay bây giờ.',
+          text: `🎉 Đã kích hoạt sử dụng phần mềm thành công (${activeLabel})! Tính năng tải về theo gói đã được mở khóa.`
         });
-        showToast('🎉 Đã kích hoạt mã mở khóa thành công! Sẵn sàng tải trọn bộ giáo án.');
+        showToast(`🎉 Đã kích hoạt thành công ${activeLabel}! Đã mở khóa tải theo gói.`);
       } else {
         setUnlockNotice({
           type: 'error',
-          text: res.error || 'Mã kích hoạt chưa hợp lệ. Vui lòng kiểm tra lại hoặc liên hệ lehung840110@gmail.com.',
+          text: res.error || 'Mã kích hoạt chưa hợp lệ. Vui lòng kiểm tra lại.'
         });
       }
     } catch (err: any) {
       setUnlockNotice({
         type: 'error',
-        text: err?.message || 'Không thể kiểm tra mã kích hoạt lúc này.',
+        text: err?.message || 'Không thể kiểm tra mã kích hoạt lúc này.'
       });
     } finally {
       setIsRedeemingKey(false);
     }
+  };
+
+  const handleRedeemUnlockKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await redeemCodeNow(licenseCodeInput);
   };
 
   const triggerDownload = (blob: Blob, filename: string) => {
@@ -449,9 +715,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
   const handleStartExport = async () => {
     if (!canDownloadCurrentSelection) {
       scrollToPaymentPanel();
-      showToast(
-        `🔒 Gói miễn phí chỉ tải miễn phí từng tuần. Để tải trọn bộ ${scopeMeta.label}, vui lòng mở khóa (${formatVnd(finalPriceVnd)}) hoặc đăng ký sử dụng phần mềm (tải miễn phí toàn bộ)!`
-      );
+      showToast('🔒 Tính năng tải về đang khóa. Vui lòng chuyển khoản, tải ảnh lên để nhận Mã & Link kích hoạt!');
       return;
     }
 
@@ -486,7 +750,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
           lastApprovalDate = resolved.approvalDate;
         }
 
-        setProgressLabel(`Đang kết xuất file Word (.DOCX) Khối ${g} (${allPlans.length} tiết)...`);
+        setProgressLabel(`Đang xuất file Word (.DOCX) Khối ${g} (${allPlans.length} tiết)...`);
         setProgressPercent(88);
         await new Promise((r) => setTimeout(r, 15));
 
@@ -507,14 +771,13 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
         });
 
         setProgressPercent(100);
-        setProgressLabel('Hoàn tất! Đang tải xuống máy tính...');
+        setProgressLabel('Hoàn tất! Đang tải xuống...');
         triggerDownload(pkg.docxBlob, filename);
         showToast(`✅ Đã tải Giáo án GDTC Khối ${g} · ${scopeMeta.label} (${allPlans.length} tiết)!`);
         onClose();
         return;
       }
 
-      // ZIP mode (separate clean .DOCX per week + Integrated Yearly Summary Table)
       const masterZip = new JSZip();
       const totalSteps = gradesToExport.length * weeks.length + (includeIntegrationSummary ? gradesToExport.length : 0);
       let completedSteps = 0;
@@ -531,7 +794,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
             return;
           }
 
-          setProgressLabel(`Đang xuất Khối ${g} · Tuần ${w} (${w <= 18 ? 'HK I' : 'HK II'})...`);
+          setProgressLabel(`Đang xuất Khối ${g} · Tuần ${w}...`);
           await new Promise((r) => setTimeout(r, 0));
 
           const resolved = resolveWeekPlansForGrade(w, g);
@@ -564,7 +827,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
         }
 
         if (includeIntegrationSummary) {
-          setProgressLabel(`Đang tạo Bảng Tổng Hợp Giáo Án Tích Hợp Khối ${g}...`);
+          setProgressLabel(`Đang tạo Bảng Tổng Hợp Tích Hợp Khối ${g}...`);
           await new Promise((r) => setTimeout(r, 0));
           const summaryBlob = await buildIntegratedSummaryDocxBlob(
             g,
@@ -582,7 +845,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
         }
       }
 
-      setProgressLabel('Đang nén gói tệp .ZIP chuẩn Windows / Mac...');
+      setProgressLabel('Đang nén file .ZIP...');
       setProgressPercent(96);
       const zipBlob = await masterZip.generateAsync({
         type: 'blob',
@@ -594,13 +857,11 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
       const zipFilename = `PE_SmartPlan_Giao_An_GDTC_${gradeTag}_${scopeMeta.shortLabel}_${yearSlug}.zip`;
       setProgressPercent(100);
       triggerDownload(zipBlob, zipFilename);
-      showToast(
-        `🎉 Đã tải trọn bộ Giáo án GDTC ${targetGrade === 'all' ? 'cả 5 Khối (1–5)' : `Khối ${targetGrade}`} · ${scopeMeta.label} (${totalLessonsCount} tiết)!`
-      );
+      showToast(`🎉 Đã tải trọn bộ Giáo án GDTC ${gradeLabel} · ${scopeMeta.label}!`);
       onClose();
     } catch (err: any) {
       console.error('Semester bundle export error:', err);
-      setErrorMsg(err?.message || 'Có lỗi khi đóng gói trọn bộ giáo án. Thầy thử chọn chế độ gói .ZIP theo từng tuần nhé.');
+      setErrorMsg(err?.message || 'Có lỗi khi đóng gói giáo án.');
     } finally {
       setIsExporting(false);
     }
@@ -608,25 +869,25 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
 
   return (
     <div
-      className="fixed inset-0 z-[85] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4"
+      className="fixed inset-0 z-[85] bg-slate-950/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={() => !isExporting && onClose()}
     >
       <div
-        className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[94vh] flex flex-col"
+        className="w-full max-w-3xl bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden max-h-[92dvh] flex flex-col pb-safe"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-900 via-blue-800 to-teal-800 text-white px-5 py-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
-              <FolderArchive className="w-5 h-5 text-amber-300" />
+        <div className="bg-gradient-to-r from-indigo-900 via-blue-800 to-teal-800 text-white px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+              <FolderArchive className="w-4.5 h-4.5 text-amber-300" />
             </div>
             <div className="min-w-0">
-              <h3 className="text-base font-bold leading-tight">
-                Mở Khóa &amp; Tải Trọn Bộ Giáo Án Theo Khối, Học Kỳ &amp; Năm Học
+              <h3 className="text-sm sm:text-base font-bold leading-tight truncate">
+                Mở Khóa &amp; Tải Giáo Án GDTC
               </h3>
-              <p className="text-xs text-sky-100 mt-0.5">
-                Bộ sách GDTC Kết nối tri thức · Giá tải về: 20k/tuần · 360k/học kỳ · 700k/cả năm · Đăng ký sau gói dùng thử {TRIAL_DURATION_DAYS} ngày
+              <p className="text-[11px] text-sky-100 truncate">
+                20k/tuần · 360k/học kỳ · 700k/cả năm · Đã kích hoạt tải miễn phí 100%
               </p>
             </div>
           </div>
@@ -642,101 +903,146 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
-          {/* Account & Clear Free vs Registered Software Policy Box */}
-          <div className="space-y-2.5">
-            <div
-              className={`rounded-xl px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2 ${
-                isFullLicenseUnlocked
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                  : isFreeTrialActive
-                  ? 'bg-blue-50 border-blue-200 text-blue-950'
-                  : 'bg-amber-50 border-amber-200 text-amber-950'
-              }`}
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                {isFullLicenseUnlocked ? (
-                  <Unlock className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <Clock className="w-4 h-4 text-blue-600 shrink-0" />
-                )}
-                <span className="leading-snug">
-                  {isAdmin ? (
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-3.5">
+          {/* 1 Compact Status Bar */}
+          <div
+            className={`rounded-xl px-3.5 py-2.5 border text-xs flex flex-wrap items-center justify-between gap-2 ${
+              canDownloadCurrentSelection
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                : 'bg-amber-50 border-amber-300 text-amber-950'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {canDownloadCurrentSelection ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              ) : (
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              )}
+              <span className="font-semibold leading-snug">
+                {isAdmin ? (
+                  <>Quản trị viên · Đã mở khóa tải toàn bộ các gói</>
+                ) : isPaidActive ? (
+                  canDownloadCurrentSelection ? (
                     <>
-                      <strong>Quản trị viên (Thầy Lê Quốc Hưng):</strong> Toàn bộ phần tải về đều <strong>MIỄN PHÍ</strong> · Khung QR bên dưới hiển thị đúng giao diện thanh toán dành cho giáo viên.
-                    </>
-                  ) : isPaidActive ? (
-                    <>
-                      <strong>Đã đăng ký sử dụng phần mềm</strong> (còn <strong>{user?.daysRemaining ?? 0} ngày</strong>): Toàn bộ phần tải về (từng tuần, trọn bộ Học kỳ &amp; Cả năm học) đều <strong>MIỄN PHÍ 100%</strong>!
-                    </>
-                  ) : isFreeTrialActive ? (
-                    <>
-                      <strong>Đang dùng Phiên bản Miễn phí (Dùng thử {TRIAL_DURATION_DAYS} ngày · còn {user?.daysRemaining ?? TRIAL_DURATION_DAYS} ngày):</strong> Thầy cô được <strong>tải MIỄN PHÍ giáo án từng tuần</strong>. Tải trọn bộ Học kỳ / Cả năm cần mở khóa theo gói hoặc đăng ký sử dụng phần mềm.
+                      <strong>Đã kích hoạt {user?.paidPlanLabel || `Gói ${getShortPaidPlanBadge(user?.paidPlanId)}`}</strong> (còn {user?.daysRemaining ?? 0} ngày · Đã mở khóa tải 0 đ)
                     </>
                   ) : (
                     <>
-                      <strong>Đăng ký sử dụng phần mềm sau gói dùng thử {TRIAL_DURATION_DAYS} ngày:</strong> Đăng ký phần mềm để <strong>tải miễn phí toàn bộ</strong>, hoặc mở khóa tải lẻ theo bảng giá 20k/tuần · 360k/học kỳ · 700k/cả năm.
+                      Đang dùng <strong>{user?.paidPlanLabel || `Gói ${getShortPaidPlanBadge(user?.paidPlanId)}`}</strong> (còn {user?.daysRemaining ?? 0} ngày) · Gói <strong>{scopeMeta.label}</strong> cần nâng cấp mã
+                    </>
+                  )
+                ) : (
+                  <>
+                    <strong>Tài khoản Miễn phí</strong> ({user?.email || 'Chưa đăng nhập'}) · <strong>Đang khóa tải về</strong> — Thanh toán &amp; nhập mã kích hoạt theo gói
+                  </>
+                )}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPaymentPanel((v) => !v)}
+              className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-[11px] flex items-center gap-1 shrink-0 transition"
+            >
+              <QrCode className="w-3.5 h-3.5 text-blue-600" />
+              <span>{showPaymentPanel ? 'Ẩn QR & Nhập mã' : 'Mở QR & Nhập mã'}</span>
+            </button>
+          </div>
+
+          {/* Live Activation / Pending Request Notice */}
+          {unlockNotice && (
+            <div
+              className={`rounded-xl px-3.5 py-2.5 border text-xs font-bold flex items-center gap-2 ${
+                unlockNotice.type === 'success'
+                  ? 'bg-emerald-600 border-emerald-700 text-white shadow-sm'
+                  : 'bg-rose-50 border-rose-200 text-rose-800'
+              }`}
+            >
+              {unlockNotice.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              )}
+              <span>{unlockNotice.text}</span>
+            </div>
+          )}
+
+          {submittedRequest && !canDownloadCurrentSelection && (
+            <div className="rounded-xl px-3.5 py-2.5 border bg-blue-50 border-blue-200 text-blue-950 text-xs flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>
+                  {submittedRequest.status === 'approved' ? (
+                    <>
+                      <strong>Quản trị viên đã duyệt #{submittedRequest.id}!</strong> Mã của bạn:{' '}
+                      <code className="font-mono font-bold text-indigo-800">{submittedRequest.licenseCode}</code> — Bấm kích hoạt để mở khóa tải ngay.
+                    </>
+                  ) : (
+                    <>
+                      Đã gửi ảnh CK <strong>#{submittedRequest.id}</strong> ({formatVnd(submittedRequest.amountVnd)}) — Chờ quản trị viên gửi mã &amp; link kích hoạt về <strong>{submittedRequest.email}</strong>.
                     </>
                   )}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowPaymentPanel((v) => !v)}
-                className="px-2.5 py-1 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 font-bold text-[11px] flex items-center gap-1 shrink-0 transition"
-              >
-                <QrCode className="w-3.5 h-3.5 text-blue-600" />
-                <span>{showPaymentPanel ? 'Thu gọn QR' : 'Hiện Mã QR Thanh Toán'}</span>
-              </button>
-            </div>
-
-            {/* 2-Column Clear Policy Distinction */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11.5px]">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-1">
-                <div className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-                  <span>Phiên bản Miễn phí (Dùng thử {TRIAL_DURATION_DAYS} ngày)</span>
-                </div>
-                <ul className="space-y-0.5 text-slate-600 pl-3.5 list-disc">
-                  <li>
-                    <strong className="text-emerald-700">Tải giáo án từng tuần của bạn: MIỄN PHÍ (0 đ)</strong> — không tính phí.
-                  </li>
-                  <li>
-                    Tải gộp <strong>Toàn bộ Học kỳ (360k)</strong> / <strong>Cả năm (700k)</strong>: cần mở khóa theo gói.
-                  </li>
-                  <li>
-                    Hết 120 ngày dùng thử: tải lẻ <strong>20k/tuần</strong> hoặc đăng ký sử dụng phần mềm.
-                  </li>
-                </ul>
+              <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                {submittedRequest.status === 'approved' && submittedRequest.licenseCode && (
+                  <button
+                    type="button"
+                    disabled={isRedeemingKey}
+                    onClick={() => {
+                      setLicenseCodeInput(submittedRequest.licenseCode || '');
+                      redeemCodeNow(submittedRequest.licenseCode || '');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                  >
+                    {isRedeemingKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlock className="w-3 h-3" />}
+                    <span>Kích Hoạt Mã Ngay</span>
+                  </button>
+                )}
+                {submittedRequest.status === 'pending' && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isSendingGmailNotice}
+                      onClick={handleSendExistingRequestViaGmail}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                    >
+                      {isSendingGmailNotice ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                      <span>Gửi báo vào Gmail</span>
+                    </button>
+                    <a
+                      href={buildPaymentGmailWebHref(submittedRequest)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                    >
+                      <Mail className="w-3 h-3" />
+                      <span>Mở Gmail</span>
+                    </a>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    refreshUser();
+                    getMyPaymentRequests().then((r) => {
+                      if (r.success && r.requests?.[0]) setSubmittedRequest(r.requests[0]);
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-white border border-blue-300 text-blue-800 font-bold text-[11px] hover:bg-blue-100 shrink-0"
+                >
+                  Kiểm tra lại
+                </button>
               </div>
-
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-1">
-                <div className="font-extrabold text-emerald-950 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
-                  <span>Đã Đăng Ký Sử Dụng Phần Mềm</span>
-                </div>
-                <ul className="space-y-0.5 text-emerald-900 pl-3.5 list-disc">
-                  <li>
-                    <strong className="text-emerald-700">Tải về MIỄN PHÍ 100% toàn bộ</strong> (từng tuần, trọn bộ Học kỳ I, Học kỳ II &amp; Cả năm học).
-                  </li>
-                  <li>
-                    Không thu thêm bất kỳ phí tải file Word/ZIP nào trong suốt thời hạn đăng ký.
-                  </li>
-                  <li>
-                    Liên hệ kích hoạt: <strong>Thầy Lê Quốc Hưng</strong> (<code>{ADMIN_OWNER_EMAIL}</code>).
-                  </li>
-                </ul>
-              </div>
             </div>
-          </div>
+          )}
 
           {/* 1. Select Grade */}
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-blue-600" />
-              <span>1. Chọn Khối lớp cần tải giáo án:</span>
+              <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+              <span>1. Chọn Khối lớp:</span>
             </label>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
               {([1, 2, 3, 4, 5] as GradeLevel[]).map((g) => (
                 <button
                   key={g}
@@ -746,7 +1052,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
                   className={`py-2 px-2 rounded-xl border text-xs font-bold transition ${
                     targetGrade === g
                       ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
-                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-blue-50 hover:border-blue-300'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-blue-50'
                   }`}
                 >
                   Khối {g}
@@ -767,140 +1073,64 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
             </div>
           </div>
 
-          {/* 2. Select Pricing & Scope Tier (20k / 360k / 700k) */}
-          <div className="space-y-2">
+          {/* 2. Select Package & Pricing */}
+          <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <CalendarRange className="w-4 h-4 text-emerald-600" />
-              <span>2. Chọn gói mở khóa tải về &amp; phạm vi giáo án:</span>
+              <CalendarRange className="w-3.5 h-3.5 text-emerald-600" />
+              <span>2. Chọn gói tải về:</span>
             </label>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => setScope('week_1')}
-                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
-                  scope === 'week_1'
-                    ? 'bg-sky-50 border-sky-500 ring-2 ring-sky-200'
-                    : 'bg-white border-slate-200 hover:border-sky-300'
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-extrabold text-slate-900">1 Tuần Lẻ</div>
-                  <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">
-                    Tuần {selectedSingleWeek} · 2 tiết
-                  </div>
-                </div>
-                <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between gap-1">
-                  {isFullLicenseUnlocked || isFreeTrialActive ? (
-                    <>
-                      <span className="text-sm font-black text-emerald-700">MIỄN PHÍ</span>
-                      <span className="text-[10px] font-semibold text-slate-400 line-through tabular-nums">20k</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm font-black text-blue-700 tabular-nums">20.000 đ</span>
-                      <span className="text-[10px] font-bold text-slate-500">/ tuần</span>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => setScope('hk1')}
-                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
-                  scope === 'hk1'
-                    ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-200'
-                    : 'bg-white border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-extrabold text-slate-900">Toàn Bộ Học Kỳ I</div>
-                  <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">Tuần 1–18 · 36 tiết</div>
-                </div>
-                <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between gap-1">
-                  {isFullLicenseUnlocked ? (
-                    <>
-                      <span className="text-sm font-black text-emerald-700">MIỄN PHÍ</span>
-                      <span className="text-[10px] font-semibold text-slate-400 line-through tabular-nums">360k</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm font-black text-emerald-700 tabular-nums">360.000 đ</span>
-                      <span className="text-[10px] font-bold text-emerald-600">HK I</span>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => setScope('hk2')}
-                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
-                  scope === 'hk2'
-                    ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-200'
-                    : 'bg-white border-slate-200 hover:border-emerald-300'
-                }`}
-              >
-                <div>
-                  <div className="text-xs font-extrabold text-slate-900">Toàn Bộ Học Kỳ II</div>
-                  <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">Tuần 19–35 · 34 tiết</div>
-                </div>
-                <div className="pt-1.5 border-t border-slate-100 flex items-baseline justify-between gap-1">
-                  {isFullLicenseUnlocked ? (
-                    <>
-                      <span className="text-sm font-black text-emerald-700">MIỄN PHÍ</span>
-                      <span className="text-[10px] font-semibold text-slate-400 line-through tabular-nums">360k</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm font-black text-emerald-700 tabular-nums">360.000 đ</span>
-                      <span className="text-[10px] font-bold text-emerald-600">HK II</span>
-                    </>
-                  )}
-                </div>
-              </button>
-
-              <button
-                type="button"
-                disabled={isExporting}
-                onClick={() => setScope('full_year')}
-                className={`p-3 rounded-xl border text-left transition flex flex-col justify-between gap-1.5 ${
-                  scope === 'full_year'
-                    ? 'bg-indigo-50 border-indigo-500 ring-2 ring-indigo-200'
-                    : 'bg-white border-slate-200 hover:border-indigo-300'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center gap-1 text-xs font-extrabold text-indigo-900">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                    <span>Trọn Bộ Cả Năm</span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5 tabular-nums">Tuần 1–35 · 70 tiết</div>
-                </div>
-                <div className="pt-1.5 border-t border-indigo-100 flex items-baseline justify-between gap-1">
-                  {isFullLicenseUnlocked ? (
-                    <>
-                      <span className="text-sm font-black text-emerald-700">MIỄN PHÍ</span>
-                      <span className="text-[10px] font-semibold text-slate-400 line-through tabular-nums">700k</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-sm font-black text-indigo-700 tabular-nums">700.000 đ</span>
-                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                        Tiết kiệm
-                      </span>
-                    </>
-                  )}
-                </div>
-              </button>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              {[
+                { id: 'week_1' as SemesterExportScope, title: '1 Tuần Lẻ', sub: `Tuần ${selectedSingleWeek} · 2 tiết`, price: '20.000 đ', strike: '20k', tag: '/ tuần', accent: 'sky' },
+                { id: 'hk1' as SemesterExportScope, title: 'Học Kỳ I', sub: 'Tuần 1–18 · 36 tiết', price: '360.000 đ', strike: '360k', tag: 'HK I', accent: 'emerald' },
+                { id: 'hk2' as SemesterExportScope, title: 'Học Kỳ II', sub: 'Tuần 19–35 · 34 tiết', price: '360.000 đ', strike: '360k', tag: 'HK II', accent: 'emerald' },
+                { id: 'full_year' as SemesterExportScope, title: 'Cả Năm Học', sub: 'Tuần 1–35 · 70 tiết', price: '700.000 đ', strike: '700k', tag: 'Tiết kiệm', accent: 'indigo' },
+              ].map((opt) => {
+                const active = scope === opt.id;
+                const cardUnlocked = isScopeUnlocked(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    disabled={isExporting}
+                    onClick={() => setScope(opt.id)}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between gap-1 ${
+                      active
+                        ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200'
+                        : 'bg-white border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1">
+                        {opt.id === 'full_year' && <Sparkles className="w-3 h-3 text-amber-500 shrink-0" />}
+                        <span>{opt.title}</span>
+                      </div>
+                      <div className="text-[10.5px] text-slate-500 tabular-nums">{opt.sub}</div>
+                    </div>
+                    <div className="pt-1 border-t border-slate-100 flex items-baseline justify-between gap-1">
+                      {cardUnlocked ? (
+                        <>
+                          <span className="text-xs font-black text-emerald-700">0 đ · ĐÃ MỞ</span>
+                          <span className="text-[10px] text-slate-400 line-through">{opt.strike}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs sm:text-sm font-black text-blue-700 tabular-nums">{opt.price}</span>
+                          <span className="text-[10px] font-bold text-amber-700 inline-flex items-center gap-0.5">
+                            <Lock className="w-2.5 h-2.5" />
+                            <span>{isPaidActive ? 'Nâng cấp' : opt.tag}</span>
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {scope === 'week_1' && (
-              <div className="flex items-center gap-2 pt-1 text-xs">
-                <span className="font-semibold text-slate-700">Chọn tuần cần tải:</span>
+              <div className="flex items-center gap-2 pt-0.5 text-xs">
+                <span className="font-semibold text-slate-700">Tuần:</span>
                 <select
                   value={selectedSingleWeek}
                   disabled={isExporting}
@@ -909,7 +1139,7 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
                 >
                   {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
                     <option key={w} value={w}>
-                      Tuần {w} ({w <= 18 ? 'Học kỳ I' : 'Học kỳ II'})
+                      Tuần {w} ({w <= 18 ? 'HK I' : 'HK II'})
                     </option>
                   ))}
                 </select>
@@ -917,211 +1147,240 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
             )}
           </div>
 
-          {/* 3. Packaging Mode */}
-          {scope !== 'week_1' && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                <span>3. Chọn kiểu file tải về:</span>
-              </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  disabled={isExporting}
-                  onClick={() => setPackageMode('zip_by_week')}
-                  className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 ${
-                    packageMode === 'zip_by_week'
-                      ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200'
-                      : 'bg-white border-slate-200 hover:border-blue-300'
-                  }`}
-                >
-                  <FolderArchive className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">
-                      Gói .ZIP tách từng tuần (.DOCX) <span className="text-emerald-700">· Khuyên dùng</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                      Mỗi tuần 1 file Word sắc nét, dễ mở in ấn, kèm Bảng tổng hợp giáo án tích hợp.
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isExporting || targetGrade === 'all'}
-                  onClick={() => setPackageMode('single_docx')}
-                  className={`p-3 rounded-xl border text-left transition flex items-start gap-2.5 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    packageMode === 'single_docx'
-                      ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200'
-                      : 'bg-white border-slate-200 hover:border-blue-300'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">1 File Word (.DOCX) gộp liền mạch</div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
-                      {targetGrade === 'all'
-                        ? 'Chỉ áp dụng khi chọn từng Khối lẻ (Khối 1–5) để mở mượt trên MS Word.'
-                        : 'Gộp toàn bộ các tuần của khối đã chọn thành 1 quyển giáo án để in đóng cuốn.'}
-                    </p>
-                  </div>
-                </button>
-              </div>
-
-              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={includeIntegrationSummary}
-                  disabled={isExporting || packageMode === 'single_docx'}
-                  onChange={(e) => setIncludeIntegrationSummary(e.target.checked)}
-                  className="mt-0.5 rounded border-emerald-400 text-emerald-600 focus:ring-emerald-500"
-                />
-                <div className="text-xs">
-                  <div className="font-bold text-emerald-950 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Đính kèm Bảng Kế Hoạch Dạy Học &amp; Giáo Án Tích Hợp Năm Học (.DOCX)</span>
-                  </div>
-                </div>
-              </label>
+          {/* 3. Packaging Mode (only shown when unlocked for current multi-week scope) */}
+          {scope !== 'week_1' && canDownloadCurrentSelection && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={isExporting}
+                onClick={() => setPackageMode('zip_by_week')}
+                className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 ${
+                  packageMode === 'zip_by_week'
+                    ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-200'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <FolderArchive className="w-4 h-4 text-blue-600 shrink-0" />
+                <div className="text-xs font-bold text-slate-900">Gói .ZIP tách từng tuần (.DOCX)</div>
+              </button>
+              <button
+                type="button"
+                disabled={isExporting || targetGrade === 'all'}
+                onClick={() => setPackageMode('single_docx')}
+                className={`p-2.5 rounded-xl border text-left transition flex items-center gap-2 disabled:opacity-50 ${
+                  packageMode === 'single_docx'
+                    ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-200'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                <div className="text-xs font-bold text-slate-900">1 File Word (.DOCX) gộp liền</div>
+              </button>
             </div>
           )}
 
-          {/* 4. VIETQR PAYMENT & LICENSE UNLOCK PANEL */}
+          {scope !== 'week_1' && canDownloadCurrentSelection && packageMode === 'zip_by_week' && (
+            <label className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50/70 border border-emerald-200 cursor-pointer text-xs font-semibold text-emerald-950">
+              <input
+                type="checkbox"
+                checked={includeIntegrationSummary}
+                disabled={isExporting}
+                onChange={(e) => setIncludeIntegrationSummary(e.target.checked)}
+                className="rounded border-emerald-400 text-emerald-600"
+              />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>Kèm Bảng Kế Hoạch Dạy Học &amp; Giáo Án Tích Hợp (.DOCX)</span>
+            </label>
+          )}
+
+          {/* 4. COMPACT VIETQR + UPLOAD RECEIPT IMAGE + ENTER CODE PANEL */}
           {showPaymentPanel && (
             <div
               ref={paymentSectionRef}
-              className="rounded-2xl border-2 border-blue-200 bg-gradient-to-br from-blue-50/80 via-white to-emerald-50/60 p-4 space-y-3.5"
+              className="rounded-2xl border-2 border-blue-200 bg-slate-50/80 p-3.5 space-y-3"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-blue-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0">
-                    <CreditCard className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-extrabold text-slate-900">
-                      Thanh Toán Mở Khóa Tải Về &amp; Đăng Ký Phần Mềm Sau {TRIAL_DURATION_DAYS} Ngày Dùng Thử
-                    </h4>
-                    <p className="text-[11px] text-slate-600">
-                      Quét mã VietQR tự động điền đúng số tiền &amp; nội dung chuyển khoản — Kích hoạt nhanh qua Thầy Lê Quốc Hưng
-                    </p>
-                  </div>
-                </div>
-                <span className="px-2.5 py-1 rounded-lg bg-blue-700 text-white text-xs font-black tabular-nums">
-                  {formatVnd(finalPriceVnd)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                {/* Left: Bank info & Contact */}
-                <div className="md:col-span-7 space-y-2.5">
-                  <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-2 text-xs shadow-2xs">
-                    <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-slate-100">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-start">
+                {/* Left: Bank Info + Upload Proof + Key Input */}
+                <div className="md:col-span-7 space-y-3">
+                  {/* Compact Bank Box */}
+                  <div className="rounded-xl bg-white border border-slate-200 p-3 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
                       <span className="inline-flex items-center gap-1.5 font-extrabold text-emerald-800">
-                        <Landmark className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Ngân hàng: Vietcombank (VCB)</span>
+                        <Landmark className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Vietcombank (VCB) · Lê Quốc Hưng</span>
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        VietQR 24/7
-                      </span>
+                      <span className="font-black text-blue-700 tabular-nums">{formatVnd(finalPriceVnd)}</span>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-slate-500">Số tài khoản:</span>
+                      <span className="text-slate-500">STK:</span>
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-sm font-black tracking-wider text-slate-900 select-all">
+                        <span className="font-mono text-sm font-black text-slate-900 select-all">
                           {DONATION_BANK_INFO.accountNumber}
                         </span>
                         <button
                           type="button"
                           onClick={() =>
-                            handleCopyText(DONATION_BANK_INFO.accountNumber, 'stk', 'số tài khoản VCB 0271000960686')
+                            handleCopyText(DONATION_BANK_INFO.accountNumber, 'stk', 'số tài khoản VCB')
                           }
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] transition"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px]"
                         >
                           {copiedField === 'stk' ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedField === 'stk' ? 'Đã chép' : 'Chép STK'}</span>
+                          <span>{copiedField === 'stk' ? 'Đã chép' : 'Chép'}</span>
                         </button>
                       </div>
                     </div>
 
                     <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-slate-500">Chủ tài khoản:</span>
-                      <span className="font-extrabold text-slate-900">Lê Quốc Hưng</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <span className="text-slate-500">Gói &amp; Số tiền:</span>
-                      <span className="font-extrabold text-blue-700 tabular-nums">
-                        {scopeMeta.label} · {formatVnd(finalPriceVnd)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 flex-wrap pt-1.5 border-t border-slate-100">
-                      <span className="text-slate-500">Nội dung CK:</span>
+                      <span className="text-slate-500">Nội dung:</span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-mono text-[11px] font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded select-all">
                           {transferNote}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleCopyText(transferNote, 'note', 'nội dung chuyển khoản')}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10.5px] transition"
+                          onClick={() => handleCopyText(transferNote, 'note', 'nội dung CK')}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[10.5px]"
                         >
                           {copiedField === 'note' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                          <span>{copiedField === 'note' ? 'Đã chép' : 'Chép'}</span>
+                          <span>Chép</span>
                         </button>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="pt-1.5 border-t border-slate-100 text-[11px] text-slate-600 flex items-center justify-between gap-2 flex-wrap">
-                      <span>Liên hệ kích hoạt &amp; hỗ trợ:</span>
-                      <a
-                        href={`mailto:${ADMIN_OWNER_EMAIL}`}
-                        className="font-bold text-blue-700 hover:underline"
+                  {/* Direct Receipt Image Upload & Send to Admin Email */}
+                  <div className="rounded-xl bg-white border border-emerald-200 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Tải ảnh chuyển khoản &amp; gửi về {ADMIN_OWNER_EMAIL}</span>
+                      </span>
+                    </div>
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSelectProofFile}
+                      className="hidden"
+                    />
+
+                    {!proofPreviewUrl ? (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-2.5 px-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 hover:bg-emerald-50 text-emerald-900 font-bold text-xs flex items-center justify-center gap-2 transition"
                       >
-                        Thầy Lê Quốc Hưng ({ADMIN_OWNER_EMAIL})
+                        <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Chọn ảnh chụp màn hình chuyển khoản thành công</span>
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-50 border border-slate-200">
+                        <img
+                          src={proofPreviewUrl}
+                          alt="Ảnh chuyển khoản"
+                          className="w-14 h-14 rounded-lg object-cover border border-slate-200 shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-slate-900 truncate">{proofFileName || 'Ảnh chuyển khoản'}</div>
+                          <div className="text-[10.5px] text-emerald-700 font-semibold">Đã sẵn sàng gửi duyệt</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProofPreviewUrl(null);
+                            setProofFileName('');
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                          title="Xóa ảnh"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={isUploadingProof || !proofPreviewUrl}
+                        onClick={handleUploadAndSendProof}
+                        className="flex-1 min-w-[180px] py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                      >
+                        {isUploadingProof ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Send className="w-3.5 h-3.5" />
+                        )}
+                        <span>{isUploadingProof ? 'Đang tải & gửi...' : 'Gửi Ảnh Chuyển Khoản Nhận Mã'}</span>
+                      </button>
+
+                      <a
+                        href={buildPaymentGmailWebHref(submittedRequest)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition"
+                        title={`Mở Gmail soạn sẵn thư gửi tới ${ADMIN_OWNER_EMAIL}`}
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Mở Gmail</span>
                       </a>
                     </div>
+
+                    {proofNotice && (
+                      <div
+                        className={`text-[11px] font-semibold px-2.5 py-2 rounded-lg border space-y-1.5 ${
+                          proofNotice.type === 'success'
+                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                            : 'bg-rose-50 border-rose-200 text-rose-800'
+                        }`}
+                      >
+                        <div>{proofNotice.text}</div>
+                        {proofNotice.needsManualGmail && (
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            <a
+                              href={buildPaymentGmailWebHref(submittedRequest)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                            >
+                              <Mail className="w-3 h-3" />
+                              <span>Mở Gmail Gửi Ngay</span>
+                            </a>
+                            {submittedRequest && (
+                              <button
+                                type="button"
+                                disabled={isSendingGmailNotice}
+                                onClick={handleSendExistingRequestViaGmail}
+                                className="px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                              >
+                                {isSendingGmailNotice ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Send className="w-3 h-3" />
+                                )}
+                                <span>Gửi tự động qua Gmail</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Direct Payment Confirmation CTA */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <a
-                      href={buildPaymentMailtoHref()}
-                      className="flex-1 min-w-[200px] py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center justify-center gap-1.5"
-                    >
-                      <Mail className="w-3.5 h-3.5" />
-                      <span>Gửi Xác Nhận Thanh Toán Cho Thầy Hưng</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCopyText(
-                          `VCB ${DONATION_BANK_INFO.accountNumber} - LE QUOC HUNG - ${formatVnd(finalPriceVnd)} - ND: ${transferNote} - Lien he: ${ADMIN_OWNER_EMAIL}`,
-                          'all',
-                          'thông tin thanh toán'
-                        )
-                      }
-                      className="py-2 px-3 rounded-xl bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-bold text-xs transition flex items-center gap-1"
-                    >
-                      {copiedField === 'all' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>Chép thông tin</span>
-                    </button>
-                  </div>
-
-                  {/* License Activation Form */}
-                  <form onSubmit={handleRedeemUnlockKey} className="space-y-1.5 pt-1">
+                  {/* Enter Activation Code */}
+                  <form onSubmit={handleRedeemUnlockKey} className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
                       <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Đã nhận Mã Mở Khóa từ Thầy Lê Quốc Hưng? Nhập để mở khóa ngay:</span>
+                      <span>Nhập Mã Kích Hoạt (nhận qua email sau khi duyệt):</span>
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={licenseCodeInput}
                         onChange={(e) => setLicenseCodeInput(e.target.value.toUpperCase())}
-                        placeholder={`VD: GDTC-${scopeMeta.planCodeHint}-XXXX-XXXX`}
-                        className="flex-1 px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono text-xs font-bold tracking-wider uppercase focus:border-blue-500 focus:outline-none"
+                        placeholder={`GDTC-${scopeMeta.planCodeHint}-XXXX-XXXX`}
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-300 bg-white font-mono text-base sm:text-xs font-bold tracking-wider uppercase focus:border-blue-500 focus:outline-none"
                       />
                       <button
                         type="submit"
@@ -1133,48 +1392,31 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
                         ) : (
                           <Unlock className="w-3.5 h-3.5" />
                         )}
-                        <span>Mở Khóa</span>
+                        <span>Kích Hoạt</span>
                       </button>
                     </div>
-                    {unlockNotice && (
-                      <div
-                        className={`text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border ${
-                          unlockNotice.type === 'success'
-                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                            : 'bg-rose-50 border-rose-200 text-rose-800'
-                        }`}
-                      >
-                        {unlockNotice.text}
-                      </div>
-                    )}
                   </form>
                 </div>
 
                 {/* Right: Live VietQR Card */}
-                <div className="md:col-span-5 flex flex-col items-center justify-center bg-white rounded-xl border border-emerald-200 p-3 shadow-xs">
+                <div className="md:col-span-5 flex flex-col items-center justify-center bg-white rounded-xl border border-emerald-200 p-3 shadow-2xs">
                   {!qrFailed ? (
                     <img
                       src={vietQrUrl}
-                      alt={`Mã VietQR Vietcombank ${DONATION_BANK_INFO.accountNumber} - ${DONATION_BANK_INFO.accountHolder} - ${formatVnd(finalPriceVnd)}`}
+                      alt={`Mã VietQR Vietcombank ${DONATION_BANK_INFO.accountNumber} - ${formatVnd(finalPriceVnd)}`}
                       onError={() => setQrFailed(true)}
-                      className="w-full max-w-[230px] h-auto rounded-lg object-contain"
+                      className="w-full max-w-[210px] h-auto rounded-lg object-contain"
                     />
                   ) : (
-                    <div className="py-8 px-4 text-center space-y-2 text-xs text-slate-600">
-                      <QrCode className="w-10 h-10 text-slate-400 mx-auto" />
-                      <p className="font-bold text-slate-800">Không tải được ảnh QR (đang Offline)</p>
-                      <p className="text-[11px]">
-                        Chuyển khoản thủ công VCB <strong className="font-mono">{DONATION_BANK_INFO.accountNumber}</strong> — Lê Quốc Hưng — <strong>{formatVnd(finalPriceVnd)}</strong>
-                      </p>
+                    <div className="py-6 px-3 text-center space-y-1.5 text-xs text-slate-600">
+                      <QrCode className="w-9 h-9 text-slate-400 mx-auto" />
+                      <p className="font-bold text-slate-800">Chuyển khoản VCB {DONATION_BANK_INFO.accountNumber}</p>
+                      <p className="text-[11px]">Lê Quốc Hưng · {formatVnd(finalPriceVnd)}</p>
                     </div>
                   )}
-                  <div className="mt-2 text-center">
-                    <div className="text-[11px] font-extrabold text-emerald-800">
-                      Quét QR bằng App Ngân hàng / MoMo / VNPay
-                    </div>
-                    <div className="text-[10.5px] text-slate-500 mt-0.5">
-                      Số tiền tự điền: <strong className="text-blue-700">{formatVnd(finalPriceVnd)}</strong> · VCB 0271000960686
-                    </div>
+                  <div className="mt-1.5 text-center text-[10.5px] text-slate-600">
+                    Quét QR tự điền <strong className="text-blue-700">{formatVnd(finalPriceVnd)}</strong> · Liên hệ{' '}
+                    <span className="font-semibold text-slate-800">{ADMIN_OWNER_EMAIL}</span>
                   </div>
                 </div>
               </div>
@@ -1183,15 +1425,15 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
 
           {/* Progress bar when exporting */}
           {isExporting && (
-            <div className="rounded-xl bg-slate-900 text-white p-4 space-y-2.5">
+            <div className="rounded-xl bg-slate-900 text-white p-3.5 space-y-2">
               <div className="flex items-center justify-between gap-2 text-xs">
                 <span className="flex items-center gap-2 font-semibold text-sky-200">
                   <Loader2 className="w-4 h-4 animate-spin text-sky-400 shrink-0" />
-                  <span>{progressLabel || 'Đang chuẩn bị dữ liệu giáo án...'}</span>
+                  <span>{progressLabel || 'Đang đóng gói giáo án...'}</span>
                 </span>
                 <span className="font-mono font-bold tabular-nums text-emerald-300">{progressPercent}%</span>
               </div>
-              <div className="w-full h-2.5 rounded-full bg-slate-700 overflow-hidden">
+              <div className="w-full h-2 rounded-full bg-slate-700 overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-sky-400 to-emerald-400 transition-all duration-200"
                   style={{ width: `${progressPercent}%` }}
@@ -1209,17 +1451,19 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+        <div className="px-4 sm:px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
           <div className="text-xs text-slate-600 flex items-center gap-1.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            {canDownloadCurrentSelection ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            )}
             <span className="tabular-nums">
-              Dự kiến xuất: <strong>{totalLessonsCount} tiết</strong> ({gradesToExport.length} khối · {weeks.length} tuần) · Chi phí:{' '}
+              <strong>{totalLessonsCount} tiết</strong> ({gradesToExport.length} khối · {weeks.length} tuần) ·{' '}
               {canDownloadCurrentSelection ? (
-                <strong className="text-emerald-700">
-                  MIỄN PHÍ (0 đ){isFullLicenseUnlocked ? ' — Đã đăng ký phần mềm' : ' — Gói từng tuần miễn phí'}
-                </strong>
+                <strong className="text-emerald-700">Đã kích hoạt (0 đ)</strong>
               ) : (
-                <strong className="text-blue-700">{formatVnd(finalPriceVnd)}</strong>
+                <strong className="text-amber-700">Khóa · {formatVnd(finalPriceVnd)}</strong>
               )}
             </span>
           </div>
@@ -1248,40 +1492,26 @@ export const SemesterBundleExportModal: React.FC<SemesterBundleExportModalProps>
                   <button
                     type="button"
                     onClick={scrollToPaymentPanel}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-2"
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-sm transition flex items-center gap-1.5"
                   >
                     <Lock className="w-3.5 h-3.5 text-amber-200" />
-                    <span>Thanh Toán &amp; Mở Khóa ({formatVnd(finalPriceVnd)})</span>
+                    <span>Thanh Toán &amp; Gửi Ảnh ({formatVnd(finalPriceVnd)})</span>
                   </button>
                 ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={scrollToPaymentPanel}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
-                    >
-                      <QrCode className="w-4 h-4" />
-                      <span>
-                        {isFullLicenseUnlocked
-                          ? `Xem QR Thanh Toán (${scopeMeta.priceShort})`
-                          : 'Đăng Ký Phần Mềm (QR)'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStartExport}
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white text-xs font-bold shadow-sm transition flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      <span>
-                        {scope === 'week_1'
-                          ? 'Tải Tuần Này Miễn Phí (.DOCX)'
-                          : packageMode === 'single_docx' && targetGrade !== 'all'
-                          ? 'Tải File Word Miễn Phí (.DOCX)'
-                          : 'Tải Gói Trọn Bộ Miễn Phí (.ZIP)'}
-                      </span>
-                    </button>
-                  </>
+                  <button
+                    type="button"
+                    onClick={handleStartExport}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 text-white text-xs font-bold shadow-sm transition flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>
+                      {scope === 'week_1'
+                        ? 'Tải Tuần Này (.DOCX)'
+                        : packageMode === 'single_docx' && targetGrade !== 'all'
+                        ? 'Tải File Word (.DOCX)'
+                        : 'Tải Gói Trọn Bộ (.ZIP)'}
+                    </span>
+                  </button>
                 )}
               </>
             )}
